@@ -1,0 +1,117 @@
+<!doctype html>
+<!-- pansy's download page, beside the release feed (publish.sh): it reads
+     latest.json and offers the archive for the visitor's system, with the
+     others below. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download Pansy</title>
+<style>
+  :root { color-scheme: light dark; --fg: #18181b; --muted: #71717a; --bg: #fafafa; --card: #fff; --line: #e4e4e7; --accent: #4f46e5; --on-accent: #fff; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #ededf1; --muted: #a1a1aa; --bg: #141416; --card: #1a1a1e; --line: #333339; --accent: #a5b4fc; --on-accent: #14142a; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  main { width: min(520px, 100% - 32px); padding: 48px 0; text-align: center; }
+  h1 { margin: 0 0 4px; font-size: 28px; }
+  p { margin: 0; color: var(--muted); }
+  .primary { display: inline-block; margin: 28px 0 8px; padding: 12px 28px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-weight: 600; text-decoration: none; }
+  ul { margin: 32px 0 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: 12px; background: var(--card); text-align: left; }
+  li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 16px; }
+  li + li { border-top: 1px solid var(--line); }
+  li a { color: var(--accent); text-decoration: none; }
+  li span { color: var(--muted); font-variant-numeric: tabular-nums; }
+  pre { margin: 20px 0 0; padding: 12px 16px; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); text-align: left; font-size: 13px; }
+  [hidden] { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pansy</h1>
+  <p id="tagline"></p>
+  <a id="primary" class="primary" hidden></a>
+  <p id="status"></p>
+  <pre id="how" hidden></pre>
+  <ul id="all" hidden></ul>
+</main>
+<script>
+const zh = (navigator.language || "").toLowerCase().startsWith("zh");
+document.documentElement.lang = zh ? "zh-CN" : "en";
+const T = zh
+  ? { title: "下载 Pansy", tagline: "所有智能体的模型，集中管理", download: "下载 %s 版", version: "版本 %s", loading: "正在读取最新版本…", failed: "读取最新版本失败，请稍后再试。", none: "还没有适用于你系统的版本，其他系统的在下面。",
+      how: { linux: "tar -xzf %s\n./%d/install.sh", macos: "tar -xzf %s\nxattr -dr com.apple.quarantine Pansy.app\nmv Pansy.app /Applications/", windows: "解压后运行 %d\\pansy.exe" } }
+  : { title: "Download Pansy", tagline: "Every agent's model, one place", download: "Download for %s", version: "Version %s", loading: "Looking for the latest version…", failed: "Couldn't read the latest version. Try again later.", none: "There is no build for your system yet; the others are below.",
+      how: { linux: "tar -xzf %s\n./%d/install.sh", macos: "tar -xzf %s\nxattr -dr com.apple.quarantine Pansy.app\nmv Pansy.app /Applications/", windows: "Unzip it and run %d\\pansy.exe" } };
+const OS = { linux: "Linux", macos: "macOS", windows: "Windows" };
+const ARCH = { x86_64: "x64", aarch64: "ARM64" };
+const $ = (id) => document.getElementById(id);
+document.title = T.title;
+$("tagline").textContent = T.tagline;
+$("status").textContent = T.loading;
+
+/** This visitor's `<os>-<arch>`, as the feed names systems; the arch is a guess where the browser doesn't say. */
+async function system() {
+  const ua = navigator.userAgent;
+  const os = /Windows/.test(ua) ? "windows" : /Mac OS X|Macintosh/.test(ua) ? "macos" : /Linux|X11/.test(ua) && !/Android/.test(ua) ? "linux" : null;
+  if (!os) return null;
+  let arch = /aarch64|arm64/i.test(ua) ? "aarch64" : os === "macos" ? "aarch64" : "x86_64";
+  try {
+    const high = await navigator.userAgentData?.getHighEntropyValues(["architecture"]);
+    if (high?.architecture) arch = high.architecture === "arm" ? "aarch64" : "x86_64";
+  } catch {}
+  return `${os}-${arch}`;
+}
+
+function size(bytes) {
+  return bytes ? `${(bytes / 1048576).toFixed(1)} MB` : "";
+}
+
+function label(key) {
+  const [os, arch] = key.split("-");
+  return `${OS[os] || os} ${ARCH[arch] || arch}`;
+}
+
+(async () => {
+  let feed;
+  try {
+    const response = await fetch("latest.json", { cache: "no-cache" });
+    if (!response.ok) throw new Error(response.status);
+    feed = await response.json();
+  } catch {
+    $("status").textContent = T.failed;
+    return;
+  }
+  const here = await system();
+  const assets = Object.entries(feed.platforms || {}).filter(([, asset]) => asset.sha256);
+  // the same system on the other arch, when this one has no build
+  const mine = assets.find(([key]) => key === here) || (here && assets.find(([key]) => key.split("-")[0] === here.split("-")[0]));
+  $("status").textContent = T.version.replace("%s", feed.version);
+  if (mine) {
+    const [key, asset] = mine;
+    const file = asset.url.split("/").pop();
+    const primary = $("primary");
+    primary.href = asset.url;
+    primary.textContent = T.download.replace("%s", label(key));
+    primary.hidden = false;
+    const how = $("how");
+    how.textContent = T.how[key.split("-")[0]].replace("%s", file).replace("%d", file.replace(/\.(tar\.gz|zip)$/, ""));
+    how.hidden = false;
+  } else {
+    $("status").textContent += ` · ${T.none}`;
+  }
+  const all = $("all");
+  for (const [key, asset] of assets) {
+    const item = document.createElement("li");
+    const link = document.createElement("a");
+    link.href = asset.url;
+    link.textContent = label(key);
+    const bytes = document.createElement("span");
+    bytes.textContent = size(asset.size);
+    item.append(link, bytes);
+    all.append(item);
+  }
+  all.hidden = assets.length === 0;
+})();
+</script>
+</body>
+</html>

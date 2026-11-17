@@ -112,8 +112,12 @@ cd desktop
 nsh check && ./test.sh                     # Rust and headless UI tests in a scratch home
 cargo build -p pansy-desktop && nsh build App.tsx --out target/debug/nsh
 ./target/debug/pansy                       # the window, with the gateway beside it
-packaging/build.sh                         # dist/pansy-<version>-linux-<arch>.tar.gz
+packaging/build.sh                         # dist/pansy-<version>-<os>-<arch>.tar.gz (.zip on Windows)
 ```
+
+A release is a tag: the archives of every system, and the window's own
+updates, go to Cloudflare R2, where pansy looks for them
+([docs/release.md](docs/release.md)).
 
 ## Layout
 

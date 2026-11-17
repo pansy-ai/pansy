@@ -94,8 +94,11 @@ cd desktop
 nsh check && ./test.sh                     # 在临时 HOME 中运行 Rust 测试和无头 UI 测试
 cargo build -p pansy-desktop && nsh build App.tsx --out target/debug/nsh
 ./target/debug/pansy                       # 打开窗口，网关同时运行
-packaging/build.sh                         # 生成 dist/pansy-<版本>-linux-<架构>.tar.gz
+packaging/build.sh                         # 生成 dist/pansy-<版本>-<系统>-<架构>.tar.gz（Windows 为 .zip）
 ```
+
+发布由一个 tag 触发：各系统的安装包和窗口的热更新包上传到 Cloudflare R2，
+pansy 从那里检查更新（[docs/release.md](docs/release.md)）。
 
 ## 目录
 

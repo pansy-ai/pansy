@@ -5,7 +5,13 @@
   "build": 1,
   "rust": "native",
   "updater": {
-    "github": "yetone/pansy"
+    "url": "https://releases.pansy.dev/latest.json",
+    "publicKey": "mMv49TxJa9g3OVGzd+NXohpeHwuhNCbKl9B36qZbe0w=",
+    "packages": {
+      "roots": [
+        "fTm99y+MDwqzo3MPx9lKudOzsbLXklMUgm9K1NEmzXc="
+      ]
+    }
   },
   "icon": "assets/icon.png",
   "appearance": "system",
