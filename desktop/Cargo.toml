@@ -1,0 +1,12 @@
+# The desktop app: the TSX window (App.tsx, ui/), its Rust module
+# (`pansy/native`, native/) and the program that hosts both (runner/). NSH's
+# crates stay out of the core's workspace and its builds.
+[workspace]
+resolver = "3"
+members = ["native", "runner"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false

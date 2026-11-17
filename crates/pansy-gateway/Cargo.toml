@@ -1,0 +1,30 @@
+[package]
+name = "pansy-gateway"
+description = "pansy's local gateway: OpenAI Chat, OpenAI Responses, Anthropic and Gemini, translated between, with failover."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pansy-core.workspace = true
+pansy-mask.workspace = true
+pansy-plugins.workspace = true
+anyhow.workspace = true
+async-stream.workspace = true
+axum.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+futures.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+base64.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+tower = { version = "0.5", features = ["util"] }
+tempfile.workspace = true
