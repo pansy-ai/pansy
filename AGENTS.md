@@ -49,6 +49,11 @@ agent use every provider's models, with a desktop window on NSH 0.5.1. Read
   length, never the value; the text before and after is kept in memory only.
 - **Every window string is in `desktop/ui/i18n.ts`** in English and
   Simplified Chinese; `nsh check` fails otherwise.
+- **A release is signed, and its keys stay out of git.** `desktop/keys/`
+  holds the secrets (`docs/release.md`); `nsh.json`'s `"updater"` holds what
+  every pansy installed trusts, so its address and keys do not change. The
+  build in `nsh.json` grows with every release (`packaging/bump.sh`), and a
+  release of the window alone carries no Rust change.
 
 - **A plugin's tests run on a Bun of their own.** `pansy-plugins`' tests
   that need Bun take `PANSY_BUN` or one on `PATH`, and pass saying so

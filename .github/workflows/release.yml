@@ -1,0 +1,135 @@
+# Releases pansy to the Cloudflare R2 bucket its window updates from
+# (docs/release.md). A tag says which kind:
+#
+#   pansy-v0.2.0        pansy itself: built on each system, then published
+#   pansy-v0.2.0-ui.7   the window alone (build 7), for the 0.2.0 that is out
+#
+# Secrets (the `release` environment): PANSY_RELEASE_KEY, the text of
+# desktop/keys/release.secret; CLOUDFLARE_API_TOKEN, a token that may write
+# the bucket's objects; CLOUDFLARE_ACCOUNT_ID. Variables: PANSY_RELEASE_BUCKET
+# when the bucket is not pansy-releases.
+name: release
+
+on:
+  push:
+    tags: ["pansy-v*"]
+
+permissions:
+  contents: read
+
+concurrency: release
+
+env:
+  NSH_VERSION: v0.5.1
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      kind: ${{ steps.kind.outputs.kind }}
+    steps:
+      - uses: actions/checkout@v4
+      # the tag is what nsh.json says: packaging/bump.sh printed it
+      - id: kind
+        run: |
+          version=$(jq -r .version desktop/nsh.json)
+          build=$(jq -r .build desktop/nsh.json)
+          case $GITHUB_REF_NAME in
+            "pansy-v$version") echo "kind=app" >> "$GITHUB_OUTPUT" ;;
+            "pansy-v$version-ui.$build") echo "kind=ui" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::the tag is $GITHUB_REF_NAME, nsh.json says $version (build $build)"; exit 1 ;;
+          esac
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.kind == 'app'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { system: linux-x86_64, runner: ubuntu-24.04 }
+          - { system: linux-aarch64, runner: ubuntu-24.04-arm }
+          - { system: macos-aarch64, runner: macos-15 }
+          - { system: macos-x86_64, runner: macos-15-intel }
+          - { system: windows-x86_64, runner: windows-2025 }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+      - name: GTK and what NSH builds with
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev clang libclang-dev
+      - name: NSH
+        if: runner.os != 'Windows'
+        run: |
+          curl -fsSL https://nsh.dev/install.sh | sh
+          echo "$HOME/.nsh/bin" >> "$GITHUB_PATH"
+      - name: NSH
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:NSH_INSTALL_DIR = Join-Path $env:USERPROFILE '.nsh'
+          irm https://nsh.dev/install.ps1 | iex
+          Join-Path $env:NSH_INSTALL_DIR 'bin' >> $env:GITHUB_PATH
+      - run: desktop/packaging/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pansy-${{ matrix.system }}
+          path: dist/pansy-*
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    needs: [plan, build]
+    # the window alone has nothing to build on each system
+    if: ${{ !cancelled() && needs.plan.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # the window alone is compared with its release's tag
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/download-artifact@v4
+        if: needs.plan.outputs.kind == 'app'
+        with:
+          path: dist
+          pattern: pansy-*
+          merge-multiple: true
+      - name: NSH
+        run: |
+          curl -fsSL https://nsh.dev/install.sh | sh
+          echo "$HOME/.nsh/bin" >> "$GITHUB_PATH"
+      # the window's package is built with its Rust crate
+      - uses: dtolnay/rust-toolchain@stable
+        if: needs.plan.outputs.kind == 'ui'
+      - name: GTK and what NSH builds with
+        if: needs.plan.outputs.kind == 'ui'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev clang libclang-dev
+      - name: Publish
+        env:
+          PANSY_RELEASE_KEY: ${{ secrets.PANSY_RELEASE_KEY }}
+          PANSY_RELEASE_BUCKET: ${{ vars.PANSY_RELEASE_BUCKET || 'pansy-releases' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          umask 077
+          export PANSY_RELEASE_KEY_FILE=$RUNNER_TEMP/release.secret
+          printf '%s\n' "$PANSY_RELEASE_KEY" > "$PANSY_RELEASE_KEY_FILE"
+          trap 'rm -f -- "$PANSY_RELEASE_KEY_FILE"' EXIT
+          if [[ ${{ needs.plan.outputs.kind }} == ui ]]; then
+            desktop/packaging/publish.sh ui
+          else
+            desktop/packaging/publish.sh
+          fi

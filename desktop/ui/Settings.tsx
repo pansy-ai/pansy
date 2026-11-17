@@ -30,7 +30,7 @@ import {
   type SettingsTab,
 } from "./model";
 import { Badge, Dropdown, FieldButton, Icon, IconButton, Input, List, MOTION, Mono, OnOff, Page as PageView, PrimaryButton, RowHead, Segs, SettingRow, SHADOW, TextButton } from "./parts";
-import { UpdateControl, updateSaid } from "./Update";
+import { UpdateControl, updateSaid, versionSaid } from "./Update";
 import { FindingList, FromATerminal, HealthControl, healthSaid, RestoreAll, ResumeAll, TestControl, TestResult, testSaid } from "./Diagnostics";
 import { Menu, MenuItem } from "nsh/base";
 
@@ -676,7 +676,7 @@ const SETTINGS: Setting[] = [
     section: () => "",
     title: () => "Pansy",
     description: () => tr("Every agent, every provider's models."),
-    control: () => <Text class="text-[12px] text-muted-foreground">{tr("Version %s", Settings.version())}</Text>,
+    control: () => <Text class="text-[12px] text-muted-foreground">{tr("Version %s", versionSaid(Settings.version()))}</Text>,
   },
   {
     id: "updates",

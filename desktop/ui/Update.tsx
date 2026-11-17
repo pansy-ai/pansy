@@ -8,9 +8,26 @@
 // the system writes to), the click opens the download instead. Settings ›
 // About has what the last look found, and Check for updates. A build
 // without a feed (a development run) never looks.
+//
+// A release may be of the window alone: a signed package of this code
+// (docs/release.md), which pansy as installed downloads and restarts into
+// without being replaced. It is offered the same way, named by its build
+// ("0.1.0 (2)"), when pansy itself is the newest and the package was built
+// for this very version: its code calls this version's pansy/native.
 import { openUrl, signal, Text } from "nsh";
 import { Button as BaseButton } from "nsh/base";
-import { checkForUpdate, downloadUpdate, installAndRestart, shellInfo, type AppUpdate } from "nsh/updater";
+import {
+  checkForPackage,
+  checkForUpdate,
+  downloadPackage,
+  downloadUpdate,
+  installAndRestart,
+  restartToPackage,
+  runningPackage,
+  shellInfo,
+  type AppUpdate,
+  type PackageUpdate,
+} from "nsh/updater";
 import { tr } from "./i18n";
 import { loadTrace, reason, routes, toast } from "./model";
 import { Hint, Icon, MOTION, TextButton } from "./parts";
@@ -20,10 +37,12 @@ const FIRST = 15_000;
 const EVERY = 6 * 3_600_000;
 
 type Phase = "idle" | "checking" | "downloading" | "waiting" | "installing";
+/** A newer pansy (`app`), or a newer build of its window alone (`ui`), and what to call it. */
+type Found = { version: string; app: AppUpdate | null; ui: PackageUpdate | null };
 /** What the updater is doing. */
 const phase = signal<Phase>("idle");
 /** The newer version the last look found. */
-const found = signal<AppUpdate | null>(null);
+const found = signal<Found | null>(null);
 /** How much of it is downloaded (0..1), null while that is unknown. */
 const share = signal<number | null>(null);
 /** What went wrong last: the look, or the update. */
@@ -49,12 +68,37 @@ export function startUpdates() {
   setInterval(() => void look(), EVERY);
 }
 
+/** A version and the build of its window: "0.1.0 (2)". */
+function named(version: string, build: number): string {
+  return `${version} (${build})`;
+}
+
+/** pansy's version as About says it: with the build of the window's code once that came as a package. */
+export function versionSaid(version: string): string {
+  try {
+    const running = runningPackage();
+    return running ? named(version, running.build) : version;
+  } catch {
+    return version;
+  }
+}
+
+/** What the feed has for this pansy: a newer one, else a newer build of its window made for this version. */
+async function newer(): Promise<Found | null> {
+  const app = await checkForUpdate();
+  if (app) return { version: app.version, app, ui: null };
+  const shell = shellInfo();
+  if (!shell.packages) return null;
+  const ui = await checkForPackage();
+  return ui && ui.version === shell.version ? { version: named(ui.version, ui.build), app: null, ui } : null;
+}
+
 /** Asks the feed for a newer version; a failure is kept for Settings, not shown. */
 export async function look(): Promise<void> {
   if (phase() !== "idle") return;
   phase.set("checking");
   try {
-    const update = await checkForUpdate();
+    const update = await newer();
     found.set(update);
     current.set(!update);
     failure.set(null);
@@ -84,21 +128,23 @@ export async function runUpdate(): Promise<void> {
     return;
   }
   if (phase() !== "idle") return;
-  if (!update.canInstall) {
-    void openUrl(update.url).catch((error) => toast(reason(error), "error"));
+  const { app } = update;
+  if (app && !app.canInstall) {
+    void openUrl(app.url).catch((error) => toast(reason(error), "error"));
     return;
   }
   failure.set(null);
   share.set(null);
   phase.set("downloading");
   try {
-    await downloadUpdate(({ received, total }) => share.set(total ? received / total : null));
+    const progress = ({ received, total }: { received: number; total?: number | null }) => share.set(total ? received / total : null);
+    await (app ? downloadUpdate(progress) : downloadPackage(progress));
     phase.set("waiting");
     now = false;
     while (!now && inFlight() > 0) await new Promise((done) => setTimeout(done, 1000));
     phase.set("installing");
     // settles only when it fails: pansy quits, and the new version starts
-    await installAndRestart();
+    await (app ? installAndRestart() : restartToPackage());
   } catch (error) {
     failure.set({ update: true, text: reason(error) });
     toast(tr("Couldn't update to %s: %s", update.version, reason(error)), "error");
@@ -117,14 +163,14 @@ function said(): string {
 }
 
 /** What the pill says under the pointer. */
-function hint(update: AppUpdate): string {
+function hint(update: Found): string {
   const out = tr("%s is out", update.version);
   if (phase() === "downloading" || phase() === "installing") return tr("Restart to update to %s", update.version);
   if (phase() === "waiting") {
     const n = routes().filter((r) => !r.done).length;
     return tr("pansy restarts to update to %s once the agents' requests through the gateway have finished: %s. Click to restart now.", update.version, tr("%d in flight", n));
   }
-  if (!update.canInstall) return `${out} · ${tr("pansy can't replace itself where it is installed; click to open the download.")}`;
+  if (update.app && !update.app.canInstall) return `${out} · ${tr("pansy can't replace itself where it is installed; click to open the download.")}`;
   const f = failure();
   if (f?.update) return `${tr("Couldn't update to %s: %s", update.version, f.text)} · ${tr("Click to try again")}`;
   return `${out} · ${tr("Click to download and restart")}`;
