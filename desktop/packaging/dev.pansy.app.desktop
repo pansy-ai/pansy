@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Pansy
+GenericName=AI agent gateway
+Comment=Every agent's model, one place
+Comment[zh_CN]=所有智能体的模型，集中管理
+Exec="{root}/pansy"
+Icon={root}/share/icons/dev.pansy.app.png
+Terminal=false
+Categories=Development;Utility;
+StartupWMClass=dev.pansy.app

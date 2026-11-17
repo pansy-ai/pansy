@@ -1,0 +1,43 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+# The desktop app is a workspace of its own: NSH's crates (GTK, AppKit,
+# Win32) stay out of the core's builds.
+exclude = ["desktop"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace.dependencies]
+pansy-core = { path = "crates/pansy-core" }
+pansy-agents = { path = "crates/pansy-agents" }
+pansy-gateway = { path = "crates/pansy-gateway" }
+pansy-cli = { path = "crates/pansy-cli" }
+pansy-mask = { path = "crates/pansy-mask" }
+pansy-plugins = { path = "crates/pansy-plugins" }
+anyhow = "1"
+async-stream = "0.3"
+axum = "0.8"
+base64 = "0.22"
+bytes = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+clap = { version = "4", features = ["derive"] }
+dirs = "6"
+futures = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "rustls-tls-native-roots", "stream", "json", "http2", "socks"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal", "fs", "io-util"] }
+tokio-stream = "0.1"
+toml_edit = "0.22"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+url = "2"
+uuid = { version = "1", features = ["v4"] }

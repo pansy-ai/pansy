@@ -1,0 +1,24 @@
+[package]
+name = "pansy-agents"
+description = "The coding agents pansy wires to its gateway: finding them and editing their configs."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pansy-core.workspace = true
+pansy-plugins.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+dirs.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+toml_edit.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
