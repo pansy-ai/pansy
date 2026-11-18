@@ -30,7 +30,7 @@ import {
   type SettingsTab,
 } from "./model";
 import { Badge, Dropdown, FieldButton, Icon, IconButton, Input, List, MOTION, Mono, OnOff, Page as PageView, PrimaryButton, RowHead, Segs, SettingRow, SHADOW, TextButton } from "./parts";
-import { UpdateControl, updateSaid, versionSaid } from "./Update";
+import { hasNotes, openNotes, UpdateControl, updateSaid, versionSaid } from "./Update";
 import { FindingList, FromATerminal, HealthControl, healthSaid, RestoreAll, ResumeAll, TestControl, TestResult, testSaid } from "./Diagnostics";
 import { Menu, MenuItem } from "nsh/base";
 
@@ -694,6 +694,14 @@ const SETTINGS: Setting[] = [
     title: () => tr("Updates"),
     description: () => updateSaid(),
     control: () => <UpdateControl />,
+  },
+  {
+    id: "whats-new",
+    tab: "about",
+    section: () => "",
+    title: () => tr("What's new"),
+    description: () => (hasNotes() ? tr("What changed in this version, and in one that is waiting") : tr("No release notes yet: they come with an update")),
+    control: () => <TextButton label={tr("Open")} disabled={!hasNotes()} testID="whats-new-open" onPress={openNotes} />,
   },
   {
     id: "folder",

@@ -4,7 +4,7 @@
 #
 #   latest.json, latest.json.sig     the feed: the newest pansy for each
 #                                    system and the newest build of its
-#                                    window, signed by the release key
+#                                    window, signed by the update key
 #   v<version>/pansy-<version>-<os>-<arch>.tar.gz|.zip   build.sh's archives
 #   v<version>/dev.pansy.app-<build>.nshpkg              the window alone
 #   index.html                       the download page (site/)
@@ -18,9 +18,13 @@
 #
 # The archives go up first and the feed last: what the feed names is there.
 #
-#   PANSY_RELEASE_KEY_FILE   the release key (default keys/release.secret)
+#   PANSY_KEYS               where release.secret (signs the window's
+#                            packages) and update.secret (signs the feed)
+#                            are (default keys/)
 #   PANSY_RELEASE_BUCKET     the bucket (default pansy-releases)
-#   PANSY_RELEASE_NOTES      a text file with what changed
+#   PANSY_RELEASE_NOTES      a text file with what changed, which the window
+#                            shows as What's new (default packaging/notes.md,
+#                            when there is one: headings, bullets, lines)
 #   PANSY_PUBLISH_DRY=1      makes ../dist/release as the bucket would be,
 #                            and uploads nothing
 #   PANSY_PUBLISH_FORCE=1    a window-only release although Rust changed
@@ -40,10 +44,11 @@ id=$(field nsh.json id)
 version=$(field nsh.json version)
 build=$(field nsh.json build)
 feed=$(field nsh.json updater.url)
-[[ $feed == https://*/latest.json ]] || fail "nsh.json's updater.url must be https://…/latest.json"
+# over HTTPS; this computer's own address is for trying a release (docs/release.md)
+[[ $feed == https://*/latest.json || $feed == http://127.0.0.1:*/latest.json ]] || fail "nsh.json's updater.url must be https://…/latest.json"
 base=${feed%/latest.json}
-key=${PANSY_RELEASE_KEY_FILE:-keys/release.secret}
-[[ -f $key ]] || fail "the release key is not at $key (packaging/keys.sh, or PANSY_RELEASE_KEY_FILE)"
+keys=${PANSY_KEYS:-keys}
+[[ -f $keys/update.secret ]] || fail "the update key is not at $keys/update.secret (packaging/keys.sh, or PANSY_KEYS)"
 bucket=${PANSY_RELEASE_BUCKET:-pansy-releases}
 read -r -a wrangler <<< "${WRANGLER:-npx --yes wrangler@4}"
 
@@ -66,8 +71,9 @@ older() { python3 -c 'import sys
 n = lambda v: [int(x) for x in v.split("-")[0].split(".")]
 sys.exit(0 if n(sys.argv[1]) < n(sys.argv[2]) else 1)' "$1" "$2"; }
 
-manifest=(--entry . --key "$key" --base-url "$base/v$version/" --out "$out")
-[[ -z ${PANSY_RELEASE_NOTES:-} ]] || manifest+=(--notes "$PANSY_RELEASE_NOTES")
+manifest=(--entry . --key "$keys/update.secret" --base-url "$base/v$version/" --out "$out")
+notes=${PANSY_RELEASE_NOTES:-packaging/notes.md}
+[[ ! -s $notes ]] || manifest+=(--notes "$notes")
 uploads=()
 
 if [[ $kind == app ]]; then
@@ -110,8 +116,16 @@ PY
     curl -fsSL "$url" -o "$file"
     echo "$sha  $file" | sha256sum -c --quiet - || fail "$url is not what the feed says"
   done < "$scratch/archives"
+  [[ -f $keys/release.secret ]] || fail "the release key is not at $keys/release.secret (packaging/keys.sh, or PANSY_KEYS)"
   package=$out/v$version/$id-$build.nshpkg
-  nsh publish . --key "$key" --cert packaging/release.cert --out "$package"
+  nsh publish . --key "$keys/release.secret" --cert packaging/release.cert --out "$package"
+  # as a pansy installed will check it: a root nsh.json trusts certifies its key
+  roots=()
+  while read -r root; do
+    echo "$root" > "$scratch/root-${#roots[@]}.pub"
+    roots+=("$scratch/root-${#roots[@]}.pub")
+  done < <(python3 -c 'import json; print("\n".join(json.load(open("nsh.json"))["updater"]["packages"]["roots"]))')
+  nsh verify "$package" "${roots[@]/#/--root=}"
   shopt -s nullglob
   archives=("$scratch"/out/*)
   shopt -u nullglob

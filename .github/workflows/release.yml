@@ -4,8 +4,9 @@
 #   pansy-v0.2.0        pansy itself: built on each system, then published
 #   pansy-v0.2.0-ui.7   the window alone (build 7), for the 0.2.0 that is out
 #
-# Secrets (the `release` environment): PANSY_RELEASE_KEY, the text of
-# desktop/keys/release.secret; CLOUDFLARE_API_TOKEN, a token that may write
+# Secrets (the `release` environment): PANSY_RELEASE_KEY and
+# PANSY_UPDATE_KEY, the text of desktop/keys/release.secret and
+# update.secret; CLOUDFLARE_API_TOKEN, a token that may write
 # the bucket's objects; CLOUDFLARE_ACCOUNT_ID. Variables: PANSY_RELEASE_BUCKET
 # when the bucket is not pansy-releases.
 name: release
@@ -120,14 +121,17 @@ jobs:
       - name: Publish
         env:
           PANSY_RELEASE_KEY: ${{ secrets.PANSY_RELEASE_KEY }}
+          PANSY_UPDATE_KEY: ${{ secrets.PANSY_UPDATE_KEY }}
           PANSY_RELEASE_BUCKET: ${{ vars.PANSY_RELEASE_BUCKET || 'pansy-releases' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           umask 077
-          export PANSY_RELEASE_KEY_FILE=$RUNNER_TEMP/release.secret
-          printf '%s\n' "$PANSY_RELEASE_KEY" > "$PANSY_RELEASE_KEY_FILE"
-          trap 'rm -f -- "$PANSY_RELEASE_KEY_FILE"' EXIT
+          export PANSY_KEYS=$RUNNER_TEMP/keys
+          mkdir -p "$PANSY_KEYS"
+          printf '%s\n' "$PANSY_RELEASE_KEY" > "$PANSY_KEYS/release.secret"
+          printf '%s\n' "$PANSY_UPDATE_KEY" > "$PANSY_KEYS/update.secret"
+          trap 'rm -rf -- "$PANSY_KEYS"' EXIT
           if [[ ${{ needs.plan.outputs.kind }} == ui ]]; then
             desktop/packaging/publish.sh ui
           else
