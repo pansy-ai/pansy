@@ -30,7 +30,7 @@ import {
   type SettingsTab,
 } from "./model";
 import { Badge, Dropdown, FieldButton, Icon, IconButton, Input, List, MOTION, Mono, OnOff, Page as PageView, PrimaryButton, RowHead, Segs, SettingRow, SHADOW, TextButton } from "./parts";
-import { hasNotes, openNotes, UpdateControl, updateSaid, versionSaid } from "./Update";
+import { channel, hasNotes, onQuit, openNotes, setChannel, setOnQuit, UpdateControl, updateSaid, updatesOn, versionSaid, type Channel } from "./Update";
 import { FindingList, FromATerminal, HealthControl, healthSaid, RestoreAll, ResumeAll, TestControl, TestResult, testSaid } from "./Diagnostics";
 import { Menu, MenuItem } from "nsh/base";
 
@@ -694,6 +694,35 @@ const SETTINGS: Setting[] = [
     title: () => tr("Updates"),
     description: () => updateSaid(),
     control: () => <UpdateControl />,
+  },
+  {
+    id: "update-channel",
+    tab: "about",
+    section: () => "",
+    title: () => tr("Update channel"),
+    description: () => (channel() === "beta" ? tr("Versions of pansy still being tried, before everyone gets them") : tr("The versions everyone gets")),
+    when: updatesOn,
+    control: () => (
+      <Segs
+        small
+        testID="update-channel"
+        value={channel()}
+        onChange={(to: Channel) => setChannel(to)}
+        options={[
+          { value: "stable", label: tr("Stable") },
+          { value: "beta", label: tr("Beta") },
+        ]}
+      />
+    ),
+  },
+  {
+    id: "update-on-quit",
+    tab: "about",
+    section: () => "",
+    title: () => tr("Update when pansy quits"),
+    description: () => tr("A newer pansy is downloaded when it is found and put in as pansy quits; off, a click on Update downloads it"),
+    when: updatesOn,
+    control: () => <OnOff testID="update-on-quit" on={onQuit()} onChange={setOnQuit} />,
   },
   {
     id: "whats-new",

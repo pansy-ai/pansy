@@ -15,7 +15,7 @@ and when a key runs out of quota, the next one quietly takes over.
 </div>
 
 pansy is a rewrite of [magpie](https://github.com/yetone/magpie) in Rust, with
-its desktop window built on [Native Shell](https://nsh.dev) (NSH) 0.5.1. As the
+its desktop window built on [Native Shell](https://nsh.dev) (NSH) 0.6.0. As the
 three petals of its logo meet at one point, your agents and your providers meet
 in one gateway.
 
@@ -126,7 +126,7 @@ export GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:7267 GEMINI_API_KEY=pansy
 # The core, the gateway and the headless `pansy` command
 cargo test --workspace && cargo build --release -p pansy-cli
 
-# The desktop app (NSH 0.5.1)
+# The desktop app (NSH 0.6.0)
 cd desktop
 nsh check && ./test.sh                     # Rust and headless UI tests in a scratch home
 cargo build -p pansy-desktop && nsh build App.tsx --out target/debug/nsh

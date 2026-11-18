@@ -23,6 +23,13 @@
 // the update. What a release says changed (the feed's notes) is kept when
 // its update is put in, and shown once pansy has restarted into it
 // (ui/WhatsNew.tsx); Settings › About › What's new opens it again.
+// Settings › About has two choices, kept in NSH's storage. The channel:
+// beta asks the feed nsh.json names "beta" for a newer pansy, before
+// everyone gets it (the window alone is released for the stable one). And
+// whether a newer pansy is put in when pansy quits: the look that finds it
+// downloads it and leaves it to the quit (the pill says Restart, for now),
+// as a package of the window is; off, the pill's click downloads it.
+// The notes are asked for in the window's language.
 import { openUrl, signal, Storage, Text, View } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import {
@@ -31,6 +38,7 @@ import {
   downloadPackage,
   downloadUpdate,
   installAndRestart,
+  installOnQuit,
   restartToPackage,
   runningPackage,
   shellInfo,
@@ -38,7 +46,7 @@ import {
   type PackageUpdate,
 } from "nsh/updater";
 import { Settings } from "pansy/native";
-import { tr } from "./i18n";
+import { locale, tr } from "./i18n";
 import { loadTrace, reason, routes, toast } from "./model";
 import { Hint, Icon, MOTION, TextButton } from "./parts";
 
@@ -68,9 +76,17 @@ const ready = signal(false);
 const AWAY = 3 * 24 * 3_600_000;
 /** Kept across runs (NSH's storage): when the pill comes back, and the notes of the update last put in. */
 const AWAY_KEY = "update.away";
+const CHANNEL_KEY = "update.channel";
+const ON_QUIT_KEY = "update.onQuit";
 const NOTES_KEY = "update.notes";
 /** The pill is away until then (ms since 1970); 0: it shows. */
 const awayUntil = signal(0);
+
+/** Where a newer pansy is looked for: the releases everyone gets, or the ones tried before them. */
+export type Channel = "stable" | "beta";
+export const channel = signal<Channel>("stable");
+/** A newer pansy found is downloaded and put in when pansy quits. */
+export const onQuit = signal(true);
 
 /** A release's notes: the version they are of, what it says changed, and whether What's new has shown them. */
 export type Notes = { version: string; text: string; seen?: boolean };
@@ -102,6 +118,8 @@ function running(): string {
 async function restore(): Promise<void> {
   try {
     awayUntil.set(Number(await Storage.getItem(AWAY_KEY)) || 0);
+    channel.set((await Storage.getItem(CHANNEL_KEY)) === "beta" ? "beta" : "stable");
+    onQuit.set((await Storage.getItem(ON_QUIT_KEY)) !== "off");
     const kept = JSON.parse((await Storage.getItem(NOTES_KEY)) ?? "null") as Notes | null;
     // notes of another version: an update that never went in, or one long past
     if (!kept || kept.version !== running()) return;
@@ -112,6 +130,22 @@ async function restore(): Promise<void> {
   } catch {
     // nothing kept that reads: the pill shows, and there are no notes
   }
+}
+
+/** Settings' channel: kept, and looked at now. An update already waiting for the quit stays. */
+export function setChannel(to: Channel) {
+  if (to === channel()) return;
+  channel.set(to);
+  void Storage.setItem(CHANNEL_KEY, to).catch(() => {});
+  if (!ready()) found.set(null);
+  void look();
+}
+
+/** Settings' install when pansy quits: kept; switched on, an update found is downloaded now. */
+export function setOnQuit(on: boolean) {
+  onQuit.set(on);
+  void Storage.setItem(ON_QUIT_KEY, on ? "on" : "off").catch(() => {});
+  if (on) void look();
 }
 
 /** The pill's ×: puts it away for three days; Settings › About still has the update. */
@@ -165,13 +199,19 @@ export function versionSaid(version: string): string {
   }
 }
 
+/** A newer pansy on the channel chosen, its notes in the window's language. */
+async function newerApp(): Promise<Found | null> {
+  const app = await checkForUpdate({ channel: channel() === "beta" ? "beta" : null, locale: locale() });
+  return app && { version: app.version, app, ui: null };
+}
+
 /** What the feed has for this pansy: a newer one, else a newer build of its window made for this version. */
 async function newer(): Promise<Found | null> {
-  const app = await checkForUpdate();
-  if (app) return { version: app.version, app, ui: null };
+  const app = await newerApp();
+  if (app) return app;
   const shell = shellInfo();
   if (!shell.packages) return null;
-  const ui = await checkForPackage();
+  const ui = await checkForPackage({ locale: locale() });
   return ui && ui.version === shell.version ? { version: named(ui.version, ui.build), app: null, ui } : null;
 }
 
@@ -181,17 +221,28 @@ async function keepNotes(update: Found): Promise<void> {
   await (notes ? Storage.setItem(NOTES_KEY, JSON.stringify(notes)) : Storage.removeItem(NOTES_KEY)).catch(() => {});
 }
 
-/** Asks the feed for a newer version, and downloads a package of the window it finds; a failure is kept for Settings, not shown. */
+/**
+ * Asks the feed for a newer version, and downloads what it finds when that
+ * goes in by itself: a package of the window (run from the next start), and
+ * a newer pansy when it is put in as pansy quits. A failure is kept for
+ * Settings, not shown.
+ */
 export async function look(): Promise<void> {
   if (phase() !== "idle") return;
+  // a newer pansy waits for the quit: what is newer still is found by the one it becomes
+  if (ready() && found()?.app) return;
   phase.set("checking");
   try {
     // with the window's package in already, only a newer pansy changes what is offered
-    const update = ready() ? await checkForUpdate().then((app) => (app ? { version: app.version, app, ui: null } : found())) : await newer();
+    const update = ready() ? ((await newerApp()) ?? found()) : await newer();
     if (update?.app) ready.set(false);
-    if (update?.ui && !ready()) {
+    if (!ready() && (update?.ui || (update?.app?.canInstall && onQuit()))) {
       try {
-        await downloadPackage();
+        if (update.ui) await downloadPackage();
+        else {
+          await downloadUpdate();
+          await installOnQuit();
+        }
         await keepNotes(update);
         ready.set(true);
       } catch {
@@ -274,7 +325,8 @@ function hint(update: Found): string {
   if (update.app && !update.app.canInstall) return `${out} · ${tr("pansy can't replace itself where it is installed; click to open the download.")}`;
   const f = failure();
   if (f?.update) return `${tr("Couldn't update to %s: %s", update.version, f.text)} · ${tr("Click to try again")}`;
-  return ready() ? tr("Restart to update to %s", update.version) : `${out} · ${tr("Click to download and restart")}`;
+  if (ready()) return update.app ? tr("Restart to update to %s, or quit pansy: it starts as %s the next time", update.version, update.version) : tr("Restart to update to %s", update.version);
+  return `${out} · ${tr("Click to download and restart")}`;
 }
 
 /**

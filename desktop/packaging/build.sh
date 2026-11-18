@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds pansy for this machine, into ../dist:
 #
-#   Linux     pansy-<version>-linux-<arch>.tar.gz, a directory:
+#   Linux     pansy-<version>-linux-<arch>.tar.gz, a directory, pansy/ (the
+#             updater replaces what is in it, so it names no version):
 #               pansy        the window with the gateway beside it, and the command
 #               nsh/         the compiled TSX window
 #               share/       the desktop entry and the icon
@@ -9,8 +10,8 @@
 #   macOS     pansy-<version>-macos-<arch>.tar.gz, Pansy.app (signed ad hoc,
 #             or by PANSY_CODESIGN_IDENTITY): Contents/MacOS/pansy and
 #             Contents/Resources/nsh
-#   Windows   pansy-<version>-windows-<arch>.zip, a directory: pansy.exe and
-#             nsh\ (run from Git Bash)
+#   Windows   pansy-<version>-windows-<arch>.zip, a directory, pansy\:
+#             pansy.exe and nsh\ (run from Git Bash)
 #
 # Each is laid out as `nsh package` lays an app out, which is what the
 # window's updater replaces (nsh/updater): it finds its release feed in
@@ -20,7 +21,7 @@ set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 export PATH="$HOME/.cargo/bin:$HOME/.nsh/bin:$PATH"
 
-nsh_version=0.5.1
+nsh_version=0.6.0
 if ! nsh --version 2>/dev/null | grep -q "^nsh $nsh_version "; then
   echo "NSH $nsh_version is required: NSH_VERSION=v$nsh_version sh <(curl -fsSL https://nsh.dev/install.sh)" >&2
   exit 1
@@ -50,9 +51,9 @@ rm -rf -- "$package"
 mkdir -p "$package" ../dist
 # what the archive holds, where the program goes in it and where the window's code
 case $os in
-  linux) stage=$package/$name program=$stage/pansy resources=$stage/nsh ;;
+  linux) stage=$package/pansy program=$stage/pansy resources=$stage/nsh ;;
   macos) stage=$package/Pansy.app program=$stage/Contents/MacOS/pansy resources=$stage/Contents/Resources/nsh ;;
-  windows) stage=$package/$name program=$stage/pansy.exe resources=$stage/nsh ;;
+  windows) stage=$package/pansy program=$stage/pansy.exe resources=$stage/nsh ;;
 esac
 mkdir -p "$(dirname "$program")" "$(dirname "$resources")"
 
@@ -87,7 +88,7 @@ SH
     chmod 755 "$stage/install.sh"
     archive=../dist/$name.tar.gz
     tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$SOURCE_DATE_EPOCH" \
-      -C "$package" -cf - "$name" | gzip -n -9 > "$archive"
+      -C "$package" -cf - pansy | gzip -n -9 > "$archive"
     ;;
   macos)
     install -m 755 target/release/pansy "$program"
@@ -137,7 +138,7 @@ PLIST
     archive=../dist/$name.zip
     rm -f -- "$archive"
     if command -v 7z > /dev/null; then
-      (cd "$package" && 7z a -tzip -mx=9 -bso0 "$OLDPWD/$archive" "$name")
+      (cd "$package" && 7z a -tzip -mx=9 -bso0 "$OLDPWD/$archive" pansy)
     else
       powershell.exe -NoProfile -Command "Compress-Archive -Path '$(cygpath -w "$stage")' -DestinationPath '$(cygpath -w "$archive")'"
     fi

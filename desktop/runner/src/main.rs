@@ -83,7 +83,7 @@ macro_rules! run_window {
         // A newer build of the window's code, downloaded as a package signed
         // by a key nsh.json's root certifies (ui/Update.tsx), runs instead
         // of the one shipped; one that fails its first run is put away.
-        let launch = nsh_engine::updates::launch(bundle, &dir, nsh_engine::data_dir().as_deref());
+        let launch = nsh_engine::updates::launch(bundle, &dir, nsh_engine::support_dir().as_deref());
         // The gateway runs while the window does, the tray keeping both.
         pansy_desktop_native::start_gateway();
         let code = $platform::run_app(
