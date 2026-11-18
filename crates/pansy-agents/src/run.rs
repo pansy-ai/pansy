@@ -578,15 +578,13 @@ mod tests {
         )));
         assert_eq!(l.small, None, "Codex has no quick-task model");
         assert_eq!(l.subagent, None);
-        assert!(!l.args.iter().any(|a| a.contains("default_subagent_model")));
+        assert!(!l.args.iter().any(|a| a.contains("subagent")));
 
         // And its file's, as Claude Code's above.
         let l = launch(codex, &project, Some(&subs), Models::default(), &[]).unwrap();
         assert_eq!(
-            l.args[l.args.len() - 4..],
+            l.args[l.args.len() - 2..],
             [
-                "-c",
-                "agents.default_subagent_model=\"group/cheap\"",
                 "-c",
                 "model_providers.pansy.http_headers.x-pansy-subagent-model=\"group/cheap\""
             ]
