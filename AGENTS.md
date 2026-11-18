@@ -63,7 +63,8 @@ agent use every provider's models, with a desktop window on NSH 0.5.1. Read
   Simplified Chinese; `nsh check` fails otherwise.
 - **A release is signed, and its keys stay out of git.** `desktop/keys/`
   holds the secrets (`docs/release.md`); `nsh.json`'s `"updater"` holds what
-  every pansy installed trusts, so its address and keys do not change. The
+  every pansy installed trusts (the feed's address, the update key, the
+  root), so it does not change. The
   build in `nsh.json` grows with every release (`packaging/bump.sh`), and a
   release of the window alone carries no Rust change.
 

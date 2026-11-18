@@ -28,6 +28,7 @@ import { sessionCrumb, SessionsPage } from "./ui/Sessions";
 import { SETTINGS_TABS, SettingsPage } from "./ui/Settings";
 import { startUpdates, UpdatePill } from "./ui/Update";
 import { UsagePage } from "./ui/Usage";
+import { WhatsNewDialog } from "./ui/WhatsNew";
 
 /** Each page's place: the group it is under in the sidebar, and its name. */
 const PLACES = (): Record<Page, { group: string; name: string; icon: IconName }> => ({
@@ -352,7 +353,7 @@ function Header() {
       <If when={sideShown() && page() === "settings"}>
         <Input value={settingsQuery()} onChange={(v) => settingsQuery.set(v)} placeholder={tr("Find a setting")} testID="settings-find" class="w-[220px]" />
       </If>
-      <UpdatePill testID="update" />
+      <UpdatePill testID="update" hide />
       <IconButton icon="sync" label={tr("Look again: agents installed or removed, settings changed")} testID="sync" onPress={() => loadPage(page())} />
       <If when={!sideShown()}>
         <IconButton icon="nav-settings" label={tr("Settings")} color={page() === "settings" ? "foreground" : undefined} testID="tab-settings" onPress={() => go("settings")} />
@@ -540,6 +541,7 @@ function App() {
       <ProviderModals />
       <AgentModals />
       <PreviewDialog />
+      <WhatsNewDialog />
       <QuestionDialog />
       <Toasts />
     </View>

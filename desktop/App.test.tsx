@@ -313,6 +313,37 @@ test("says in About that a build without a release feed doesn't look for updates
   await app.waitFor("id:update-check", { state: "gone" });
 });
 
+test("shows What's new once after an update, and again from About", async () => {
+  // the version running, as About says it
+  const first = await launch();
+  await first.press("id:nav-settings");
+  await first.press("id:settings-tab-about");
+  await first.waitFor("id:setting-row-whats-new");
+  await first.waitFor("text:No release notes yet: they come with an update");
+  const version = first.texts().find((text) => text.startsWith("Version "))!.slice("Version ".length);
+  // the notes the update before the restart kept
+  const notes = { version, text: "## Fixed\n- The gateway **keeps** a stream open\nThanks for the reports." };
+  const app = await open("./App.tsx", { platform: "linux", width: 1100, height: 720, storage: { "update.notes": JSON.stringify(notes) } });
+  await app.waitFor("id:whats-new");
+  await app.waitFor(`text:What's new in ${version}`);
+  expect(app.texts()).toContain("Fixed");
+  expect(app.texts()).toContain("The gateway keeps a stream open");
+  expect(app.texts()).toContain("Thanks for the reports.");
+  expect(app.texts()).not.toContain("Not installed yet");
+  await app.press("id:whats-new-close");
+  await app.waitFor("id:whats-new", { state: "gone" });
+  // shown once: kept as seen
+  await app.waitUntil(() => JSON.parse(app.storage()["update.notes"]).seen === true);
+  await app.press("id:nav-settings");
+  await app.press("id:settings-tab-about");
+  await app.press("id:whats-new-open");
+  await app.waitFor("id:whats-new");
+  // notes of another version are not this one's
+  const other = await open("./App.tsx", { platform: "linux", width: 1100, height: 720, storage: { "update.notes": JSON.stringify({ ...notes, version: "0.0.1" }) } });
+  await other.waitFor("id:page-agents");
+  await other.waitFor("id:whats-new", { state: "gone" });
+});
+
 test("masks a key in Try it, and opens the Masking page", async () => {
   const app = await launch();
   await app.press("id:nav-masking");
