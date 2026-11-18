@@ -1,11 +1,14 @@
 # Claude Code. Its settings' `env` wins over the environment it is started
 # in, so one run is pointed elsewhere with `--settings`, which wins over both.
+# A subagent runs on the model its call names, then its definition's, then
+# CLAUDE_CODE_SUBAGENT_MODEL, then the session's.
 id = "claude-code"
 name = "Claude Code"
 protocol = "anthropic"
 programs = ["claude"]
 dirs = [".claude"]
 small_model = true
+subagent_model = true
 
 [files]
 settings = "~/.claude/settings.json"
@@ -45,6 +48,11 @@ file = "settings"
 key = ["env", "ANTHROPIC_SMALL_FAST_MODEL"]
 value = "{small}"
 
+[[set]]
+file = "settings"
+key = ["env", "CLAUDE_CODE_SUBAGENT_MODEL"]
+value = "{subagent}"
+
 [base_url]
 file = "settings"
 key = ["env", "ANTHROPIC_BASE_URL"]
@@ -81,3 +89,4 @@ ANTHROPIC_DEFAULT_OPUS_MODEL = "{model}"
 ANTHROPIC_DEFAULT_SONNET_MODEL = "{model}"
 ANTHROPIC_DEFAULT_HAIKU_MODEL = "{small}"
 ANTHROPIC_SMALL_FAST_MODEL = "{small}"
+CLAUDE_CODE_SUBAGENT_MODEL = "{subagent}"

@@ -59,6 +59,13 @@ pub struct AgentView {
     pub model: Option<String>,
     pub small_model: Option<String>,
     pub has_small_model: bool,
+    /// The model its subagents start on, as pansy set it.
+    pub subagent_model: Option<String>,
+    /// It has a key for that model.
+    pub has_subagent_model: bool,
+    /// Every subagent of it goes on that model, whatever one its lead
+    /// names: the gateway sees to it.
+    pub subagent_every: bool,
     pub config_files: Vec<String>,
     pub recent: Vec<String>,
     pub note: Option<&'static str>,
@@ -116,6 +123,11 @@ pub fn view(agent: &Agent, state: &State) -> AgentView {
         model,
         small_model: saved.and_then(|s| s.small_model.clone()),
         has_small_model: agent.small_model,
+        subagent_model: saved
+            .and_then(|s| s.subagent_model.clone())
+            .filter(|_| connected && agent.subagent_model),
+        has_subagent_model: agent.subagent_model,
+        subagent_every: agent.subagent_every,
         config_files: agent
             .files()
             .iter()
@@ -242,6 +254,7 @@ fn formats(agent: &Agent) -> BTreeMap<String, files::Format> {
             out.insert(file.display().to_string(), *format);
         }
     }
+    // With a model for subagents, so the keys for one are among them.
     out.extend(
         agent
             .edits(&agent::Wiring {
@@ -249,6 +262,7 @@ fn formats(agent: &Agent) -> BTreeMap<String, files::Format> {
                 key: "",
                 model: "",
                 small_model: None,
+                subagent_model: Some(""),
                 choices: &[],
             })
             .into_iter()
@@ -319,9 +333,32 @@ fn back_up(agent: &str, file: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Sets the agent's keys for `model` (and its quick-task model), noting
-/// what each replaced.
-fn wire(agent: &Agent, model: &str, small: Option<&str>, state: &mut State) -> Result<()> {
+/// The models an agent is wired with beside its main one.
+#[derive(Debug, Clone, Copy, Default)]
+struct Others<'a> {
+    /// For quick tasks.
+    small: Option<&'a str>,
+    /// For subagents that name none.
+    subagent: Option<&'a str>,
+}
+
+impl<'a> Others<'a> {
+    /// Those `state` keeps for the agent `id`.
+    fn saved(state: &'a State, id: &str) -> Others<'a> {
+        let saved = state.agents.get(id);
+        Others {
+            small: saved.and_then(|s| s.small_model.as_deref()),
+            subagent: saved.and_then(|s| s.subagent_model.as_deref()),
+        }
+    }
+}
+
+/// Sets the agent's keys for `model` (and its other models), noting what
+/// each replaced. A key for a model the user gives none of any more goes
+/// back to what it was.
+fn wire(agent: &Agent, model: &str, others: Others, state: &mut State) -> Result<()> {
+    let small = others.small;
+    let subagent = others.subagent.filter(|_| agent.subagent_model);
     let base = gateway_url();
     let choices: Vec<String> = pansy_core::manage::choices()
         .unwrap_or_default()
@@ -333,15 +370,20 @@ fn wire(agent: &Agent, model: &str, small: Option<&str>, state: &mut State) -> R
         key: AGENT_KEY,
         model,
         small_model: small,
+        subagent_model: subagent,
         choices: &choices,
     };
     let edits = agent.edits_checked(&wiring)?;
-    let mut by_file: BTreeMap<PathBuf, Vec<&agent::Edit>> = BTreeMap::new();
+    let left_out = agent.left_out(&wiring);
+    let mut by_file: BTreeMap<PathBuf, (Vec<&agent::Edit>, Vec<&agent::Edit>)> = BTreeMap::new();
     for e in &edits {
-        by_file.entry(e.file.clone()).or_default().push(e);
+        by_file.entry(e.file.clone()).or_default().0.push(e);
+    }
+    for e in &left_out {
+        by_file.entry(e.file.clone()).or_default().1.push(e);
     }
     let record = state.agent(agent.id);
-    for (file, edits) in by_file {
+    for (file, (edits, left_out)) in by_file {
         let mut text = files::read_text(&file)?;
         let original = text.clone();
         let file_key = file.display().to_string();
@@ -374,6 +416,20 @@ fn wire(agent: &Agent, model: &str, small: Option<&str>, state: &mut State) -> R
             text = files::set(e.format, &text, &path, Some(&e.value))
                 .with_context(|| format!("editing {}", file.display()))?;
         }
+        // A key pansy set for a model there is none of now: as it was.
+        for e in left_out {
+            let Some(at) = record
+                .touched
+                .iter()
+                .position(|t| t.file == file_key && t.path == e.path)
+            else {
+                continue;
+            };
+            let was = record.touched.remove(at);
+            let path: Vec<&str> = e.path.iter().map(String::as_str).collect();
+            text = files::set(e.format, &text, &path, was.before.as_ref())
+                .with_context(|| format!("editing {}", file.display()))?;
+        }
         if text != original {
             back_up(agent.id, &file)?;
             let existed = file.exists();
@@ -399,6 +455,7 @@ fn wire(agent: &Agent, model: &str, small: Option<&str>, state: &mut State) -> R
     }
     record.model = Some(model.to_owned());
     record.small_model = small.map(str::to_owned);
+    record.subagent_model = subagent.map(str::to_owned);
     record.paused = None;
     record.remember(model);
     Ok(())
@@ -412,8 +469,8 @@ pub fn connect(id: &str, model: &str) -> Result<()> {
         bail!("no model given");
     }
     let mut state = State::load()?;
-    let small = state.agents.get(id).and_then(|s| s.small_model.clone());
-    wire(agent, model, small.as_deref(), &mut state)?;
+    let saved = state.clone();
+    wire(agent, model, Others::saved(&saved, id), &mut state)?;
     state.save()
 }
 
@@ -424,7 +481,36 @@ pub fn set_small_model(id: &str, model: Option<&str>) -> Result<()> {
     let current = view(agent, &state)
         .model
         .ok_or_else(|| anyhow!("{} is not connected to pansy", agent.name))?;
-    wire(agent, &current, model, &mut state)?;
+    let saved = state.clone();
+    let others = Others {
+        small: model,
+        ..Others::saved(&saved, id)
+    };
+    wire(agent, &current, others, &mut state)?;
+    state.save()
+}
+
+/// Sets the model the agent's subagents start on when they name none;
+/// `None` leaves that to the agent, its key as it was before pansy.
+pub fn set_subagent_model(id: &str, model: Option<&str>) -> Result<()> {
+    let agent = find(id)?;
+    if !agent.subagent_model {
+        bail!(
+            "{} has no setting for its subagents' model that pansy knows",
+            agent.name
+        );
+    }
+    let model = model.map(str::trim).filter(|m| !m.is_empty());
+    let mut state = State::load()?;
+    let current = view(agent, &state)
+        .model
+        .ok_or_else(|| anyhow!("{} is not connected to pansy", agent.name))?;
+    let saved = state.clone();
+    let others = Others {
+        subagent: model,
+        ..Others::saved(&saved, id)
+    };
+    wire(agent, &current, others, &mut state)?;
     state.save()
 }
 

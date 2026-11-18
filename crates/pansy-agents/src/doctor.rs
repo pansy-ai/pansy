@@ -247,6 +247,14 @@ pub fn run() -> Vec<Finding> {
                     &[agent.name, &model],
                 )
             });
+            if let Some(subagent) = v.subagent_model.as_deref().filter(|m| !served(m)) {
+                out.push(finding(
+                    agent.id,
+                    Level::Warn,
+                    "agent-subagent-gone",
+                    &[agent.name, subagent],
+                ));
+            }
             if v.cli_missing {
                 out.push(finding(
                     agent.id,
@@ -341,6 +349,12 @@ pub fn say(f: &Finding) -> String {
             "{} is on {}, which no provider or group serves now: pick another",
             a(0),
             a(1)
+        ),
+        "agent-subagent-gone" => format!(
+            "{}'s subagents start on {}, which no provider or group serves now: pick another (pansy {} --subagent <provider/model>), or leave them to it (--subagent off)",
+            a(0),
+            a(1),
+            f.about
         ),
         "agent-cli-missing" => format!("{}'s settings are here, its program isn't", a(0)),
         "agent-paused" => format!(

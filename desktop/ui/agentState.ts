@@ -8,7 +8,7 @@ import { tr } from "./i18n";
 import { act, agents, choiceName, choices, loadAgents, reason, settings, toast, type Agent, type FileChange, type SettingsView } from "./model";
 
 /** The agent whose picker is open, and for which of its models. */
-export const picking = signal<{ id: string; small: boolean } | null>(null);
+export const picking = signal<{ id: string; small: boolean; subagent?: boolean } | null>(null);
 /** The connected agent whose row is opened (Details). */
 export const expanded = signal<string | null>(null);
 /** The folded agents are shown. */

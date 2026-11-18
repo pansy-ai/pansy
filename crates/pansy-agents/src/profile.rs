@@ -17,6 +17,8 @@ pub struct Choice {
     pub model: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub small_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagent_model: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -60,6 +62,7 @@ fn current() -> BTreeMap<String, Choice> {
                 Choice {
                     model: v.model.clone()?,
                     small_model: v.small_model.clone(),
+                    subagent_model: v.subagent_model.clone(),
                 },
             ))
         })
@@ -108,10 +111,15 @@ pub fn apply(name: &str) -> Result<Vec<String>> {
         .ok_or_else(|| anyhow!("there is no profile {name}"))?;
     let mut problems = Vec::new();
     for (id, choice) in &profile.agents {
-        let result = crate::connect(id, &choice.model).and_then(|_| match &choice.small_model {
-            Some(small) => crate::set_small_model(id, Some(small)),
-            None => Ok(()),
-        });
+        let result = crate::connect(id, &choice.model)
+            .and_then(|_| match &choice.small_model {
+                Some(small) => crate::set_small_model(id, Some(small)),
+                None => Ok(()),
+            })
+            .and_then(|_| match &choice.subagent_model {
+                Some(subagent) => crate::set_subagent_model(id, Some(subagent)),
+                None => Ok(()),
+            });
         if let Err(e) = result {
             problems.push(format!("{id}: {e:#}"));
         }

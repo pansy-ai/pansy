@@ -165,6 +165,12 @@ function Detail(props: { profile: Profile }) {
                   </Text>
                 </View>
               </If>
+              <If when={entry()[1].subagentModel}>
+                <View class="flex-row gap-3">
+                  <Text class="w-[84px] text-[12px] leading-[18px] text-muted-foreground">{tr("subagents")}</Text>
+                  <Text class="flex-1 text-[12px] leading-[18px] text-foreground line-clamp-1">{choiceName(entry()[1].subagentModel!)}</Text>
+                </View>
+              </If>
             </View>
           </View>
         )}

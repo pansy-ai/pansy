@@ -194,6 +194,16 @@ export function storyOf(r: Route): Step[] {
     kind: "plain",
     text: r.group ? tr("%s asked for the routing group %s: %s", agent, r.group.name, r.group.members.join(", ")) : tr("%s asked for %s", agent, r.requested),
   });
+  if (r.subagent) {
+    steps.push({
+      kind: "plain",
+      text: r.asked
+        ? tr("This is a subagent's request: it asked for %s, and %s's subagents go on this model instead.", r.asked, agent)
+        : r.kept
+          ? tr("This is a subagent's request. It stayed on the model it asked for: %s", r.kept)
+          : tr("This is a subagent's request."),
+    });
+  }
   if (r.lineup.length === 0) {
     steps.push({ kind: "bad", text: tr("Nothing took this request: %s", r.error ?? "") });
     return steps;

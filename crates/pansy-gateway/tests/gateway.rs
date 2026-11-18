@@ -346,6 +346,120 @@ async fn agents_reach_a_chat_vendor_through_the_gateway() {
         3
     );
 
+    // A subagent of Codex's goes on the model Codex sends for its subagents,
+    // whatever its lead named for it; the lead's own turns stay where they are.
+    let codex = |model: &str, headers: &[(&str, &str)], input: Value| {
+        let mut request = Request::post("/v1/responses")
+            .header("content-type", "application/json")
+            .header("user-agent", "codex_cli_rs/0.169.0");
+        for (name, value) in headers {
+            request = request.header(*name, *value);
+        }
+        request
+            .body(Body::from(
+                json!({"model": model, "input": input}).to_string(),
+            ))
+            .unwrap()
+    };
+    let spawned = ("x-openai-subagent", "collab_spawn");
+    let on_daily = (pansy_gateway::server::SUBAGENT_MODEL, "group/daily");
+    let last = || gateway.trace().routes().pop().unwrap();
+    let response = gateway
+        .router()
+        .oneshot(codex("gpt-5.6-sol", &[spawned, on_daily], json!("hi")))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let route = last();
+    assert!(route.subagent);
+    assert_eq!(
+        (
+            route.requested.as_str(),
+            route.asked.as_str(),
+            route.kept.as_str()
+        ),
+        ("group/daily", "gpt-5.6-sol", "")
+    );
+    assert_eq!(route.group.as_ref().map(|g| g.id.as_str()), Some("daily"));
+    let record = pansy_core::usage::recent(1).pop().unwrap();
+    assert!(record.subagent);
+    assert_eq!(
+        (record.requested.as_str(), record.model.as_str()),
+        ("group/daily", "fake-chat")
+    );
+    // The lead's turn, with the same header: not a subagent's, not moved.
+    let response = gateway
+        .router()
+        .oneshot(codex("fake/fake-chat", &[on_daily], json!("hi")))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let route = last();
+    assert!(!route.subagent);
+    assert_eq!(
+        (route.requested.as_str(), route.asked.as_str()),
+        ("fake/fake-chat", "")
+    );
+    assert!(!pansy_core::usage::recent(1).pop().unwrap().subagent);
+    // A task its lead's vendor sealed opens there alone: it stays, and says why.
+    let sealed = json!([{"type": "agent_message", "content": [
+        {"type": "encrypted_content", "encrypted_content": "gAAAA-sealed"}]},
+        {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]}]);
+    let response = gateway
+        .router()
+        .oneshot(codex("fake/fake-chat", &[spawned, on_daily], sealed))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let route = last();
+    assert!(route.subagent);
+    assert_eq!(
+        (route.requested.as_str(), route.asked.as_str()),
+        ("fake/fake-chat", "")
+    );
+    assert!(route.kept.contains("sealed"), "{}", route.kept);
+    // So does one whose model nobody serves now.
+    let gone = (pansy_gateway::server::SUBAGENT_MODEL, "nobody/none");
+    let response = gateway
+        .router()
+        .oneshot(codex("fake/fake-chat", &[spawned, gone], json!("hi")))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let route = last();
+    assert_eq!(route.requested, "fake/fake-chat");
+    assert!(
+        route.kept.starts_with("nobody/none can't take it"),
+        "{}",
+        route.kept
+    );
+    // Claude Code names its subagent; it sets their model itself, so the
+    // request is marked and goes where it asked.
+    let request = Request::post("/v1/messages")
+        .header("content-type", "application/json")
+        .header("user-agent", "claude-cli/2.1.326")
+        .header("x-claude-code-agent-id", "a1b2")
+        .body(Body::from(
+            json!({"model": "fake/fake-chat", "max_tokens": 10,
+                   "messages": [{"role": "user", "content": "hi"}]})
+            .to_string(),
+        ))
+        .unwrap();
+    assert_eq!(
+        gateway.router().oneshot(request).await.unwrap().status(),
+        StatusCode::OK
+    );
+    let route = last();
+    assert!(route.subagent);
+    assert_eq!(
+        (
+            route.agent.as_str(),
+            route.asked.as_str(),
+            route.kept.as_str()
+        ),
+        ("claude-code", "", "")
+    );
+
     // A web page elsewhere is refused; one on this computer is let in.
     let from = |origin: &str| {
         Request::post("/v1/chat/completions")

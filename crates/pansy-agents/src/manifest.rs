@@ -34,6 +34,18 @@
 //! one key is `"$each_model"` becomes one entry for each model the gateway
 //! offers, by its id (`{id}`); alone in a list, one item for each.
 //!
+//! `{subagent}` is the model the agent's subagents start on, for an agent
+//! that has a key for it (`subagent_model = true`). The user may give none:
+//! a text that names it is then left out — the key to set, the entry of a
+//! table, the item of a list, the variable of a run — and a key pansy set
+//! for one before goes back to what it was. A run's arguments for it are
+//! `subagent_args`, added when there is one.
+//!
+//! An agent whose lead names its subagents' models itself, over its config,
+//! sends the model in the header `x-pansy-subagent-model` (Codex's
+//! `http_headers`): the gateway puts a subagent's request on it whatever it
+//! asked for. `subagent_every = true` says so, for the window's words.
+//!
 //! A file's format is its ending's: `.toml`, `.yaml`, `.env`, else JSON
 //! (with comments). A path's `~/` is the home directory, and
 //! `{env:NAME|else}` a variable's value or, without one, what follows the
@@ -142,6 +154,8 @@ pub struct RunSpec {
     pub unsupported: Option<&'static str>,
     pub note: Option<&'static str>,
     pub args: Vec<&'static str>,
+    /// The arguments after those, when there is a model for subagents.
+    pub subagent_args: Vec<&'static str>,
     pub env: Vec<(&'static str, &'static str)>,
     /// Variables whose value is JSON.
     pub json_env: Vec<(&'static str, Value)>,
@@ -157,6 +171,11 @@ pub struct Manifest {
     pub programs: Vec<&'static str>,
     pub dirs: Vec<&'static str>,
     pub small_model: bool,
+    /// It has a key for the model its subagents start on.
+    pub subagent_model: bool,
+    /// The gateway puts every subagent of it on that model, whatever one
+    /// its lead names.
+    pub subagent_every: bool,
     pub note: Option<&'static str>,
     pub picks_in: Option<&'static str>,
     pub files: Vec<(String, FilePath)>,
@@ -185,6 +204,10 @@ struct Raw {
     dirs: Vec<String>,
     #[serde(default)]
     small_model: bool,
+    #[serde(default)]
+    subagent_model: bool,
+    #[serde(default)]
+    subagent_every: bool,
     note: Option<String>,
     picks_in: Option<String>,
     files: Map<String, Value>,
@@ -231,6 +254,8 @@ struct RawRun {
     note: Option<String>,
     #[serde(default)]
     args: Vec<String>,
+    #[serde(default)]
+    subagent_args: Vec<String>,
     #[serde(default)]
     env: Map<String, Value>,
     #[serde(default)]
@@ -335,6 +360,7 @@ pub fn parse(text: &str) -> Result<Manifest> {
                 unsupported: run.unsupported.as_deref().map(leak),
                 note: run.note.as_deref().map(leak),
                 args: leak_all(&run.args),
+                subagent_args: leak_all(&run.subagent_args),
                 env,
                 json_env: run
                     .json_env
@@ -349,6 +375,37 @@ pub fn parse(text: &str) -> Result<Manifest> {
             })
         }
     };
+    let names_it = set.iter().any(|s| names_subagent(&s.value))
+        || run.as_ref().is_some_and(|r| {
+            !r.subagent_args.is_empty()
+                || r.args
+                    .iter()
+                    .chain(r.env.iter().map(|(_, v)| v))
+                    .any(|t| subagent_in(t))
+                || r.json_env
+                    .iter()
+                    .chain(&r.json_arg)
+                    .any(|(_, v)| names_subagent(v))
+        });
+    if names_it && !raw.subagent_model {
+        bail!(
+            "{{subagent}} is named, but the agent doesn't say it has a model for subagents (subagent_model = true)"
+        );
+    }
+    if raw.subagent_model && !set.iter().any(|s| names_subagent(&s.value)) {
+        bail!("subagent_model = true, but no key to set names {{subagent}}");
+    }
+    if run
+        .as_ref()
+        .is_some_and(|r| r.args.iter().any(|a| subagent_in(a)))
+    {
+        bail!("a run's arguments for the subagents' model go in subagent_args");
+    }
+    if raw.subagent_every && !raw.subagent_model {
+        bail!(
+            "subagent_every = true is for an agent with a model for subagents (subagent_model = true)"
+        );
+    }
     Ok(Manifest {
         base_url: key_at(&raw.base_url, "base_url")?,
         model: key_at(&raw.model, "model")?,
@@ -358,6 +415,8 @@ pub fn parse(text: &str) -> Result<Manifest> {
         programs: leak_all(&raw.programs),
         dirs: leak_all(&raw.dirs),
         small_model: raw.small_model,
+        subagent_model: raw.subagent_model,
+        subagent_every: raw.subagent_every,
         note: raw.note.as_deref().map(leak),
         picks_in: raw.picks_in.as_deref().map(leak),
         files,
@@ -373,6 +432,21 @@ pub fn parse(text: &str) -> Result<Manifest> {
             .collect(),
         run,
     })
+}
+
+/// Whether a text names `{subagent}`.
+fn subagent_in(text: &str) -> bool {
+    text.contains("{subagent}") || text.contains("{subagent:q}")
+}
+
+/// Whether a value names `{subagent}`, at any depth.
+fn names_subagent(value: &Value) -> bool {
+    match value {
+        Value::String(s) => subagent_in(s),
+        Value::Array(items) => items.iter().any(names_subagent),
+        Value::Object(map) => map.values().any(names_subagent),
+        _ => false,
+    }
 }
 
 /// pansy's own agents, in the order the Agents page lists them.
@@ -421,7 +495,8 @@ pub struct Vars<'a> {
     key: &'a str,
     model: &'a str,
     small: &'a str,
-    /// Every model the gateway offers, then the agent's own two.
+    subagent: Option<&'a str>,
+    /// Every model the gateway offers, then the agent's own.
     models: Vec<&'a str>,
 }
 
@@ -429,7 +504,8 @@ impl<'a> Vars<'a> {
     pub fn of(w: &'a Wiring<'a>) -> Vars<'a> {
         let small = w.small_model.unwrap_or(w.model);
         let mut models: Vec<&str> = Vec::new();
-        for id in w.choices.iter().map(String::as_str).chain([w.model, small]) {
+        let own = [w.model, small].into_iter().chain(w.subagent_model);
+        for id in w.choices.iter().map(String::as_str).chain(own) {
             if !models.contains(&id) {
                 models.push(id);
             }
@@ -440,8 +516,25 @@ impl<'a> Vars<'a> {
             key: w.key,
             model: w.model,
             small,
+            subagent: w.subagent_model,
             models,
         }
+    }
+
+    /// Whether `value` is a text left out: it names `{subagent}`, and the
+    /// user gave no model for subagents.
+    pub fn leaves_out(&self, value: &Value) -> bool {
+        self.subagent.is_none() && value.as_str().is_some_and(subagent_in)
+    }
+
+    /// [`Vars::leaves_out`], of a text.
+    pub fn leaves_out_text(&self, text: &str) -> bool {
+        self.subagent.is_none() && subagent_in(text)
+    }
+
+    /// Whether there is a model for subagents.
+    pub fn has_subagent(&self) -> bool {
+        self.subagent.is_some()
     }
 
     fn var<'s>(&'s self, name: &str, id: Option<&'s str>) -> Option<&'s str> {
@@ -451,6 +544,7 @@ impl<'a> Vars<'a> {
             "key" => self.key,
             "model" => self.model,
             "small" => self.small,
+            "subagent" => self.subagent?,
             "id" => id?,
             _ => return None,
         })
@@ -512,7 +606,13 @@ impl<'a> Vars<'a> {
                             .collect(),
                     );
                 }
-                Value::Array(items.iter().map(|v| self.fill_with(v, id)).collect())
+                Value::Array(
+                    items
+                        .iter()
+                        .filter(|v| !self.leaves_out(v))
+                        .map(|v| self.fill_with(v, id))
+                        .collect(),
+                )
             }
             Value::Object(map) => {
                 if let Some(each) = each_model(map) {
@@ -525,6 +625,7 @@ impl<'a> Vars<'a> {
                 }
                 Value::Object(
                     map.iter()
+                        .filter(|(_, v)| !self.leaves_out(v))
                         .map(|(k, v)| (k.clone(), self.fill_with(v, id)))
                         .collect(),
                 )
@@ -576,8 +677,32 @@ mod tests {
             key: "pansy",
             model: "a/x",
             small_model: Some("b/y"),
+            subagent_model: None,
             choices,
         }
+    }
+
+    #[test]
+    fn leaves_out_what_names_a_subagent_model_there_is_none_of() {
+        let value = json!({
+            "env": {"MODEL": "{model}", "SUB": "{subagent}"},
+            "list": ["{model}", "sub={subagent:q}"],
+        });
+        let mut w = wiring(&[]);
+        let vars = Vars::of(&w);
+        assert_eq!(
+            vars.fill(&value),
+            json!({"env": {"MODEL": "a/x"}, "list": ["a/x"]})
+        );
+        assert!(vars.leaves_out(&json!("{subagent}")));
+        assert!(!vars.leaves_out(&json!("{model}")));
+        w.subagent_model = Some("c/z");
+        let vars = Vars::of(&w);
+        assert_eq!(
+            vars.fill(&value),
+            json!({"env": {"MODEL": "a/x", "SUB": "c/z"}, "list": ["a/x", "sub=\"c/z\""]})
+        );
+        assert!(!vars.leaves_out(&json!("{subagent}")));
     }
 
     #[test]

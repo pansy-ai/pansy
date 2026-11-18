@@ -860,6 +860,15 @@ impl Agents {
         .await
     }
 
+    /// Sets the model the agent's subagents start on when they name none;
+    /// empty leaves that to the agent.
+    pub async fn set_subagent_model(id: String, model: String) -> Result<(), String> {
+        off(move || {
+            pansy_agents::set_subagent_model(&id, Some(model.as_str()).filter(|m| !m.is_empty()))
+        })
+        .await
+    }
+
     /// Puts back what pansy changed in the agent's config.
     pub async fn disconnect(id: String) -> Result<(), String> {
         off(move || pansy_agents::disconnect(&id)).await
@@ -999,7 +1008,7 @@ pub struct Profiles;
 
 #[module]
 impl Profiles {
-    /// `[{name, agents: {id: {model, smallModel}}, active}]` (JSON).
+    /// `[{name, agents: {id: {model, smallModel, subagentModel}}, active}]` (JSON).
     pub async fn list() -> Result<String, String> {
         off(|| Ok(to_json(&pansy_agents::profile::list()?))).await
     }

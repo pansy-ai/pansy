@@ -1,9 +1,15 @@
 # Codex. `-c key=value` wins over config.toml for one run.
+# [agents] default_subagent_model is the model of a subagent whose spawn names
+# none. The lead may name one itself, which its config can't overrule: so the
+# model goes with every request in a header of pansy's, and the gateway puts a
+# subagent's (x-openai-subagent: collab_spawn) on it whatever it asked for.
 id = "codex"
 name = "Codex"
 protocol = "responses"
 programs = ["codex"]
 dirs = [".codex"]
+subagent_model = true
+subagent_every = true
 
 [files]
 config = "{env:CODEX_HOME|~/.codex}/config.toml"
@@ -37,6 +43,16 @@ value = "responses"
 file = "config"
 key = ["model_providers", "pansy", "experimental_bearer_token"]
 value = "{key}"
+
+[[set]]
+file = "config"
+key = ["agents", "default_subagent_model"]
+value = "{subagent}"
+
+[[set]]
+file = "config"
+key = ["model_providers", "pansy", "http_headers", "x-pansy-subagent-model"]
+value = "{subagent}"
 
 [base_url]
 file = "config"
@@ -74,4 +90,8 @@ args = [
   "-c", "model_providers.pansy.base_url={v1:q}",
   "-c", 'model_providers.pansy.wire_api="responses"',
   "-c", "model_providers.pansy.experimental_bearer_token={key:q}",
+]
+subagent_args = [
+  "-c", "agents.default_subagent_model={subagent:q}",
+  "-c", "model_providers.pansy.http_headers.x-pansy-subagent-model={subagent:q}",
 ]

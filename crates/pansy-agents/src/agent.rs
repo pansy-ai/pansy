@@ -46,6 +46,9 @@ pub struct Wiring<'a> {
     pub model: &'a str,
     /// The model for quick tasks; the main one when `None`.
     pub small_model: Option<&'a str>,
+    /// The model its subagents start on, when they name none; `None`: the
+    /// agent's own choice, its key left as the user has it.
+    pub subagent_model: Option<&'a str>,
     /// Every model the gateway offers, for agents that list them.
     pub choices: &'a [String],
 }
@@ -84,6 +87,11 @@ pub struct Agent {
     pub dirs: &'static [&'static str],
     /// It has a second model for quick tasks.
     pub small_model: bool,
+    /// It has a key for the model its subagents start on.
+    pub subagent_model: bool,
+    /// The gateway puts every subagent of it on that model, whatever one
+    /// its lead names.
+    pub subagent_every: bool,
     /// Something the user should know about wiring it.
     pub note: Option<&'static str>,
     kind: Kind,
@@ -217,6 +225,8 @@ pub fn plugged() -> Vec<&'static Agent> {
             programs,
             dirs,
             small_model: false,
+            subagent_model: false,
+            subagent_every: false,
             note: (!a.notice.is_empty()).then(|| leak(&a.notice)),
             kind: Kind::Plugin(plugged),
         }));
@@ -250,6 +260,8 @@ fn agent_of(m: &'static Manifest) -> Agent {
         programs: &m.programs,
         dirs: &m.dirs,
         small_model: m.small_model,
+        subagent_model: m.subagent_model,
+        subagent_every: m.subagent_every,
         note: m.note,
         kind: Kind::Listed(m),
     }
@@ -439,6 +451,7 @@ impl Agent {
                 let vars = Vars::of(w);
                 m.set
                     .iter()
+                    .filter(|s| !vars.leaves_out(&s.value))
                     .map(|s| {
                         let file = m.file(s.file);
                         Edit {
@@ -451,6 +464,29 @@ impl Agent {
                     .collect()
             }
         }
+    }
+
+    /// The keys [`Agent::edits`] leaves out with `w`: those for the
+    /// subagents' model, while the user gives none. One pansy set before
+    /// goes back to what it was.
+    pub fn left_out(&self, w: &Wiring) -> Vec<Edit> {
+        let Kind::Listed(m) = self.kind else {
+            return Vec::new();
+        };
+        let vars = Vars::of(w);
+        m.set
+            .iter()
+            .filter(|s| vars.leaves_out(&s.value))
+            .map(|s| {
+                let file = m.file(s.file);
+                Edit {
+                    format: format_of("", &file),
+                    file,
+                    path: s.key.iter().map(|k| (*k).to_owned()).collect(),
+                    value: Value::Null,
+                }
+            })
+            .collect()
     }
 
     /// How one run of the agent is pointed at the gateway with `w.model`,
@@ -476,6 +512,7 @@ impl Agent {
         let mut env: Vec<(String, String)> = run
             .env
             .iter()
+            .filter(|(_, v)| !vars.leaves_out_text(v))
             .map(|(k, v)| ((*k).to_owned(), vars.text(v)))
             .collect();
         for (name, value) in &run.json_env {
@@ -497,6 +534,9 @@ impl Agent {
             args.push(vars.fill(value).to_string());
         }
         args.extend(run.args.iter().map(|a| vars.text(a)));
+        if vars.has_subagent() {
+            args.extend(run.subagent_args.iter().map(|a| vars.text(a)));
+        }
         Ok(Run {
             env,
             args,

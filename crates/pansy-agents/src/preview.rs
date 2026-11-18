@@ -27,6 +27,10 @@ pub fn preview(id: &str, model: &str) -> Result<Vec<FileChange>> {
         key: AGENT_KEY,
         model: model.trim(),
         small_model: saved.as_ref().and_then(|s| s.small_model.as_deref()),
+        subagent_model: saved
+            .as_ref()
+            .and_then(|s| s.subagent_model.as_deref())
+            .filter(|_| agent.subagent_model),
         choices: &choices,
     });
     let mut out: Vec<FileChange> = Vec::new();

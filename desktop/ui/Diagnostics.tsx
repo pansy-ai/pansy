@@ -63,6 +63,8 @@ export function said(f: Finding): string {
       return tr("%s is on %s", a, b);
     case "agent-model-gone":
       return tr("%s is on %s, which no provider or group serves now", a, b);
+    case "agent-subagent-gone":
+      return tr("%s's subagents start on %s, which no provider or group serves now", a, b);
     case "agent-cli-missing":
       return tr("%s's settings are here, its program isn't", a);
     case "agent-paused":
@@ -112,6 +114,7 @@ function fix(f: Finding): { label: string; run: () => Promise<unknown> } | null 
     case "models-none":
       return { label: tr("Open Providers"), run: async () => go("providers") };
     case "agent-model-gone":
+    case "agent-subagent-gone":
       return { label: tr("Pick a model"), run: async () => go("agents") };
     case "agent-connected":
       return { label: tr("Restore for now"), run: () => Agents.pause(f.about) };

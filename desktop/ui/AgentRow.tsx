@@ -2,8 +2,8 @@
 // press, or a right click on the row, opens Move up, Move down, Disconnect
 // and Hide), its name and version, whether it is connected, Details for a
 // connected one, the model it starts on and its switch. Opened, it says
-// where it picks its models, its quick-task model, and what pansy changed
-// in its files, with Disconnect and restore.
+// where it picks its models, its quick-task model, the model its subagents
+// start on, and what pansy changed in its files, with Disconnect and restore.
 import { Text, View, type JSX } from "nsh";
 import { ContextMenu, Menu, MenuItem, MenuSeparator } from "nsh/base";
 import { Agents } from "pansy/native";
@@ -57,26 +57,37 @@ function AgentMenu(props: { agent: Agent; inFold: boolean }) {
   );
 }
 
-function ModelField(props: { agent: Agent; small?: boolean }) {
+/** Which of an agent's subagents go on the model set for them. */
+const subagentsSaid = (a: Agent) => (a.subagentEvery ? tr("every subagent, whatever model its lead names") : tr("a subagent that names no model"));
+
+function ModelField(props: { agent: Agent; small?: boolean; subagent?: boolean }) {
   const a = () => props.agent;
-  const model = () => (props.small ? a().smallModel : a().model);
-  const open = () => picking()?.id === a().id && picking()?.small === !!props.small;
+  const model = () => (props.subagent ? a().subagentModel : props.small ? a().smallModel : a().model);
+  const open = () => picking()?.id === a().id && picking()?.small === !!props.small && !!picking()?.subagent === !!props.subagent;
+  const reset = () =>
+    props.subagent
+      ? { label: tr("Left to %s", a().name), note: subagentsSaid(a()) }
+      : props.small
+        ? { label: tr("The same as the main model"), note: tr("titles, summaries and other small requests") }
+        : undefined;
   return (
     <ModelPicker
       open={open()}
-      onOpenChange={(o) => picking.set(o ? { id: a().id, small: !!props.small } : null)}
+      onOpenChange={(o) => picking.set(o ? { id: a().id, small: !!props.small, subagent: !!props.subagent } : null)}
       current={a().connected ? model() : null}
-      reset={props.small ? { label: tr("The same as the main model"), note: tr("titles, summaries and other small requests") } : undefined}
+      reset={reset()}
       onPick={(id) => {
-        if (props.small) void act(`agent:${a().id}`, () => Agents.setSmallModel(a().id, id)).then(() => loadAgents());
+        // A key more or less in its files: what pansy changed is read again.
+        if (props.subagent) void act(`agent:${a().id}`, () => Agents.setSubagentModel(a().id, id)).then(() => (loadAgents(), loadChanges(a().id)));
+        else if (props.small) void act(`agent:${a().id}`, () => Agents.setSmallModel(a().id, id)).then(() => loadAgents());
         else connect(a(), id);
       }}
       trigger={
         <FieldButton
-          testID={props.small ? `small-${a().id}` : `model-${a().id}`}
+          testID={props.subagent ? `subagent-${a().id}` : props.small ? `small-${a().id}` : `model-${a().id}`}
           open={open()}
           empty={!a().connected || !model()}
-          value={a().connected && model() ? choiceName(model()) : props.small ? tr("same as the main model") : tr("default")}
+          value={a().connected && model() ? choiceName(model()) : props.subagent ? tr("left to %s", a().name) : props.small ? tr("same as the main model") : tr("default")}
           icon={a().connected && model() ? <ChoiceLogo id={model()!} size={14} /> : <Logo name={agentLogo(a().id)} size={14} />}
         />
       }
@@ -147,6 +158,14 @@ function Details(props: { agent: Agent }) {
           <View class="flex-row items-center gap-2">
             <ModelField agent={a()} small />
             <Text class="flex-1 text-[11.5px] text-muted-foreground line-clamp-1">{tr("titles, summaries and other small requests")}</Text>
+          </View>
+        </Kv>
+      </If>
+      <If when={a().hasSubagentModel}>
+        <Kv label={tr("Subagents")} testID={`subagents-${a().id}`}>
+          <View class="flex-row items-center gap-2">
+            <ModelField agent={a()} subagent />
+            <Text class="flex-1 text-[11.5px] text-muted-foreground line-clamp-1">{subagentsSaid(a())}</Text>
           </View>
         </Kv>
       </If>

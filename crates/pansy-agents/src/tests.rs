@@ -224,6 +224,21 @@ fn diagnoses_the_gateway_providers_and_agents() {
     connect("codex", "moonshot/kimi-k2").unwrap();
     pause("codex").unwrap();
 
+    // Its subagents' model, which no provider serves either.
+    set_subagent_model("claude-code", Some("group/cheap")).unwrap();
+    let found = doctor::run();
+    assert_eq!(
+        code_of(&found, "claude-code"),
+        ["agent-model-gone", "agent-subagent-gone"]
+    );
+    let gone = found
+        .iter()
+        .find(|f| f.code == "agent-subagent-gone")
+        .unwrap();
+    assert_eq!(gone.args, ["Claude Code", "group/cheap"]);
+    assert!(doctor::say(gone).contains("pansy claude-code --subagent"));
+    set_subagent_model("claude-code", None).unwrap();
+
     let found = doctor::run();
     assert_eq!(code_of(&found, "gateway"), ["gateway-stopped"]);
     assert_eq!(found[0].args, [format!("http://127.0.0.1:{port}")]);
@@ -486,6 +501,7 @@ fn the_built_in_agents_set_what_their_manifests_always_did() {
                 key: "pansy",
                 model: "a/x",
                 small_model: small,
+                subagent_model: None,
                 choices: &choices,
             };
             out.push_str(&format!("{} {:?}\n", agent.id, agent.edits(&w)));
@@ -607,6 +623,7 @@ DEMO_BASE = "{v1}"
             key: "k",
             model: "a/x",
             small_model: None,
+            subagent_model: None,
             choices: &[],
         })
         .unwrap();
@@ -620,4 +637,146 @@ DEMO_BASE = "{v1}"
     );
     assert_eq!(run.verified, None);
     assert_eq!(crate::run::by_name("demo").unwrap().id, "demo");
+}
+
+#[test]
+fn a_subagent_model_is_a_key_set_and_put_back() {
+    let (home, _lock) = scratch();
+    let claude = home.path().join(".claude/settings.json");
+    fs::create_dir_all(claude.parent().unwrap()).unwrap();
+    let mine = "{\n  // mine\n  \"theme\": \"dark\"\n}\n";
+    fs::write(&claude, mine).unwrap();
+    let codex = home.path().join(".codex/config.toml");
+    fs::create_dir_all(codex.parent().unwrap()).unwrap();
+    // The user's own model for Codex's subagents, and a setting beside it.
+    let theirs = "[agents]\nmax_threads = 4\ndefault_subagent_model = \"gpt-5-mini\" # mine\n";
+    fs::write(&codex, theirs).unwrap();
+    let env = |key: &str| -> Value {
+        jsonedit::to_value(&fs::read_to_string(&claude).unwrap()).unwrap()["env"][key].clone()
+    };
+
+    // Not while the agent isn't connected.
+    let error = set_subagent_model("claude-code", Some("group/cheap")).unwrap_err();
+    assert!(error.to_string().contains("not connected"), "{error}");
+
+    // Connected with none: the key isn't there, and Codex's is the user's.
+    connect("claude-code", "deepseek/deepseek-chat").unwrap();
+    connect("codex", "deepseek/deepseek-chat").unwrap();
+    assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), Value::Null);
+    assert!(
+        fs::read_to_string(&codex)
+            .unwrap()
+            .contains("default_subagent_model = \"gpt-5-mini\" # mine")
+    );
+    let v = view(agent::find("claude-code").unwrap(), &State::load().unwrap());
+    assert!(v.has_subagent_model);
+    assert_eq!(v.subagent_model, None);
+
+    // Set: the key, in both; a new main model keeps it.
+    set_subagent_model("claude-code", Some(" group/cheap ")).unwrap();
+    set_subagent_model("codex", Some("group/cheap")).unwrap();
+    assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), "group/cheap");
+    connect("claude-code", "moonshot/kimi-k2").unwrap();
+    assert_eq!(env("ANTHROPIC_MODEL"), "moonshot/kimi-k2");
+    assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), "group/cheap");
+    let toml = fs::read_to_string(&codex).unwrap();
+    assert!(
+        toml.contains("default_subagent_model = \"group/cheap\" # mine"),
+        "{toml}"
+    );
+    assert!(toml.contains("max_threads = 4"));
+    // Codex's lead names its subagents' models itself: the model goes to
+    // the gateway in a header too, which puts every one of them on it.
+    assert!(
+        toml.contains("x-pansy-subagent-model = \"group/cheap\""),
+        "{toml}"
+    );
+    let v = view(agent::find("codex").unwrap(), &State::load().unwrap());
+    assert!(v.subagent_every);
+    let v = view(agent::find("claude-code").unwrap(), &State::load().unwrap());
+    assert!(!v.subagent_every);
+    assert_eq!(v.subagent_model.as_deref(), Some("group/cheap"));
+    assert!(
+        changes("codex")
+            .unwrap()
+            .iter()
+            .flat_map(|f| &f.keys)
+            .any(|k| k.key == "agents.default_subagent_model"
+                && k.before.as_deref() == Some("gpt-5-mini")
+                && k.after.as_deref() == Some("group/cheap"))
+    );
+
+    // A profile keeps it, and put back for now and connected again it is there.
+    profile::save("work").unwrap();
+    pause("claude-code").unwrap();
+    assert_eq!(fs::read_to_string(&claude).unwrap(), mine);
+    resume("claude-code").unwrap();
+    assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), "group/cheap");
+
+    // Cleared: that key alone goes back to what it was, the others stay.
+    set_subagent_model("claude-code", None).unwrap();
+    set_subagent_model("codex", None).unwrap();
+    assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), Value::Null);
+    assert_eq!(env("ANTHROPIC_MODEL"), "moonshot/kimi-k2");
+    let toml = fs::read_to_string(&codex).unwrap();
+    assert!(
+        toml.contains("default_subagent_model = \"gpt-5-mini\" # mine"),
+        "{toml}"
+    );
+    assert!(toml.contains("model = \"deepseek/deepseek-chat\""));
+    assert!(!toml.contains("http_headers"), "{toml}");
+    assert!(
+        !changes("codex")
+            .unwrap()
+            .iter()
+            .flat_map(|f| &f.keys)
+            .any(|k| k.key == "agents.default_subagent_model")
+    );
+
+    // The profile puts it on again; disconnecting leaves the files as they were.
+    assert!(profile::apply("work").unwrap().is_empty());
+    assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), "group/cheap");
+    disconnect("claude-code").unwrap();
+    disconnect("codex").unwrap();
+    assert_eq!(fs::read_to_string(&claude).unwrap(), mine);
+    assert_eq!(fs::read_to_string(&codex).unwrap(), theirs);
+
+    // An agent without a key for it says so.
+    connect("gemini-cli", "deepseek/deepseek-chat").unwrap();
+    let error = set_subagent_model("gemini-cli", Some("group/cheap")).unwrap_err();
+    assert!(error.to_string().contains("no setting"), "{error}");
+}
+
+#[test]
+fn a_manifest_names_the_subagent_model_only_when_it_has_one() {
+    let base = "id = \"demo\"\nname = \"Demo\"\nprotocol = \"chat\"\nSUB\n[files]\nconfig = \"~/.demo/config.json\"\n[[set]]\nfile = \"config\"\nkey = [\"model\"]\nvalue = \"{model}\"\nSET\n[base_url]\nfile = \"config\"\nkey = [\"url\"]\n[model]\nfile = \"config\"\nkey = [\"model\"]\nRUN";
+    let set = "[[set]]\nfile = \"config\"\nkey = [\"sub\"]\nvalue = \"{subagent}\"";
+    let of = |sub: &str, set: &str, run: &str| {
+        manifest::parse(
+            &base
+                .replace("SUB", sub)
+                .replace("SET", set)
+                .replace("RUN", run),
+        )
+    };
+    let m = of(
+        "subagent_model = true",
+        set,
+        "[run]\nargs = [\"-m\", \"{model}\"]\nsubagent_args = [\"--sub\", \"{subagent:q}\"]",
+    )
+    .unwrap();
+    assert!(m.subagent_model);
+    for (sub, set, run, says) in [
+        ("", set, "", "doesn't say it has a model for subagents"),
+        ("subagent_model = true", "", "", "no key to set names"),
+        (
+            "subagent_model = true",
+            set,
+            "[run]\nargs = [\"--sub\", \"{subagent}\"]",
+            "go in subagent_args",
+        ),
+    ] {
+        let error = of(sub, set, run).unwrap_err().to_string();
+        assert!(error.contains(says), "{error}");
+    }
 }

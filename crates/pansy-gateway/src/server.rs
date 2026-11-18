@@ -54,6 +54,8 @@ struct Meta {
     agent: String,
     /// The folder `pansy run` started the agent in, when it did.
     project: String,
+    /// A subagent's request.
+    subagent: bool,
     requested: String,
     client: Protocol,
     attempt: Attempt,
@@ -88,6 +90,7 @@ impl Meta {
             started,
             agent: agent.to_owned(),
             project: String::new(),
+            subagent: false,
             requested: requested.to_owned(),
             client,
             attempt: attempt.clone(),
@@ -117,6 +120,7 @@ impl Meta {
             at: chrono::Utc::now(),
             agent: self.agent.clone(),
             project: self.project.clone(),
+            subagent: self.subagent,
             requested: self.requested.clone(),
             provider: self.attempt.provider.clone(),
             account: self
@@ -188,6 +192,42 @@ fn tried_of(attempt: &Attempt, status: u16) -> usage::Tried {
 
 fn is_content(event: &Event) -> bool {
     !matches!(event, Event::Start { .. } | Event::Usage(_))
+}
+
+/// The header an agent sends the model its subagents go on in, when its
+/// own config can't put them there (Codex, whose lead names their models
+/// itself): the gateway puts a subagent's request on it.
+pub const SUBAGENT_MODEL: &str = "x-pansy-subagent-model";
+
+/// Whether a request is a subagent's, as its agent says: Claude Code names
+/// the subagent (`x-claude-code-agent-id`), Codex what the call is for
+/// (`x-openai-subagent: collab_spawn`). Only what the agent sends counts,
+/// never the prompt.
+pub fn subagent_of(headers: &HeaderMap) -> bool {
+    headers.contains_key("x-claude-code-agent-id")
+        || headers
+            .get("x-openai-subagent")
+            .is_some_and(|v| v.as_bytes() == b"collab_spawn")
+}
+
+/// Whether a Responses request carries a task its lead's vendor sealed: an
+/// `agent_message` whose content is encrypted, which only that vendor opens.
+fn sealed_task(value: &Value) -> bool {
+    value
+        .get("input")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|item| item.get("type").and_then(Value::as_str) == Some("agent_message"))
+        .filter_map(|item| item.get("content").and_then(Value::as_array))
+        .flatten()
+        .any(|part| {
+            part.get("type").and_then(Value::as_str) == Some("encrypted_content")
+                && part
+                    .get("encrypted_content")
+                    .and_then(Value::as_str)
+                    .is_some_and(|sealed| !sealed.is_empty())
+        })
 }
 
 /// The agent behind a request, as its user agent names it.
@@ -569,8 +609,37 @@ impl Gateway {
                 requested = model.to_owned();
             }
         }
+        // A subagent goes on the model its agent set for its subagents
+        // (SUBAGENT_MODEL), whatever it asked for; on the one it asked for
+        // when that one can't take it, the trace saying why.
+        let subagent = subagent_of(&headers);
+        let (mut asked, mut kept) = (String::new(), String::new());
+        let mut planned = None;
+        if subagent
+            && let Some(to) = headers
+                .get(SUBAGENT_MODEL)
+                .and_then(|v| v.to_str().ok())
+                .map(str::trim)
+                .filter(|to| !to.is_empty() && *to != requested)
+        {
+            if sealed_task(&value) {
+                kept = format!(
+                    "its task was sealed by the vendor that answered its lead, which {to} can't open"
+                );
+            } else {
+                let orders = plugins::orders(&config, to, &self.health).await;
+                match route::plan_with(&config, to, client, &self.health, &orders) {
+                    Ok(lineup) => {
+                        tracing::debug!(%agent, asked = %requested, %to, "a subagent, on the model set for them");
+                        asked = std::mem::replace(&mut requested, to.to_owned());
+                        planned = Some(lineup);
+                    }
+                    Err(NoRoute(message)) => kept = format!("{to} can't take it: {message}"),
+                }
+            }
+        }
         let begin = |lineup: &[Attempt]| {
-            Tracing::begin(
+            let tracing = Tracing::begin(
                 &self.trace,
                 started,
                 &config,
@@ -578,15 +647,24 @@ impl Gateway {
                 &agent,
                 &requested,
                 lineup,
-            )
+            );
+            if subagent {
+                tracing.subagent(&asked, &kept);
+            }
+            tracing
         };
-        let orders = plugins::orders(&config, &requested, &self.health).await;
-        let lineup = match route::plan_with(&config, &requested, client, &self.health, &orders) {
-            Ok(lineup) => lineup,
-            Err(NoRoute(message)) => {
-                tracing::info!(%agent, %requested, "no route: {message}");
-                begin(&[]).end(404, &message, &Usage::default(), 0);
-                return error(client, 404, &message);
+        let lineup = match planned {
+            Some(lineup) => lineup,
+            None => {
+                let orders = plugins::orders(&config, &requested, &self.health).await;
+                match route::plan_with(&config, &requested, client, &self.health, &orders) {
+                    Ok(lineup) => lineup,
+                    Err(NoRoute(message)) => {
+                        tracing::info!(%agent, %requested, "no route: {message}");
+                        begin(&[]).end(404, &message, &Usage::default(), 0);
+                        return error(client, 404, &message);
+                    }
+                }
             }
         };
         let trace = begin(&lineup);
@@ -781,6 +859,7 @@ impl Gateway {
                 started, &agent, &requested, client, attempt, stream, n as u32,
             );
             meta.project = project.clone();
+            meta.subagent = subagent;
             meta.unmask = unmask.clone();
             meta.tried = tried.clone();
             meta.tracing = Some(trace.clone());
@@ -851,6 +930,7 @@ impl Gateway {
                 started, &agent, &requested, client, attempt, stream, failovers,
             );
             meta.project = project;
+            meta.subagent = subagent;
             // The last try is the record's own.
             tried.pop();
             meta.tried = tried;

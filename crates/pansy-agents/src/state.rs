@@ -52,6 +52,9 @@ pub struct AgentState {
     /// The model for the agent's quick tasks, where it has a second one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub small_model: Option<String>,
+    /// The model the agent's subagents start on, where it has a key for it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subagent_model: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub touched: Vec<Touched>,
     /// The files pansy changed, by path, while the agent is connected.
