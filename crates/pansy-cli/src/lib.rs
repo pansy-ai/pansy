@@ -25,6 +25,7 @@ use pansy_core::usage;
 use serde_json::json;
 
 mod plugins;
+mod run;
 
 const HELP: &str = "pansy — every agent's model, one place
 
@@ -35,6 +36,8 @@ Agents
   <agent> <provider/model>            point an agent at the gateway with a model
                                       (claude, codex, gemini, opencode, qwen, crush)
   <agent> --small <provider/model>    the agent's quick-task model (Claude Code, OpenCode, Crush)
+  <agent> <provider/model> --show     what connecting would write into the agent's files,
+                                      key by key, and nothing written
   <agent> off                         put the agent's config back as it was
   connect <agent> <provider/model> | disconnect <agent>
                                       the same, by the agent's name
@@ -42,6 +45,18 @@ Agents
   pause <agent>|all                   put an agent's config back for now, so it works
                                       without pansy; its model is remembered
   resume <agent>|all                  connect it again with that model
+  run [--model <provider/model>] [--small <provider/model>] [--show] [--yes] <agent> [arguments]
+                                      start an agent on a model for this run alone: its
+                                      config is not written, so two terminals can use two
+                                      models. The model: --model, else this folder's
+                                      .pansy.toml, else the one the agent is connected with.
+                                      --show says what would start (claude, codex, gemini,
+                                      opencode; qwen untried; crush can't)
+  project [show] [folder]             this folder's .pansy.toml: the model each agent uses
+                                      here, and whether you said yes to it
+  project init [folder]               write one from the connected agents' models
+  project trust|forget [folder]       say yes to the file as it is now (one that came with
+                                      a repository is not used before), or take it back
   doctor                              whether the gateway, providers and agents work
   test [provider/model]               send one short message through the gateway, as an
                                       agent would (the first model without one)
@@ -64,6 +79,11 @@ Providers
   provider key add <id> <key> [label=…]
   provider key remove <id> <key id>
   provider key on|off <id> <key id>
+  provider proxy <id> <address>|direct|off
+                                      an HTTP or SOCKS proxy for a provider's requests;
+                                      direct: none; off: pansy's own (settings: proxy)
+  provider key proxy <id> <key id> <address>|direct|off
+                                      a proxy for one key's requests, over the provider's
   provider models <id> [--refresh]    a provider's models, fetched again with --refresh
   provider model add|remove <id> <model>
 
@@ -136,9 +156,15 @@ Profiles
 Gateway
   serve                               run the gateway in the foreground
   status                              the gateway, providers and agents at a glance
-  usage [days=7]                      requests and tokens through the gateway
+  usage [days=7]                      requests and tokens through the gateway, by day,
+                                      provider, model, agent and project (pansy run's)
   settings                            every setting
   settings get <key> | set <key> <value>
+
+Quirks (what vendors' models refuse, taken out of requests pansy translates)
+  quirks                              the rules: pansy's own, then those in quirks.toml in
+                                      pansy's folder
+  quirks <provider/model>             the rules that count for a model
 
 Masking
   mask <text>                         the text as a vendor would get it (standard input
@@ -172,6 +198,10 @@ pub fn run(args: Vec<String>) -> ExitCode {
     // else runs yet.
     unsafe {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+    // What follows `pansy run <agent>` is the agent's own, `--json` too.
+    if args.first().is_some_and(|a| a == "run") {
+        return run::command(&args[1..]);
     }
     let json = args.iter().any(|a| a == "--json");
     let args: Vec<String> = args.into_iter().filter(|a| a != "--json").collect();
@@ -263,6 +293,9 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
             Ok(())
         }
         ["profiles"] => profiles(json),
+        ["quirks"] => quirks(None, json),
+        ["quirks", model] => quirks(Some(model), json),
+        ["project", rest @ ..] => run::project(rest, json),
         ["accounts"] => accounts(json),
         ["limits"] | ["allowances"] => limits(json),
         ["accounts", "project", kind, account, rest @ ..] if rest.len() <= 1 => {
@@ -295,6 +328,9 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
             profile::remove(name)?;
             println!("Removed the profile {name}.");
             Ok(())
+        }
+        ["connect", "--show", agent, model] | ["connect", agent, model, "--show"] => {
+            preview(agent_id(agent), model, json)
         }
         ["connect", agent, model] => connect(agent, model),
         ["disconnect", agent] => disconnect(agent),
@@ -364,6 +400,17 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
             );
             Ok(())
         }
+        // Moves the keys as well as setting where they are kept.
+        ["settings", "set", "keyStore", mode] => {
+            let moved = pansy_core::keystore::move_to(mode)?;
+            match *mode {
+                "system" => println!(
+                    "{moved} key(s) are in the system's key store now; providers.json says only where."
+                ),
+                _ => println!("{moved} key(s) are back in providers.json."),
+            }
+            Ok(())
+        }
         ["settings", "set", key, value] => {
             config::update_settings(|s| s.set(key, value).map_err(|e| anyhow!(e)))?;
             if *key == "port" {
@@ -385,13 +432,19 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
             }
             Ok(())
         }
-        [agent, rest @ ..] => match AGENT_ALIASES.iter().find(|(alias, _)| alias == agent) {
-            Some((_, id)) => match rest {
+        [agent, rest @ ..] => match AGENT_ALIASES
+            .iter()
+            .find(|(alias, _)| alias == agent)
+            .map(|(_, id)| *id)
+            // An agent a manifest of the user's adds, by its id or its program.
+            .or_else(|| pansy_agents::run::by_name(agent).map(|a| a.id))
+        {
+            Some(id) => match rest {
                 [] => {
                     let v = pansy_agents::list()
                         .into_iter()
-                        .find(|v| v.id == *id)
-                        .unwrap();
+                        .find(|v| v.id == id)
+                        .ok_or_else(|| anyhow!("no agent {id}"))?;
                     println!(
                         "{}: {}",
                         v.name,
@@ -411,6 +464,7 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
                     println!("Set {}'s quick-task model.", agent.name);
                     Ok(())
                 }
+                [model, "--show"] | ["--show", model] => preview(id, model, json),
                 [model] => connect(id, model),
                 _ => {
                     bail!("usage: pansy {agent} <provider/model> | off | --small <provider/model>")
@@ -426,6 +480,7 @@ fn agent_id(name: &str) -> &str {
         .iter()
         .find(|(alias, _)| *alias == name)
         .map(|(_, id)| *id)
+        .or_else(|| pansy_agents::run::by_name(name).map(|a| a.id))
         .unwrap_or(name)
 }
 
@@ -444,6 +499,39 @@ fn connect(agent: &str, model: &str) -> Result<()> {
     pansy_agents::connect(id, model)?;
     let name = pansy_agents::agent::find(id).map(|a| a.name).unwrap_or(id);
     println!("{name} now uses {model}. Start a new session for it to take effect.");
+    Ok(())
+}
+
+/// What connecting would write into the agent's config, and nothing done.
+fn preview(id: &str, model: &str, json: bool) -> Result<()> {
+    let changes = pansy_agents::preview::preview(id, model)?;
+    if json {
+        return print_json(&changes);
+    }
+    let name = pansy_agents::agent::find(id).map(|a| a.name).unwrap_or(id);
+    if changes.is_empty() {
+        println!("{name} is on {model} already: connecting would change nothing.");
+        return Ok(());
+    }
+    println!("Connecting {name} with {model} would set (nothing is written yet):");
+    for file in changes {
+        println!();
+        println!(
+            "{}{}",
+            file.path,
+            if file.created { "  (a new file)" } else { "" }
+        );
+        for k in file.keys {
+            if let Some(before) = k.before {
+                println!("  - {} = {before}", k.key);
+            }
+            if let Some(after) = k.after {
+                println!("  + {} = {after}", k.key);
+            }
+        }
+    }
+    println!();
+    println!("Disconnecting (pansy {id} off) puts back exactly these.");
     Ok(())
 }
 
@@ -577,6 +665,10 @@ fn status(json: bool) -> Result<()> {
 
 fn agents(json: bool) -> Result<()> {
     let agents = pansy_agents::list();
+    // A manifest of the user's that can't be read is said, not passed over.
+    for problem in pansy_agents::agent::problems() {
+        eprintln!("pansy: {problem}");
+    }
     if json {
         return print_json(&agents);
     }
@@ -907,6 +999,26 @@ fn provider(words: &[&str], args: &[String], json: bool) -> Result<()> {
         ["key", "off", id, account] => {
             manage::set_key_enabled(id, account, false)?;
             println!("Key {account} of {id} is off.");
+            Ok(())
+        }
+        ["key", "proxy", id, account, proxy] => {
+            let proxy = if *proxy == "off" { "" } else { proxy };
+            manage::set_key_proxy(id, account, proxy)?;
+            match proxy {
+                "" => println!("Key {account} of {id} uses {id}'s proxy."),
+                "direct" => println!("Key {account} of {id} uses no proxy."),
+                proxy => println!("Key {account} of {id} goes through {proxy}."),
+            }
+            Ok(())
+        }
+        ["proxy", id, proxy] => {
+            let proxy = if *proxy == "off" { "" } else { proxy };
+            manage::set_proxy(id, proxy)?;
+            match proxy {
+                "" => println!("{id} uses pansy's proxy (settings: proxy)."),
+                "direct" => println!("{id} uses no proxy."),
+                proxy => println!("{id} goes through {proxy}."),
+            }
             Ok(())
         }
         ["models", id, rest @ ..] => {
@@ -1311,6 +1423,90 @@ fn usage_report(args: &[String], json: bool) -> Result<()> {
             );
         }
     }
+    // The folders `pansy run` started agents in.
+    let mut projects: Vec<_> = summary.by_project.iter().collect();
+    projects.sort_by_key(|(_, t)| std::cmp::Reverse(t.input + t.output));
+    table("PROJECT", projects);
+    Ok(())
+}
+
+/// `pansy quirks`: the rules, or those that count for one model.
+fn quirks(model: Option<&str>, json: bool) -> Result<()> {
+    use pansy_core::quirk;
+    // The user's file, when it can't be read, is said here: the gateway
+    // goes on without it.
+    let problem = quirk::own().err();
+    if let Some(problem) = &problem {
+        eprintln!("pansy: {problem:#}");
+    }
+    let rules = quirk::rules();
+    let config = Config::load()?;
+    let shown: Vec<&quirk::Rule> = match model {
+        None => rules.iter().collect(),
+        Some(model) => {
+            let (id, name) = model
+                .split_once('/')
+                .ok_or_else(|| anyhow!("name the model as provider/model"))?;
+            let provider = config
+                .provider(id)
+                .ok_or_else(|| anyhow!("no provider {id}; `pansy providers` lists them"))?;
+            rules
+                .iter()
+                .filter(|r| {
+                    provider.endpoints.iter().any(|e| {
+                        r.is_for(&provider.id, provider.preset.as_deref(), name, e.protocol)
+                    })
+                })
+                .collect()
+        }
+    };
+    if json {
+        return print_json(&shown);
+    }
+    if shown.is_empty() {
+        println!("No rule counts for {}.", model.unwrap_or("any model"));
+    }
+    for r in shown {
+        let list = |items: &[String]| {
+            if items.is_empty() {
+                "any".to_owned()
+            } else {
+                items.join(", ")
+            }
+        };
+        println!(
+            "{}  provider: {}  model: {}  protocol: {}",
+            if r.own { "yours " } else { "pansy's" },
+            list(&r.providers),
+            list(&r.models),
+            r.protocol.map(|p| p.as_str()).unwrap_or("any"),
+        );
+        let mut does = Vec::new();
+        if let Some(when) = &r.when {
+            does.push(format!("when it has {when}"));
+        }
+        for (from, to) in &r.rename {
+            does.push(format!("{from} becomes {to}"));
+        }
+        if !r.drop.is_empty() {
+            does.push(format!("drops {}", r.drop.join(", ")));
+        }
+        for (key, value) in &r.set {
+            does.push(format!("sets {key} to {value}"));
+        }
+        for (key, most) in &r.most {
+            does.push(format!("{key} at most {most}"));
+        }
+        println!("         {}", does.join("; "));
+        if !r.why.is_empty() {
+            println!("         {}", r.why);
+        }
+    }
+    println!();
+    println!(
+        "Rules change only requests pansy translates; one in the vendor's own protocol passes through as it is. Your own go in {}.",
+        quirk::own_file().display()
+    );
     Ok(())
 }
 

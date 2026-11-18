@@ -301,6 +301,50 @@ async fn agents_reach_a_chat_vendor_through_the_gateway() {
     assert_eq!((records[0].input, records[0].output), (12, 7));
     assert_eq!(records[1].agent, "codex");
     assert_eq!(records[2].agent, "gemini-cli");
+    assert!(records.iter().all(|r| r.project.is_empty()));
+
+    // An agent `pansy run` started sends a key that names its folder: the
+    // request is counted under it, in a header or in Gemini's URL.
+    let key = pansy_core::project::key_for(std::path::Path::new("/code/shop"));
+    let run = |path: &str, header: Option<(&str, String)>| {
+        let mut request = Request::post(path).header("content-type", "application/json");
+        if let Some((name, value)) = header {
+            request = request.header(name, value);
+        }
+        request
+            .body(Body::from(
+                json!({"model": "fake/fake-chat", "max_tokens": 10,
+                       "messages": [{"role": "user", "content": "hi"}],
+                       "contents": [{"role": "user", "parts": [{"text": "hi"}]}]})
+                .to_string(),
+            ))
+            .unwrap()
+    };
+    for request in [
+        run(
+            "/v1/messages",
+            Some(("authorization", format!("Bearer {key}"))),
+        ),
+        run("/v1/messages", Some(("x-api-key", key.clone()))),
+        run(
+            &format!("/v1beta/models/fake/fake-chat:generateContent?key={key}"),
+            None,
+        ),
+        run("/v1/messages", Some(("x-api-key", "pansy".into()))),
+    ] {
+        let response = gateway.router().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    let projects: Vec<String> = pansy_core::usage::recent(1)
+        .into_iter()
+        .skip(4)
+        .map(|r| r.project)
+        .collect();
+    assert_eq!(projects, ["/code/shop", "/code/shop", "/code/shop", ""]);
+    assert_eq!(
+        pansy_core::usage::summary(1).by_project["/code/shop"].requests,
+        3
+    );
 
     // A web page elsewhere is refused; one on this computer is let in.
     let from = |origin: &str| {

@@ -9,6 +9,7 @@ import { effect, keymap, LayoutAnimation, mount, platform, reduceMotion, Scroll,
 import { Button } from "nsh/base";
 import { currentWindow, isAvailable, Tray, Window } from "nsh/desktop";
 import { AgentModals } from "./ui/AgentModals";
+import { PreviewDialog } from "./ui/Preview";
 import { AgentsPage } from "./ui/Agents";
 import { Brand } from "./ui/Brand";
 import { GatewayPage } from "./ui/Gateway";
@@ -538,6 +539,7 @@ function App() {
       </View>
       <ProviderModals />
       <AgentModals />
+      <PreviewDialog />
       <QuestionDialog />
       <Toasts />
     </View>

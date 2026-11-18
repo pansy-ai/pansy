@@ -1,0 +1,59 @@
+# Gemini CLI. The environment it is started in wins over ~/.gemini/.env, and
+# GEMINI_MODEL over the settings' model. Without a terminal (`-p`) it takes a
+# key only when its settings say "gemini-api-key", as connecting it leaves
+# them; 0.65 refuses the "gateway" it otherwise picks for a base URL.
+id = "gemini-cli"
+name = "Gemini CLI"
+protocol = "gemini"
+programs = ["gemini"]
+dirs = [".gemini"]
+
+[files]
+settings = "~/.gemini/settings.json"
+env = "~/.gemini/.env"
+
+[[set]]
+file = "settings"
+key = ["model", "name"]
+value = "{model}"
+
+[[set]]
+file = "settings"
+key = ["security", "auth", "selectedType"]
+value = "gemini-api-key"
+
+[[set]]
+file = "env"
+key = ["GOOGLE_GEMINI_BASE_URL"]
+value = "{base_url}"
+
+[[set]]
+file = "env"
+key = ["GEMINI_API_KEY"]
+value = "{key}"
+
+[base_url]
+file = "env"
+key = ["GOOGLE_GEMINI_BASE_URL"]
+
+[model]
+file = "settings"
+key = ["model", "name"]
+
+[[install]]
+via = "brew"
+command = "brew install gemini-cli"
+os = ["linux", "macos"]
+
+[[install]]
+via = "npm"
+command = "npm install -g @google/gemini-cli"
+
+[run]
+verified = "0.65.0"
+note = "Without a terminal (-p), Gemini CLI takes the key only once it was connected (pansy gemini <model>) or set to use a Gemini API key."
+
+[run.env]
+GOOGLE_GEMINI_BASE_URL = "{base_url}"
+GEMINI_API_KEY = "{key}"
+GEMINI_MODEL = "{model}"

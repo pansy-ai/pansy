@@ -33,8 +33,20 @@ agent use every provider's models, with a desktop window on NSH 0.5.1. Read
 - **A request passes through when the protocols match.** Translate only
   between different protocols, through `ir.rs`; a vendor's reasoning seal
   goes back only to that vendor (`proto/mod.rs`).
+- **One run writes nothing.** `pansy run` points an agent at the gateway by
+  its arguments and environment (`pansy-agents/src/run.rs`), never its files.
+  A project's `.pansy.toml` holds model names alone, and counts only once
+  the user said yes to it as it is.
+- **An agent is a manifest.** `crates/pansy-agents/agents/*.toml`; a change
+  to what one sets is blessed into `agents/edits.golden`
+  (`PANSY_BLESS=1 cargo test -p pansy-agents`), never slipped in.
+- **`docs/compat.md` is written by a test** (`PANSY_BLESS=1 cargo test -p
+  pansy-gateway --test compat`). Quirk rules (`quirks.toml`) change only
+  requests the gateway translated.
 - **Keys are private.** `providers.json` and `settings.json` are written
-  0600; keys are masked everywhere they are shown.
+  0600; keys are masked everywhere they are shown. With `keyStore` `system`
+  they are in the system's key store and `providers.json` says only where;
+  tests use a folder (`PANSY_KEYSTORE=dir:…`), never the user's keyring.
 - **A sign-in stays where it is kept.** A subscription's account is read
   from the agent's own file (Codex's `auth.json`, Copilot's `apps.json`,
   Gemini CLI's `oauth_creds.json`) or

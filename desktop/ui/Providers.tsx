@@ -762,6 +762,8 @@ function AddCustom() {
 function Keys(props: { provider: Provider }) {
   const p = () => props.provider;
   const newKey = signal("");
+  /** The key whose proxy is being set. */
+  const proxyOf = signal<string | null>(null);
   const add = () => {
     const key = newKey().trim();
     if (!key) return;
@@ -777,6 +779,12 @@ function Keys(props: { provider: Provider }) {
           <Row first={i() === 0} testID={`key-${p().id}-${a().id}`} class="min-h-[36px] py-[4px] pl-[10px] pr-[6px]">
             <Mono text={a().masked} class={a().enabled ? "" : "text-faint"} />
             <Text class="flex-1 text-[11.5px] text-muted-foreground line-clamp-1">{a().display}</Text>
+            <IconButton
+              icon="globe"
+              label={a().proxy ? tr("This key's proxy: %s", a().proxy) : tr("A proxy for this key")}
+              testID={`key-proxy-open-${p().id}-${i()}`}
+              onPress={() => proxyOf.set(proxyOf() === a().id ? null : a().id)}
+            />
             <IconButton icon="down" label={tr("Move down")} onPress={() => void act("key", () => Providers.moveKey(p().id, a().id, 1)).then(() => loadProviders())} />
             <Switch
               checked={a().enabled}
@@ -798,6 +806,20 @@ function Keys(props: { provider: Provider }) {
           </Row>
         )}
       </Each>
+      <If when={p().accounts.some((a) => a.id === proxyOf())}>
+        <View class="gap-1 border-t border-line-2 px-[10px] py-2">
+          <Text class="text-[11.5px] text-muted-foreground">
+            {tr("A proxy for %s alone, over the provider's: an HTTP or SOCKS address, direct for none, empty for the provider's.", p().accounts.find((a) => a.id === proxyOf())?.masked ?? "")}
+          </Text>
+          <SavedInput
+            value={p().accounts.find((a) => a.id === proxyOf())?.proxy ?? ""}
+            placeholder="socks5://127.0.0.1:1080"
+            mono
+            testID={`key-proxy-${p().id}`}
+            onSave={(proxy) => act("key", () => Providers.setKeyProxy(p().id, proxyOf() ?? "", proxy), tr("Proxy saved")).then(() => loadProviders())}
+          />
+        </View>
+      </If>
       <Row first={p().accounts.length === 0} class="min-h-[38px] py-[6px] pl-[10px] pr-[6px]">
         <Icon name="add" color="muted-foreground" size={12} />
         <Input

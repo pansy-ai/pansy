@@ -1,0 +1,68 @@
+# OpenCode. OPENCODE_CONFIG_CONTENT is a config of its own for one run, laid
+# over the user's.
+id = "opencode"
+name = "OpenCode"
+protocol = "chat"
+programs = ["opencode"]
+dirs = [".config/opencode"]
+small_model = true
+picks_in = "/models"
+note = "OpenCode lists every model of pansy under the Pansy provider; /models switches between them."
+
+[files]
+# opencode.jsonc when there is one, else opencode.json.
+config = [
+  "{env:XDG_CONFIG_HOME|~/.config}/opencode/opencode.jsonc",
+  "{env:XDG_CONFIG_HOME|~/.config}/opencode/opencode.json",
+]
+
+[[set]]
+file = "config"
+key = ["provider", "pansy"]
+
+[set.value]
+npm = "@ai-sdk/openai-compatible"
+name = "Pansy"
+options = { baseURL = "{v1}", apiKey = "{key}" }
+models = { "$each_model" = { name = "{id}" } }
+
+[[set]]
+file = "config"
+key = ["model"]
+value = "pansy/{model}"
+
+[[set]]
+file = "config"
+key = ["small_model"]
+value = "pansy/{small}"
+
+[base_url]
+file = "config"
+key = ["provider", "pansy", "options", "baseURL"]
+
+[model]
+file = "config"
+key = ["model"]
+prefix = "pansy/"
+
+[[install]]
+via = "script"
+command = "curl -fsSL https://opencode.ai/v2/install | bash"
+os = ["linux", "macos"]
+
+[[install]]
+via = "npm"
+command = "npm install -g --allow-scripts=@opencode/cli @opencode/cli"
+
+[run]
+verified = "2.3.0"
+
+[run.json_env.OPENCODE_CONFIG_CONTENT]
+model = "pansy/{model}"
+small_model = "pansy/{small}"
+
+[run.json_env.OPENCODE_CONFIG_CONTENT.provider.pansy]
+npm = "@ai-sdk/openai-compatible"
+name = "Pansy"
+options = { baseURL = "{v1}", apiKey = "{key}" }
+models = { "$each_model" = { name = "{id}" } }

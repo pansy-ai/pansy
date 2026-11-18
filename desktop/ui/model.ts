@@ -69,6 +69,8 @@ export interface Account {
   display: string;
   masked: string;
   enabled: boolean;
+  /** The key's own proxy, over the provider's; empty for none. */
+  proxy: string;
   /** Set on a subscription's account, which has no key. */
   signIn: SignIn | null;
 }
@@ -374,6 +376,8 @@ export interface UsageSummary {
   byModel: Record<string, Totals>;
   byAgent: Record<string, Totals>;
   byProvider: Record<string, Totals>;
+  /** By the folder `pansy run` started the agent in. */
+  byProject: Record<string, Totals>;
   latest: UsageRecord[];
 }
 
@@ -421,6 +425,8 @@ export interface SettingsView {
   agentsHidden: string[];
   /** Serve the subscriptions Codex and Copilot are signed in to, read where they keep them. */
   agentSignIns: boolean;
+  /** Where API keys are kept: `file` or `system`. */
+  keyStore: string;
   /** The Plugins page's 「国内镜像」: the plugin list, Bun and plugins from mirrors in China first. */
   chinaMirror: boolean;
 }

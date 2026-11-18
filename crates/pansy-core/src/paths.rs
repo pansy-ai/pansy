@@ -65,6 +65,16 @@ pub fn agents() -> PathBuf {
     home().join("agents.json")
 }
 
+/// The user's own agents, a manifest each (`agents/*.toml`).
+pub fn agent_manifests() -> PathBuf {
+    home().join("agents")
+}
+
+/// The project files (`.pansy.toml`) the user said yes to.
+pub fn projects() -> PathBuf {
+    home().join("projects.json")
+}
+
 /// Copies of agents' configs as they were before pansy first changed them.
 pub fn backups() -> PathBuf {
     home().join("backups")

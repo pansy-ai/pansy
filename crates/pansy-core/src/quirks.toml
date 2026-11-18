@@ -1,0 +1,33 @@
+# What a vendor's models refuse, and what pansy does about it before a
+# request it translated goes out. A request in the vendor's own protocol
+# passes through untouched: these never touch it.
+#
+# A rule is for a provider (its id or its preset's), models (`*` stands for
+# any run of characters) and the protocol the vendor is spoken to in; one
+# without any of them is for all. `when` names a key the request must have.
+# Then, in this order: `rename` moves a key, `drop` removes keys, `set` puts
+# values in, `most` holds a number down. Keys are dotted paths. `why` says
+# what the vendor answers without the rule.
+#
+# Your own rules go in `quirks.toml` in pansy's folder, in the same form;
+# they run after these.
+
+[[rule]]
+provider = "openai"
+model = ["o1*", "o3*", "o4*", "gpt-5*"]
+protocol = "chat"
+drop = ["temperature", "top_p"]
+why = "OpenAI's reasoning models answer 400 to a temperature or top_p other than the default."
+
+[[rule]]
+provider = "openai"
+model = ["o1*", "o3*", "o4*", "gpt-5*"]
+protocol = "responses"
+drop = ["temperature", "top_p"]
+why = "OpenAI's reasoning models answer 400 to a temperature or top_p other than the default."
+
+[[rule]]
+protocol = "anthropic"
+when = "thinking"
+drop = ["temperature", "top_p", "top_k"]
+why = "With thinking on, Anthropic answers 400 to a temperature or top_k, and to most values of top_p."

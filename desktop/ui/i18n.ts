@@ -5,6 +5,20 @@ import { locale as systemLocale, platform, signal } from "nsh";
 import { Prefs } from "pansy/native";
 
 const ZH_HANS = {
+  // What connecting changes, by project, a key's proxy, the key store
+  "What it changes": "会改什么",
+  "What connecting %s changes": "连接 %s 会改什么",
+  "Connected with %s, pansy sets these keys in %s's own files and nothing else. Disconnecting puts back exactly these. Nothing is written until you connect.": "以 %s 连接时，pansy 只在 %s 自己的文件里设置下面这些键。断开会原样放回这些键。连接之前什么都不会写入。",
+  "Reading what it would write…": "正在读取将要写入的内容…",
+  "Connect": "连接",
+  "By project": "按项目",
+  "A project is the folder an agent was started in with pansy run; agents started another way are under none.": "项目是用 pansy run 启动智能体时所在的文件夹；用其他方式启动的智能体不计入任何项目。",
+  "A proxy for this key": "为这个 Key 单独设置代理",
+  "This key's proxy: %s": "这个 Key 的代理：%s",
+  "A proxy for %s alone, over the provider's: an HTTP or SOCKS address, direct for none, empty for the provider's.": "只用于 %s 的代理，优先于供应商的代理：填 HTTP 或 SOCKS 地址；填 direct 表示不走代理；留空则沿用供应商的。",
+  "Proxy saved": "代理已保存",
+  "Keep API keys in the system's key store": "把 API Key 存进系统钥匙串",
+  "The login keyring on Linux (it needs secret-tool), the Keychain on macOS. On, pansy's providers file says only where each key is; off, the keys are in the file, which only you can read": "Linux 上是登录钥匙环（需要 secret-tool），macOS 上是钥匙串。开启后，pansy 的供应商文件只记录每个 Key 存在哪里；关闭时 Key 写在文件里，该文件只有你能读",
   // The window
   "Work": "工作",
   "Agents": "智能体",

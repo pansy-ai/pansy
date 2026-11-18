@@ -12,6 +12,7 @@ import { arrange, askDisconnect, changes, connect, expanded, isHidden, kindOf, l
 import { tr } from "./i18n";
 import { act, choiceName, choices, go, isBusy, loadAgents, versions, type Agent } from "./model";
 import { ChoiceLogo, ModelPicker } from "./Picker";
+import { openPreview } from "./Preview";
 import { adding } from "./Providers";
 import { agentLogo, Dot, FieldButton, Hint, Icon, Logo, MOTION, SHADOW, Switch, type IconName } from "./parts";
 
@@ -259,6 +260,9 @@ export function AgentRow(props: { agent: Agent; first: boolean; inFold?: boolean
         </If>
       </View>
       <If when={kind() === "ok"}>
+        <If when={!a().connected}>
+          <Quiet label={tr("What it changes")} testID={`preview-${a().id}`} onPress={() => openPreview(a())} />
+        </If>
         <If when={a().connected}>
           <Quiet label={open() ? tr("Collapse") : tr("Details")} chevron={open() ? undefined : "right"} open={open()} testID={`details-${a().id}`} onPress={toggle} />
         </If>

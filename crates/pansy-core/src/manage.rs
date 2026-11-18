@@ -296,8 +296,9 @@ pub fn set_endpoint(id: &str, protocol: Protocol, base_url: &str) -> Result<()> 
 }
 
 pub fn set_proxy(id: &str, proxy: &str) -> Result<()> {
+    let proxy = proxy_of(proxy)?;
     with_provider(id, |p| {
-        p.proxy = Some(proxy.trim().to_owned()).filter(|s| !s.is_empty());
+        p.proxy = proxy;
         Ok(())
     })
 }
@@ -350,6 +351,34 @@ pub fn set_key_label(id: &str, account: &str, label: &str) -> Result<()> {
             .find(|a| a.id == account)
             .ok_or_else(|| anyhow!("no key {account}"))?;
         a.label = label.trim().to_owned();
+        Ok(())
+    })
+}
+
+/// A proxy as a provider or a key may have one: none, `direct`, or an HTTP
+/// or SOCKS proxy's address that reads as one.
+fn proxy_of(proxy: &str) -> Result<Option<String>> {
+    let proxy = proxy.trim();
+    if proxy.is_empty() {
+        return Ok(None);
+    }
+    if proxy != "direct" {
+        reqwest::Proxy::all(proxy).map_err(|e| anyhow!("the proxy {proxy}: {e}"))?;
+    }
+    Ok(Some(proxy.to_owned()))
+}
+
+/// The proxy for one key's requests, over the provider's and pansy's:
+/// empty for none of its own, `direct` to use no proxy.
+pub fn set_key_proxy(id: &str, account: &str, proxy: &str) -> Result<()> {
+    let proxy = proxy_of(proxy)?;
+    with_provider(id, |p| {
+        let a = p
+            .accounts
+            .iter_mut()
+            .find(|a| a.id == account)
+            .ok_or_else(|| anyhow!("no key {account}"))?;
+        a.proxy = proxy;
         Ok(())
     })
 }
@@ -557,6 +586,43 @@ pub struct Choice {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_key_has_a_proxy_of_its_own() {
+        let home = tempfile::tempdir().unwrap();
+        let _lock = crate::subscription::tests::scratch_home(home.path());
+        let id = add_custom("Acme", Protocol::Chat, "https://acme.example/v1", None, &[]).unwrap();
+        let first = add_key(&id, "sk-one", "").unwrap();
+        let second = add_key(&id, "sk-two", "").unwrap();
+        set_proxy(&id, "http://127.0.0.1:8080").unwrap();
+        set_key_proxy(&id, &second, " socks5://127.0.0.1:1080 ").unwrap();
+        let config = crate::config::Config::load().unwrap();
+        let p = config.provider(&id).unwrap();
+        assert_eq!(p.proxy.as_deref(), Some("http://127.0.0.1:8080"));
+        let of = |account: &str| {
+            p.accounts
+                .iter()
+                .find(|a| a.id == account)
+                .unwrap()
+                .proxy
+                .clone()
+        };
+        assert_eq!(of(&first), None);
+        assert_eq!(of(&second).as_deref(), Some("socks5://127.0.0.1:1080"));
+
+        // Not an address: refused, and what was there stays.
+        let error = set_key_proxy(&id, &second, "not a proxy")
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("the proxy not a proxy"), "{error}");
+        assert!(set_key_proxy(&id, "nobody", "direct").is_err());
+        set_key_proxy(&id, &second, "direct").unwrap();
+        set_key_proxy(&id, &first, "").unwrap();
+        let config = crate::config::Config::load().unwrap();
+        let p = config.provider(&id).unwrap();
+        assert_eq!(p.accounts[1].proxy.as_deref(), Some("direct"));
+        assert_eq!(p.accounts[0].proxy, None);
+    }
 
     #[test]
     fn free_ids_count_up() {

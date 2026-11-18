@@ -1,0 +1,56 @@
+# Qwen Code, a fork of Gemini CLI on the OpenAI API.
+id = "qwen-code"
+name = "Qwen Code"
+protocol = "chat"
+programs = ["qwen"]
+dirs = [".qwen"]
+
+[files]
+settings = "~/.qwen/settings.json"
+env = "~/.qwen/.env"
+
+[[set]]
+file = "settings"
+key = ["model", "name"]
+value = "{model}"
+
+[[set]]
+file = "settings"
+key = ["security", "auth", "selectedType"]
+value = "openai"
+
+[[set]]
+file = "env"
+key = ["OPENAI_BASE_URL"]
+value = "{v1}"
+
+[[set]]
+file = "env"
+key = ["OPENAI_API_KEY"]
+value = "{key}"
+
+[[set]]
+file = "env"
+key = ["OPENAI_MODEL"]
+value = "{model}"
+
+[base_url]
+file = "env"
+key = ["OPENAI_BASE_URL"]
+
+[model]
+file = "settings"
+key = ["model", "name"]
+
+[[install]]
+via = "npm"
+command = "npm install -g @qwen-code/qwen-code"
+
+# Not tried on a Qwen Code: as Gemini CLI takes them, by its fork's names.
+[run]
+args = ["-m", "{model}"]
+
+[run.env]
+OPENAI_BASE_URL = "{v1}"
+OPENAI_API_KEY = "{key}"
+OPENAI_MODEL = "{model}"

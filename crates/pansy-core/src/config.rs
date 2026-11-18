@@ -56,6 +56,10 @@ impl Config {
 /// subscription signed in to is a provider whose accounts are its sign-ins.
 pub fn load_providers() -> Result<Vec<Provider>> {
     let mut providers = read_json::<Providers>(&paths::providers())?.providers;
+    // Keys kept in the system's store are read back; the file says where.
+    if !crate::keystore::refs(&providers).is_empty() {
+        crate::keystore::open(&mut providers);
+    }
     crate::subscription::merge(&mut providers, &crate::subscription::found());
     crate::plugin::merge(&mut providers, &crate::plugin::Listing::load());
     Ok(providers)
@@ -67,13 +71,24 @@ pub fn save_providers(providers: &[Provider]) -> Result<()> {
     if let Some(w) = ids.windows(2).find(|w| w[0] == w[1]) {
         bail!("two providers are called {}", w[0]);
     }
-    write_json(
-        &paths::providers(),
-        &Providers {
-            providers: providers.to_vec(),
-        },
-        true,
-    )
+    let mut providers = providers.to_vec();
+    let before = read_json::<Providers>(&paths::providers())
+        .map(|kept| crate::keystore::refs(&kept.providers))
+        .unwrap_or_default();
+    if load_settings().is_ok_and(|s| s.key_store == "system") {
+        crate::keystore::seal(&mut providers)?;
+    }
+    write_json(&paths::providers(), &Providers { providers }, true)?;
+    // What the file no longer refers to leaves the store.
+    if !before.is_empty() {
+        let after = read_json::<Providers>(&paths::providers())
+            .map(|kept| crate::keystore::refs(&kept.providers))
+            .unwrap_or_default();
+        for gone in before.iter().filter(|name| !after.contains(name)) {
+            let _ = crate::keystore::remove(gone);
+        }
+    }
+    Ok(())
 }
 
 pub fn load_groups() -> Result<Vec<Group>> {

@@ -12,7 +12,10 @@ pub mod doctor;
 pub mod files;
 pub mod import;
 pub mod jsonedit;
+pub mod manifest;
+pub mod preview;
 pub mod profile;
+pub mod run;
 pub mod sessions;
 pub mod state;
 
@@ -71,7 +74,7 @@ fn read_key(file: &Path, format: files::Format, path: &[&str]) -> Option<String>
     }
 }
 
-fn gateway_url() -> String {
+pub(crate) fn gateway_url() -> String {
     config::load_settings().unwrap_or_default().base_url()
 }
 
@@ -204,7 +207,7 @@ fn secret_key(name: &str) -> bool {
 
 /// `value` as a change shows it: a secret masked (pansy's own key is
 /// none), an object as one line, cut short.
-fn shown(name: &str, value: &Value) -> String {
+pub(crate) fn shown(name: &str, value: &Value) -> String {
     fn hide(name: &str, value: &Value) -> Value {
         match value {
             Value::String(s) if secret_key(name) && s != AGENT_KEY => {
@@ -292,7 +295,7 @@ pub fn changes(id: &str) -> Result<Vec<FileChange>> {
     Ok(out)
 }
 
-fn find(id: &str) -> Result<&'static Agent> {
+pub(crate) fn find(id: &str) -> Result<&'static Agent> {
     agent::find(id)
         .ok_or_else(|| anyhow!("pansy does not know an agent {id}; `pansy agents` lists them"))
 }
@@ -547,4 +550,4 @@ pub fn reconnect_all() -> Result<Vec<String>> {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
