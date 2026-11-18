@@ -1,7 +1,8 @@
 //! What the Routing page plays: the requests the gateway routed lately,
 //! each with the accounts routing lined up for it, every try and what it
-//! answered, and where the time went. Kept in memory only, and never a
-//! prompt or a reply; a day's requests come back from the usage records.
+//! answered, where the time went and what its prompt held (`prompt`, by
+//! names and sizes). Kept in memory only, and never a prompt's text or a
+//! reply; a day's requests come back from the usage records.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -15,6 +16,7 @@ use pansy_core::usage::{Record, Tried};
 use serde::Serialize;
 
 use crate::ir::Usage;
+use crate::prompt::Prompt;
 use crate::route::{Attempt, Health};
 
 /// How many requests the trace keeps.
@@ -59,6 +61,10 @@ pub struct Route {
     pub input: u64,
     pub output: u64,
     pub cache_read: u64,
+    /// What its prompt held, part by part; none until it was read, and for
+    /// a day's requests.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt: Option<Prompt>,
 }
 
 /// A routing group a request asked for.
@@ -86,6 +92,8 @@ pub struct Slot {
     pub used: u64,
     /// Past the most tries a request makes: lined up, never tried.
     pub spare: bool,
+    /// Its model's context window in tokens; 0 when not known.
+    pub window: u64,
 }
 
 /// One try: an account asked, and what it answered.
@@ -183,6 +191,7 @@ impl Tracing {
                 resting: health.rest_left(&a.key_id()),
                 used: health.used(&format!("{}/{}", a.provider, a.model)),
                 spare: n >= tries,
+                window: crate::prompt::window(config, &a.provider, &a.model),
             })
             .collect();
         let route = Route {
@@ -208,6 +217,11 @@ impl Tracing {
             r.asked = asked.to_owned();
             r.kept = kept.to_owned();
         });
+    }
+
+    /// What the request's prompt holds.
+    pub fn prompt(&self, prompt: Prompt) {
+        self.trace.update(self.id, |r| r.prompt = Some(prompt));
     }
 
     pub fn masked(&self) {

@@ -24,6 +24,7 @@ use serde_json::{Value, json};
 use crate::ir::{self, Event, Usage};
 use crate::mask;
 use crate::plugins;
+use crate::prompt;
 use crate::proto::{self, Quirks};
 use crate::route::{self, Attempt, Health, NoRoute};
 use crate::sse;
@@ -710,7 +711,19 @@ impl Gateway {
         }
         let cooldown = Duration::from_secs(settings.cooldown_secs.max(1));
         let first_byte = Duration::from_secs(settings.first_byte_timeout_secs.max(10));
-        let mut ir_request: Option<ir::Request> = None;
+        // Read once, as masked: what its prompt holds, for Routing's context
+        // window, and the request a try that translates is built from. One
+        // that can't be read passes through all the same, and fails a
+        // translating try with why below.
+        let mut ir_request: Option<ir::Request> =
+            proto::parse_request(client, &value).ok().map(|mut r| {
+                r.model = requested.clone();
+                r.stream = stream;
+                r
+            });
+        if let Some(request) = &ir_request {
+            trace.prompt(prompt::of(request));
+        }
         let mut last = (502u16, String::from("no provider answered"));
         let mut tried: Vec<usage::Tried> = Vec::new();
         let mut asked = false;

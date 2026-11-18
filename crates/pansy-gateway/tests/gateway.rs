@@ -207,6 +207,17 @@ async fn agents_reach_a_chat_vendor_through_the_gateway() {
     assert!(route.tries[0].rest > 0);
     assert!(route.tries[1].us > 0);
     assert_eq!((route.input, route.output), (12, 7));
+    // And what its prompt held, by parts: the tool, the turn; never the words.
+    let prompt = route.prompt.as_ref().unwrap();
+    let kinds: Vec<&str> = prompt.parts.iter().map(|p| p.kind).collect();
+    assert_eq!(kinds, ["tools", "chat"]);
+    assert_eq!(prompt.parts[0].items[0].name, "Bash");
+    assert_eq!(prompt.turns, 1);
+    assert!(
+        !serde_json::to_string(prompt)
+            .unwrap()
+            .contains("list files")
+    );
 
     // The resting key is tried last now: one hit.
     let (status, text) = call(
