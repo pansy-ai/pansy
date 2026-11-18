@@ -1,7 +1,14 @@
 //! The agents pansy wires: where each keeps its config, and the keys that
 //! point it at the gateway with a model.
+//!
+//! An agent is data: a manifest (`agents/*.toml`, read by [`crate::manifest`])
+//! says how it is found, which files it keeps its config in, the keys to set
+//! there and how one run of it is pointed elsewhere. pansy's own six are
+//! built in; the user's are the files in `agents/` of pansy's folder; an
+//! agent plugin (`magpie.agent`) adds the rest.
 
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use pansy_core::paths::user_home;
 use pansy_core::provider::Protocol;
@@ -9,6 +16,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::files::Format;
+use crate::manifest::{self, Manifest, Vars};
 
 /// One key to set in an agent's config.
 #[derive(Debug, Clone, PartialEq)]
@@ -50,8 +58,17 @@ pub struct Install {
     pub command: &'static str,
 }
 
-const fn install(via: &'static str, command: &'static str) -> Install {
-    Install { via, command }
+/// How one run of an agent is pointed at the gateway with a model, its
+/// config left alone: what its environment gains and the arguments put
+/// before the user's.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Run {
+    pub env: Vec<(String, String)>,
+    pub args: Vec<String>,
+    /// The agent's version this was tried on; `None`: not tried on one.
+    pub verified: Option<&'static str>,
+    /// Something the user should know about a run of it.
+    pub note: Option<&'static str>,
 }
 
 /// An agent pansy knows.
@@ -72,14 +89,10 @@ pub struct Agent {
     kind: Kind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy)]
 enum Kind {
-    ClaudeCode,
-    Codex,
-    GeminiCli,
-    QwenCode,
-    OpenCode,
-    Crush,
+    /// One a manifest describes.
+    Listed(&'static Manifest),
     /// An agent a plugin adds (`magpie.agent`).
     Plugin(&'static Plugged),
 }
@@ -114,7 +127,7 @@ fn expand(path: &str) -> PathBuf {
 }
 
 /// A plugin's `format`, else the file's ending's.
-fn format_of(format: &str, file: &Path) -> Format {
+pub(crate) fn format_of(format: &str, file: &Path) -> Format {
     match format.to_ascii_lowercase().as_str() {
         "json" | "jsonc" => Format::Json,
         "toml" => Format::Toml,
@@ -213,81 +226,90 @@ pub fn plugged() -> Vec<&'static Agent> {
     out
 }
 
-/// Every agent: pansy's own, then those plugins add.
+/// Every agent: pansy's own, the user's manifests', then those plugins add.
 pub fn all() -> Vec<&'static Agent> {
-    AGENTS.iter().chain(plugged()).collect()
+    let mut out: Vec<&'static Agent> = AGENTS.iter().collect();
+    for agent in listed() {
+        if !out.iter().any(|a| a.id == agent.id) {
+            out.push(agent);
+        }
+    }
+    for agent in plugged() {
+        if !out.iter().any(|a| a.id == agent.id) {
+            out.push(agent);
+        }
+    }
+    out
 }
 
-pub static AGENTS: &[Agent] = &[
+fn agent_of(m: &'static Manifest) -> Agent {
     Agent {
-        id: "claude-code",
-        name: "Claude Code",
-        protocol: Protocol::Anthropic,
-        programs: &["claude"],
-        dirs: &[".claude"],
-        small_model: true,
-        note: None,
-        kind: Kind::ClaudeCode,
-    },
-    Agent {
-        id: "codex",
-        name: "Codex",
-        protocol: Protocol::Responses,
-        programs: &["codex"],
-        dirs: &[".codex"],
-        small_model: false,
-        note: None,
-        kind: Kind::Codex,
-    },
-    Agent {
-        id: "gemini-cli",
-        name: "Gemini CLI",
-        protocol: Protocol::Gemini,
-        programs: &["gemini"],
-        dirs: &[".gemini"],
-        small_model: false,
-        note: None,
-        kind: Kind::GeminiCli,
-    },
-    Agent {
-        id: "opencode",
-        name: "OpenCode",
-        protocol: Protocol::Chat,
-        programs: &["opencode"],
-        dirs: &[".config/opencode"],
-        small_model: true,
-        note: Some(
-            "OpenCode lists every model of pansy under the Pansy provider; /models switches between them.",
-        ),
-        kind: Kind::OpenCode,
-    },
-    Agent {
-        id: "qwen-code",
-        name: "Qwen Code",
-        protocol: Protocol::Chat,
-        programs: &["qwen"],
-        dirs: &[".qwen"],
-        small_model: false,
-        note: None,
-        kind: Kind::QwenCode,
-    },
-    Agent {
-        id: "crush",
-        name: "Crush",
-        protocol: Protocol::Chat,
-        programs: &["crush"],
-        dirs: &[".config/crush"],
-        small_model: true,
-        note: None,
-        kind: Kind::Crush,
-    },
-];
+        id: &m.id,
+        name: &m.name,
+        protocol: m.protocol,
+        programs: &m.programs,
+        dirs: &m.dirs,
+        small_model: m.small_model,
+        note: m.note,
+        kind: Kind::Listed(m),
+    }
+}
+
+/// pansy's own agents, from the manifests built in.
+pub static AGENTS: LazyLock<Vec<Agent>> =
+    LazyLock::new(|| manifest::builtin().iter().map(agent_of).collect());
+
+/// The agents the user's manifests describe (`agents/*.toml` in pansy's
+/// folder), in their files' order: each made once for a file's text, so
+/// reading them again leaks nothing more. One at an id pansy has is passed
+/// over; [`problems`] says so.
+pub fn listed() -> Vec<&'static Agent> {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    static MADE: LazyLock<Mutex<HashMap<String, &'static Agent>>> = LazyLock::new(Default::default);
+    let mut made = MADE.lock().unwrap_or_else(|e| e.into_inner());
+    let mut out: Vec<&'static Agent> = Vec::new();
+    for (_, text) in manifest::user_files() {
+        let agent = match made.get(&text) {
+            Some(agent) => agent,
+            None => {
+                let Ok(m) = manifest::parse(&text) else {
+                    continue;
+                };
+                let agent: &'static Agent = Box::leak(Box::new(agent_of(Box::leak(Box::new(m)))));
+                made.insert(text, agent);
+                agent
+            }
+        };
+        if AGENTS.iter().any(|a| a.id == agent.id) || out.iter().any(|a| a.id == agent.id) {
+            continue;
+        }
+        out.push(agent);
+    }
+    out
+}
+
+/// What is wrong with the user's manifests, a line each: one that can't be
+/// read, or whose id another agent has.
+pub fn problems() -> Vec<String> {
+    let mut seen: Vec<String> = AGENTS.iter().map(|a| a.id.to_owned()).collect();
+    let mut out = Vec::new();
+    for (file, text) in manifest::user_files() {
+        match manifest::parse(&text) {
+            Err(e) => out.push(format!("{}: {e:#}", file.display())),
+            Ok(m) if seen.contains(&m.id) => out.push(format!(
+                "{}: pansy already has an agent {}",
+                file.display(),
+                m.id
+            )),
+            Ok(m) => seen.push(m.id),
+        }
+    }
+    out
+}
 
 pub fn find(id: &str) -> Option<&'static Agent> {
-    AGENTS
-        .iter()
-        .find(|a| a.id == id)
-        .or_else(|| plugged().into_iter().find(|a| a.id == id))
+    all().into_iter().find(|a| a.id == id)
 }
 
 fn home(rel: &str) -> PathBuf {
@@ -298,34 +320,12 @@ fn home(rel: &str) -> PathBuf {
     path
 }
 
-/// OpenCode reads `opencode.jsonc` when there is one, else `opencode.json`.
-fn opencode_config() -> PathBuf {
-    let dir = std::env::var_os("XDG_CONFIG_HOME")
-        .filter(|d| !d.is_empty())
-        .map(|d| PathBuf::from(d).join("opencode"))
-        .unwrap_or_else(|| home(".config/opencode"));
-    let jsonc = dir.join("opencode.jsonc");
-    if jsonc.exists() {
-        jsonc
-    } else {
-        dir.join("opencode.json")
-    }
-}
-
-fn crush_config() -> PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .filter(|d| !d.is_empty())
-        .map(|d| PathBuf::from(d).join("crush"))
-        .unwrap_or_else(|| home(".config/crush"))
-        .join("crush.json")
-}
-
 impl Agent {
     /// The plugin's description of an agent a plugin adds.
     pub fn plugged(&self) -> Option<&'static Plugged> {
         match self.kind {
             Kind::Plugin(p) => Some(p),
-            _ => None,
+            Kind::Listed(_) => None,
         }
     }
 
@@ -364,12 +364,7 @@ impl Agent {
                 }
                 out
             }
-            Kind::ClaudeCode => vec![home(".claude/settings.json")],
-            Kind::Codex => vec![codex_home().join("config.toml")],
-            Kind::GeminiCli => vec![home(".gemini/settings.json"), home(".gemini/.env")],
-            Kind::QwenCode => vec![home(".qwen/settings.json"), home(".qwen/.env")],
-            Kind::OpenCode => vec![opencode_config()],
-            Kind::Crush => vec![crush_config()],
+            Kind::Listed(m) => m.files.iter().map(|(_, f)| f.resolve()).collect(),
         }
     }
 
@@ -387,64 +382,18 @@ impl Agent {
     /// How to install it here: its vendor's installer first, then its npm
     /// package (pansy doesn't run them; the user does, in a terminal).
     pub fn install(&self) -> Vec<Install> {
-        let windows = cfg!(windows);
-        let mac = cfg!(target_os = "macos");
-        let mut out = Vec::new();
         match self.kind {
-            Kind::ClaudeCode => {
-                out.push(if windows {
-                    install("powershell", "irm https://claude.ai/install.ps1 | iex")
-                } else {
-                    install("script", "curl -fsSL https://claude.ai/install.sh | bash")
-                });
-                out.push(install(
-                    "npm",
-                    "npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code",
-                ));
-            }
-            Kind::Codex => {
-                if windows {
-                    out.push(install(
-                        "powershell",
-                        r#"powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex""#,
-                    ));
-                } else {
-                    out.push(install(
-                        "script",
-                        "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
-                    ));
-                    if mac {
-                        out.push(install("brew", "brew install --cask codex"));
-                    }
-                }
-                out.push(install("npm", "npm install -g @openai/codex"));
-            }
-            Kind::GeminiCli => {
-                if !windows {
-                    out.push(install("brew", "brew install gemini-cli"));
-                }
-                out.push(install("npm", "npm install -g @google/gemini-cli"));
-            }
-            Kind::OpenCode => {
-                if !windows {
-                    out.push(install(
-                        "script",
-                        "curl -fsSL https://opencode.ai/v2/install | bash",
-                    ));
-                }
-                out.push(install(
-                    "npm",
-                    "npm install -g --allow-scripts=@opencode/cli @opencode/cli",
-                ));
-            }
-            Kind::QwenCode => out.push(install("npm", "npm install -g @qwen-code/qwen-code")),
-            Kind::Crush => out.push(install(
-                "npm",
-                "npm install -g --allow-scripts=@charmland/crush @charmland/crush",
-            )),
-            Kind::Plugin(_) => {}
+            Kind::Listed(m) => m
+                .install
+                .iter()
+                .filter(|i| i.here())
+                .map(|i| Install {
+                    via: i.via,
+                    command: i.command,
+                })
+                .collect(),
+            Kind::Plugin(_) => Vec::new(),
         }
-        out
     }
 
     /// Whether its settings folder is here (`~/.claude`).
@@ -456,18 +405,13 @@ impl Agent {
     /// OpenCode's `/models`, Crush's `ctrl+p`.
     pub fn picks_in(&self) -> Option<&'static str> {
         match self.kind {
-            Kind::OpenCode => Some("/models"),
-            Kind::Crush => Some("ctrl+p"),
-            _ => None,
+            Kind::Listed(m) => m.picks_in,
+            Kind::Plugin(_) => None,
         }
     }
 
     /// The keys that point the agent at the gateway with `w.model`.
     pub fn edits(&self, w: &Wiring) -> Vec<Edit> {
-        let files = self.files();
-        let main = &files[0];
-        let small = w.small_model.unwrap_or(w.model);
-        let v1 = format!("{}/v1", w.base_url);
         match self.kind {
             // The model's keys; what `connect` gives comes in edits_checked.
             Kind::Plugin(p) => {
@@ -491,182 +435,90 @@ impl Agent {
                 }
                 out
             }
-            Kind::ClaudeCode => {
-                let env =
-                    |key: &str, value: &str| edit(main, Format::Json, &["env", key], json!(value));
-                vec![
-                    env("ANTHROPIC_BASE_URL", w.base_url),
-                    env("ANTHROPIC_AUTH_TOKEN", w.key),
-                    env("ANTHROPIC_MODEL", w.model),
-                    env("ANTHROPIC_DEFAULT_OPUS_MODEL", w.model),
-                    env("ANTHROPIC_DEFAULT_SONNET_MODEL", w.model),
-                    env("ANTHROPIC_DEFAULT_HAIKU_MODEL", small),
-                    env("ANTHROPIC_SMALL_FAST_MODEL", small),
-                ]
-            }
-            Kind::Codex => vec![
-                edit(main, Format::Toml, &["model"], json!(w.model)),
-                edit(main, Format::Toml, &["model_provider"], json!("pansy")),
-                edit(
-                    main,
-                    Format::Toml,
-                    &["model_providers", "pansy", "name"],
-                    json!("Pansy"),
-                ),
-                edit(
-                    main,
-                    Format::Toml,
-                    &["model_providers", "pansy", "base_url"],
-                    json!(v1),
-                ),
-                edit(
-                    main,
-                    Format::Toml,
-                    &["model_providers", "pansy", "wire_api"],
-                    json!("responses"),
-                ),
-                edit(
-                    main,
-                    Format::Toml,
-                    &["model_providers", "pansy", "experimental_bearer_token"],
-                    json!(w.key),
-                ),
-            ],
-            Kind::GeminiCli => vec![
-                edit(main, Format::Json, &["model", "name"], json!(w.model)),
-                edit(
-                    main,
-                    Format::Json,
-                    &["security", "auth", "selectedType"],
-                    json!("gemini-api-key"),
-                ),
-                edit(
-                    &files[1],
-                    Format::Env,
-                    &["GOOGLE_GEMINI_BASE_URL"],
-                    json!(w.base_url),
-                ),
-                edit(&files[1], Format::Env, &["GEMINI_API_KEY"], json!(w.key)),
-            ],
-            Kind::QwenCode => vec![
-                edit(main, Format::Json, &["model", "name"], json!(w.model)),
-                edit(
-                    main,
-                    Format::Json,
-                    &["security", "auth", "selectedType"],
-                    json!("openai"),
-                ),
-                edit(&files[1], Format::Env, &["OPENAI_BASE_URL"], json!(v1)),
-                edit(&files[1], Format::Env, &["OPENAI_API_KEY"], json!(w.key)),
-                edit(&files[1], Format::Env, &["OPENAI_MODEL"], json!(w.model)),
-            ],
-            Kind::OpenCode => {
-                let mut models = serde_json::Map::new();
-                for id in w
-                    .choices
+            Kind::Listed(m) => {
+                let vars = Vars::of(w);
+                m.set
                     .iter()
-                    .chain([w.model.to_owned(), small.to_owned()].iter())
-                {
-                    models.insert(id.clone(), json!({"name": id}));
-                }
-                vec![
-                    edit(
-                        main,
-                        Format::Json,
-                        &["provider", "pansy"],
-                        json!({
-                            "npm": "@ai-sdk/openai-compatible",
-                            "name": "Pansy",
-                            "options": {"baseURL": v1, "apiKey": w.key},
-                            "models": models,
-                        }),
-                    ),
-                    edit(
-                        main,
-                        Format::Json,
-                        &["model"],
-                        json!(format!("pansy/{}", w.model)),
-                    ),
-                    edit(
-                        main,
-                        Format::Json,
-                        &["small_model"],
-                        json!(format!("pansy/{small}")),
-                    ),
-                ]
-            }
-            Kind::Crush => {
-                let mut ids: Vec<&str> = w.choices.iter().map(String::as_str).collect();
-                for id in [w.model, small] {
-                    if !ids.contains(&id) {
-                        ids.push(id);
-                    }
-                }
-                let models: Vec<Value> = ids
-                    .iter()
-                    .map(|id| json!({"id": id, "name": id, "context_window": 128000, "default_max_tokens": 16000}))
-                    .collect();
-                vec![
-                    edit(
-                        main,
-                        Format::Json,
-                        &["providers", "pansy"],
-                        json!({"name": "Pansy", "type": "openai", "base_url": v1, "api_key": w.key, "models": models}),
-                    ),
-                    edit(
-                        main,
-                        Format::Json,
-                        &["models", "large"],
-                        json!({"model": w.model, "provider": "pansy"}),
-                    ),
-                    edit(
-                        main,
-                        Format::Json,
-                        &["models", "small"],
-                        json!({"model": small, "provider": "pansy"}),
-                    ),
-                ]
+                    .map(|s| {
+                        let file = m.file(s.file);
+                        Edit {
+                            format: format_of("", &file),
+                            file,
+                            path: s.key.iter().map(|k| (*k).to_owned()).collect(),
+                            value: vars.fill(&s.value),
+                        }
+                    })
+                    .collect()
             }
         }
     }
 
+    /// How one run of the agent is pointed at the gateway with `w.model`,
+    /// its config left alone; why it can't be, for one that reads its
+    /// config files alone.
+    pub fn run(&self, w: &Wiring) -> Result<Run, String> {
+        let Kind::Listed(m) = self.kind else {
+            return Err(format!(
+                "{} is added by a plugin, which doesn't say how one run of it is pointed elsewhere; connect it instead",
+                self.name
+            ));
+        };
+        let Some(run) = &m.run else {
+            return Err(format!(
+                "{}'s manifest doesn't say how one run of it is pointed elsewhere; connect it instead",
+                self.name
+            ));
+        };
+        if let Some(why) = run.unsupported {
+            return Err(why.to_owned());
+        }
+        let vars = Vars::of(w);
+        let mut env: Vec<(String, String)> = run
+            .env
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), vars.text(v)))
+            .collect();
+        for (name, value) in &run.json_env {
+            let mut value = vars.fill(value);
+            // Laid over what the variable holds already, when both are objects.
+            if let Some(mut theirs) = std::env::var(name)
+                .ok()
+                .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+                .filter(Value::is_object)
+            {
+                manifest::lay_over(&mut theirs, &value);
+                value = theirs;
+            }
+            env.push(((*name).to_owned(), value.to_string()));
+        }
+        let mut args = Vec::new();
+        for (flag, value) in &run.json_arg {
+            args.push((*flag).to_owned());
+            args.push(vars.fill(value).to_string());
+        }
+        args.extend(run.args.iter().map(|a| vars.text(a)));
+        Ok(Run {
+            env,
+            args,
+            verified: run.verified,
+            note: run.note,
+        })
+    }
+
     /// Where the agent's base URL is, to tell whether it points at pansy.
     pub fn base_url_key(&self) -> (PathBuf, Format, Vec<&'static str>) {
-        let files = self.files();
         match self.kind {
             Kind::Plugin(_) => self.model_key(),
-            Kind::ClaudeCode => (
-                files[0].clone(),
-                Format::Json,
-                vec!["env", "ANTHROPIC_BASE_URL"],
-            ),
-            Kind::Codex => (
-                files[0].clone(),
-                Format::Toml,
-                vec!["model_providers", "pansy", "base_url"],
-            ),
-            Kind::GeminiCli => (
-                files[1].clone(),
-                Format::Env,
-                vec!["GOOGLE_GEMINI_BASE_URL"],
-            ),
-            Kind::QwenCode => (files[1].clone(), Format::Env, vec!["OPENAI_BASE_URL"]),
-            Kind::OpenCode => (
-                files[0].clone(),
-                Format::Json,
-                vec!["provider", "pansy", "options", "baseURL"],
-            ),
-            Kind::Crush => (
-                files[0].clone(),
-                Format::Json,
-                vec!["providers", "pansy", "base_url"],
-            ),
+            Kind::Listed(m) => {
+                let file = m.file(m.base_url.file);
+                let format = format_of("", &file);
+                (file, format, m.base_url.key.clone())
+            }
         }
     }
 
     /// Where the agent's model is.
     pub fn model_key(&self) -> (PathBuf, Format, Vec<&'static str>) {
-        let files = self.files();
         match self.kind {
             Kind::Plugin(p) => {
                 let (file, format) = match &p.startup {
@@ -675,34 +527,21 @@ impl Agent {
                 };
                 (file, format, p.model_key.to_vec())
             }
-            Kind::ClaudeCode => (
-                files[0].clone(),
-                Format::Json,
-                vec!["env", "ANTHROPIC_MODEL"],
-            ),
-            Kind::Codex => (files[0].clone(), Format::Toml, vec!["model"]),
-            Kind::GeminiCli | Kind::QwenCode => {
-                (files[0].clone(), Format::Json, vec!["model", "name"])
+            Kind::Listed(m) => {
+                let file = m.file(m.model.file);
+                let format = format_of("", &file);
+                (file, format, m.model.key.clone())
             }
-            Kind::OpenCode => (files[0].clone(), Format::Json, vec!["model"]),
-            Kind::Crush => (
-                files[0].clone(),
-                Format::Json,
-                vec!["models", "large", "model"],
-            ),
         }
     }
 
     /// The model as the agent's config names it, without what the agent adds.
     pub fn model_of(&self, raw: &str) -> String {
-        match self.kind {
-            Kind::Plugin(p) => raw
-                .strip_prefix(p.prefix.as_str())
-                .unwrap_or(raw)
-                .to_owned(),
-            Kind::OpenCode => raw.strip_prefix("pansy/").unwrap_or(raw).to_owned(),
-            _ => raw.to_owned(),
-        }
+        let prefix = match self.kind {
+            Kind::Plugin(p) => p.prefix.as_str(),
+            Kind::Listed(m) => m.model.prefix,
+        };
+        raw.strip_prefix(prefix).unwrap_or(raw).to_owned()
     }
 }
 

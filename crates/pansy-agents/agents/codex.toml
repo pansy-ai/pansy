@@ -1,0 +1,77 @@
+# Codex. `-c key=value` wins over config.toml for one run.
+id = "codex"
+name = "Codex"
+protocol = "responses"
+programs = ["codex"]
+dirs = [".codex"]
+
+[files]
+config = "{env:CODEX_HOME|~/.codex}/config.toml"
+
+[[set]]
+file = "config"
+key = ["model"]
+value = "{model}"
+
+[[set]]
+file = "config"
+key = ["model_provider"]
+value = "pansy"
+
+[[set]]
+file = "config"
+key = ["model_providers", "pansy", "name"]
+value = "Pansy"
+
+[[set]]
+file = "config"
+key = ["model_providers", "pansy", "base_url"]
+value = "{v1}"
+
+[[set]]
+file = "config"
+key = ["model_providers", "pansy", "wire_api"]
+value = "responses"
+
+[[set]]
+file = "config"
+key = ["model_providers", "pansy", "experimental_bearer_token"]
+value = "{key}"
+
+[base_url]
+file = "config"
+key = ["model_providers", "pansy", "base_url"]
+
+[model]
+file = "config"
+key = ["model"]
+
+[[install]]
+via = "powershell"
+command = 'powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"'
+os = ["windows"]
+
+[[install]]
+via = "script"
+command = "curl -fsSL https://chatgpt.com/codex/install.sh | sh"
+os = ["linux", "macos"]
+
+[[install]]
+via = "brew"
+command = "brew install --cask codex"
+os = ["macos"]
+
+[[install]]
+via = "npm"
+command = "npm install -g @openai/codex"
+
+[run]
+verified = "0.169.0"
+args = [
+  "-c", "model={model:q}",
+  "-c", 'model_provider="pansy"',
+  "-c", 'model_providers.pansy.name="Pansy"',
+  "-c", "model_providers.pansy.base_url={v1:q}",
+  "-c", 'model_providers.pansy.wire_api="responses"',
+  "-c", "model_providers.pansy.experimental_bearer_token={key:q}",
+]

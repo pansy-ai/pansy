@@ -127,6 +127,37 @@ test("waits on the Routing page for a request, with the group's accounts below",
   await app.waitFor("text:Show accounts");
 });
 
+test("shows what connecting an agent would write, and writes nothing by looking", async () => {
+  const app = await launch();
+  await app.waitFor("id:agent-claude-code");
+  await app.press("id:preview-claude-code");
+  await app.waitFor("id:preview");
+  await app.waitFor("text:+");
+  const said = app.texts().join("\n");
+  expect(said).toContain("What connecting Claude Code changes");
+  expect(said).toContain("env.ANTHROPIC_BASE_URL = http://127.0.0.1:7267");
+  expect(said).toContain("Nothing is written until you connect.");
+  await app.press("id:preview-close");
+  await app.waitFor("id:status-claude-code");
+  expect(app.texts().join("\n")).toContain("Not connected · Claude Code uses its own settings");
+});
+
+test("gives one key a proxy of its own", async () => {
+  const app = await launch();
+  await app.press("id:nav-providers");
+  await app.press("id:provider-open-local-relay");
+  await app.waitFor("id:provider-editor");
+  await app.type("id:key-new-local-relay", "sk-proxy-test-0123456789");
+  await app.press("id:key-add-local-relay");
+  await app.waitFor("id:key-proxy-open-local-relay-0");
+  await app.press("id:key-proxy-open-local-relay-0");
+  await app.waitFor("id:key-proxy-local-relay");
+  await app.type("id:key-proxy-local-relay", "socks5://127.0.0.1:1080");
+  await app.press("id:key-proxy-local-relay-save");
+  await app.waitFor("text:Proxy saved");
+  await app.press("id:provider-done");
+});
+
 test("connects an agent to a model with its switch and disconnects it", async () => {
   const app = await launch();
   await app.press("id:nav-agents");

@@ -507,6 +507,15 @@ const SETTINGS: Setting[] = [
     control: () => <OnOff testID="setting-sign-ins" on={s()?.agentSignIns !== false} onChange={(on) => void setSetting("agentSignIns", on)} />,
   },
   {
+    id: "key-store",
+    tab: "privacy",
+    section: () => tr("Keys"),
+    title: () => tr("Keep API keys in the system's key store"),
+    description: () =>
+      tr("The login keyring on Linux (it needs secret-tool), the Keychain on macOS. On, pansy's providers file says only where each key is; off, the keys are in the file, which only you can read"),
+    control: () => <OnOff testID="setting-key-store" on={s()?.keyStore === "system"} onChange={(on) => void setSetting("keyStore", on ? "system" : "file")} />,
+  },
+  {
     id: "found-rules",
     tab: "privacy",
     section: () => tr("How it's found"),

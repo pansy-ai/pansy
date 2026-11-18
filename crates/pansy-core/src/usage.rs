@@ -19,6 +19,9 @@ pub struct Record {
     pub at: DateTime<Utc>,
     /// The agent that asked, as its user agent tells (`claude-code`, `codex`), or `other`.
     pub agent: String,
+    /// The folder it was run in, for one `pansy run` started.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub project: String,
     /// The model it asked for (`deepseek/deepseek-chat`, `group/daily`).
     pub requested: String,
     pub provider: String,
@@ -151,7 +154,8 @@ impl Totals {
     }
 }
 
-/// The Usage page: totals, by day, by model, by agent and by provider.
+/// The Usage page: totals, by day, by model, by agent, by provider and by
+/// project.
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Summary {
@@ -162,6 +166,9 @@ pub struct Summary {
     pub by_model: BTreeMap<String, Totals>,
     pub by_agent: BTreeMap<String, Totals>,
     pub by_provider: BTreeMap<String, Totals>,
+    /// By the folder `pansy run` started the agent in; the requests of
+    /// agents started another way are under none.
+    pub by_project: BTreeMap<String, Totals>,
     /// The latest requests, newest first.
     pub latest: Vec<Record>,
 }
@@ -197,6 +204,9 @@ pub fn summarize(records: &[Record], days: u32, today: NaiveDate) -> Summary {
             .add(r);
         s.by_agent.entry(r.agent.clone()).or_default().add(r);
         s.by_provider.entry(r.provider.clone()).or_default().add(r);
+        if !r.project.is_empty() {
+            s.by_project.entry(r.project.clone()).or_default().add(r);
+        }
     }
     s.latest = records.iter().rev().take(50).cloned().collect();
     s
@@ -221,7 +231,17 @@ mod tests {
             output: 2,
             ..Record::default()
         };
+        let mut run = r("codex", 200);
+        run.project = "/code/shop".into();
+        let s = summarize(
+            &[r("codex", 200), r("claude-code", 429), run],
+            7,
+            day.max(today),
+        );
+        assert_eq!(s.by_project.len(), 1);
+        assert_eq!(s.by_project["/code/shop"].requests, 1);
         let s = summarize(&[r("codex", 200), r("claude-code", 429)], 7, day.max(today));
+        assert!(s.by_project.is_empty());
         assert_eq!(s.total.requests, 2);
         assert_eq!(s.total.errors, 1);
         assert_eq!(s.by_model["deepseek/deepseek-chat"].input, 20);

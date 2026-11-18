@@ -1,0 +1,47 @@
+# Crush.
+id = "crush"
+name = "Crush"
+protocol = "chat"
+programs = ["crush"]
+dirs = [".config/crush"]
+small_model = true
+picks_in = "ctrl+p"
+
+[files]
+config = "{env:XDG_CONFIG_HOME|~/.config}/crush/crush.json"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy"]
+
+[set.value]
+name = "Pansy"
+type = "openai"
+base_url = "{v1}"
+api_key = "{key}"
+models = [{ "$each_model" = { id = "{id}", name = "{id}", context_window = 128000, default_max_tokens = 16000 } }]
+
+[[set]]
+file = "config"
+key = ["models", "large"]
+value = { model = "{model}", provider = "pansy" }
+
+[[set]]
+file = "config"
+key = ["models", "small"]
+value = { model = "{small}", provider = "pansy" }
+
+[base_url]
+file = "config"
+key = ["providers", "pansy", "base_url"]
+
+[model]
+file = "config"
+key = ["models", "large", "model"]
+
+[[install]]
+via = "npm"
+command = "npm install -g --allow-scripts=@charmland/crush @charmland/crush"
+
+[run]
+unsupported = "Crush reads its providers from its config files alone; connect it instead (pansy crush <model>)."

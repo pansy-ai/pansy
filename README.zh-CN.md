@@ -48,6 +48,16 @@ pansy 是 [magpie](https://github.com/yetone/magpie) 的 Rust 重写版，桌面
 - **隐私脱敏。** API Key、令牌、密码、个人信息和你自己的词以占位符（`{{API_KEY_k3j9x2ab}}`）离开这台电脑，
   回复里（无论是否流式）再还原。每类值也可以设为只提醒或直接拦截请求；洞察 › 脱敏 页面显示每个厂商看到了什么，
   且从不保存原值。
+- **一次运行用一个模型，一个文件夹用一个模型。** `pansy run claude` 启动智能体并指定模型，
+  不写它的配置，两个终端可以同时用两个模型。项目里的 `.pansy.toml` 写明每个智能体在这里用哪个模型
+  （只有模型名，没有密钥；随仓库带来的文件要你确认后才生效），用量可以按项目查看。
+- **改之前先给看。** 智能体那一行的「会改什么」，以及 `pansy <agent> <model> --show`，
+  会列出连接时要在智能体文件里设置的每个键，以及现在的值。
+- **协议之间的转换有测试。** [docs/compat.md](docs/compat.md) 由测试生成：四种协议的请求和回复
+  都是手写的样本，结论与代码不符时测试失败。各厂商模型拒绝的参数是数据（`pansy quirks`，
+  自己的规则写在 `quirks.toml`）。
+- **智能体是文件。** 一个智能体就是一份 TOML 清单（[docs/agents.md](docs/agents.md)）；
+  放进 `~/.config/pansy/agents/` 的清单不需要新版 pansy。
 - **60 个预设，与 magpie 一致。** Anthropic、OpenAI、Gemini、DeepSeek、xAI、Kimi 与 Kimi Code、智谱 GLM、
   Z.ai、MiniMax、阶跃星辰、小米 MiMo、LongCat、百度千帆、腾讯云、华为云、火山方舟、千问与阿里云的 Token Plan、
   Mistral、Groq、Amazon Bedrock、Azure OpenAI、Ollama Cloud、Nous Portal、OpenRouter、Vercel AI Gateway、
@@ -70,6 +80,10 @@ pansy serve                                 # 无窗口运行网关
 pansy doctor                                # 检查网关、供应商和智能体是否正常
 pansy test deepseek/deepseek-chat           # 经网关发一条简短的测试消息
 pansy pause all && pansy resume all         # 智能体临时用回自己的配置，再接回来
+pansy project init                          # .pansy.toml：这个文件夹里每个智能体用的模型
+pansy run claude                            # 只在这一次运行里让 Claude Code 用它
+pansy run --model group/daily codex         # 或者在另一个终端用另一个模型
+pansy codex deepseek/deepseek-chat --show   # 连接会写入什么，但什么都不写
 ```
 
 也可以打开窗口（不带参数运行 `pansy`）：**供应商 → 添加供应商**，然后在**智能体**页为每个智能体选择模型。

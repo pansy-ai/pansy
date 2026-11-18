@@ -203,6 +203,10 @@ export function UsagePage() {
         <Breakdown title={tr("By agent")} rows={usage()?.byAgent ?? {}} logo={agentLogo} name={agentName} testID="usage-agents" />
         <Breakdown title={tr("By model")} rows={usage()?.byModel ?? {}} logo={(k) => providerPreset(k.split("/")[0] ?? k)} name={(k) => k} testID="usage-models" />
         <Breakdown title={tr("By provider")} rows={usage()?.byProvider ?? {}} logo={providerPreset} name={providerName} />
+        <If when={Object.keys(usage()?.byProject ?? {}).length > 0}>
+          <Breakdown title={tr("By project")} rows={usage()?.byProject ?? {}} logo={() => "generic"} name={(k) => k} testID="usage-projects" />
+          <Text class="px-1 text-[11px] text-faint">{tr("A project is the folder an agent was started in with pansy run; agents started another way are under none.")}</Text>
+        </If>
         <Requests />
       </If>
     </Page>

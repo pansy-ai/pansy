@@ -6,6 +6,7 @@
 pub mod config;
 pub mod fsutil;
 pub mod group;
+pub mod keystore;
 pub mod manage;
 pub mod masking;
 pub mod models;
@@ -13,7 +14,9 @@ pub mod paths;
 pub mod plugin;
 pub mod presets;
 pub mod profile;
+pub mod project;
 pub mod provider;
+pub mod quirk;
 pub mod settings;
 pub mod subscription;
 pub mod usage;

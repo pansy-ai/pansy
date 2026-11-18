@@ -52,6 +52,8 @@ struct GeminiCall {
 struct Meta {
     started: Instant,
     agent: String,
+    /// The folder `pansy run` started the agent in, when it did.
+    project: String,
     requested: String,
     client: Protocol,
     attempt: Attempt,
@@ -85,6 +87,7 @@ impl Meta {
         Meta {
             started,
             agent: agent.to_owned(),
+            project: String::new(),
             requested: requested.to_owned(),
             client,
             attempt: attempt.clone(),
@@ -113,6 +116,7 @@ impl Meta {
         let record = usage::Record {
             at: chrono::Utc::now(),
             agent: self.agent.clone(),
+            project: self.project.clone(),
             requested: self.requested.clone(),
             provider: self.attempt.provider.clone(),
             account: self
@@ -367,6 +371,26 @@ async fn exchange(
         .map_err(Unsent::Send)
 }
 
+/// A translated request as the attempt's vendor takes it: written in its
+/// protocol, then what its models refuse taken out (`quirks.toml`). A
+/// request that passes through never comes here.
+fn build_for(attempt: &Attempt, request: &ir::Request) -> Value {
+    let protocol = attempt.endpoint.protocol;
+    let mut body =
+        proto::build_request(protocol, request, attempt.wire_model(), &quirks_of(attempt));
+    let why = pansy_core::quirk::apply(
+        &mut body,
+        &attempt.provider,
+        attempt.preset.as_deref(),
+        attempt.wire_model(),
+        protocol,
+    );
+    if !why.is_empty() {
+        tracing::debug!(provider = %attempt.provider, model = %attempt.model, "changed for the vendor: {}", why.join(" "));
+    }
+    body
+}
+
 fn quirks_of(attempt: &Attempt) -> Quirks {
     Quirks {
         max_completion_tokens: attempt.quirks.openai,
@@ -484,6 +508,12 @@ impl Gateway {
         let (parts, body) = request.into_parts();
         let path = parts.uri.path().to_owned();
         let headers = parts.headers;
+        // A key `pansy run` gave names the folder; only this computer's count.
+        let project = if local {
+            project_of(&headers, parts.uri.query())
+        } else {
+            String::new()
+        };
         let body = match axum::body::to_bytes(body, BODY_LIMIT).await {
             Ok(body) => body,
             Err(e) => return error(client, 413, &format!("the request could not be read: {e}")),
@@ -648,12 +678,7 @@ impl Gateway {
                     Ok(mut r) => {
                         r.model = requested.clone();
                         r.stream = stream;
-                        let built = proto::build_request(
-                            attempt.endpoint.protocol,
-                            &r,
-                            attempt.wire_model(),
-                            &quirks_of(attempt),
-                        );
+                        let built = build_for(attempt, &r);
                         fresh_ir = Some(r);
                         built
                     }
@@ -676,12 +701,7 @@ impl Gateway {
                         }
                     }
                 }
-                proto::build_request(
-                    attempt.endpoint.protocol,
-                    ir_request.as_ref().unwrap(),
-                    attempt.wire_model(),
-                    &quirks_of(attempt),
-                )
+                build_for(attempt, ir_request.as_ref().unwrap())
             };
             let request_ir = fresh_ir.as_ref().or(ir_request.as_ref());
             // A subscription's backend takes the request its own way; one
@@ -760,6 +780,7 @@ impl Gateway {
             let mut meta = Meta::new(
                 started, &agent, &requested, client, attempt, stream, n as u32,
             );
+            meta.project = project.clone();
             meta.unmask = unmask.clone();
             meta.tried = tried.clone();
             meta.tracing = Some(trace.clone());
@@ -829,6 +850,7 @@ impl Gateway {
             let mut meta = Meta::new(
                 started, &agent, &requested, client, attempt, stream, failovers,
             );
+            meta.project = project;
             // The last try is the record's own.
             tried.pop();
             meta.tried = tried;
@@ -1169,18 +1191,33 @@ async fn gathered(
     Ok(response)
 }
 
-/// Whether `headers` carry the gateway key `key` (never, when it is empty).
-fn has_key(headers: &HeaderMap, key: &str) -> bool {
-    if key.is_empty() {
-        return false;
-    }
-    let given = headers
+/// The key a request's headers carry.
+fn key_in(headers: &HeaderMap) -> Option<&str> {
+    headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .map(|v| v.trim_start_matches("Bearer ").trim())
         .or_else(|| headers.get("x-api-key").and_then(|v| v.to_str().ok()))
-        .or_else(|| headers.get("x-goog-api-key").and_then(|v| v.to_str().ok()));
-    given == Some(key)
+        .or_else(|| headers.get("x-goog-api-key").and_then(|v| v.to_str().ok()))
+}
+
+/// Whether `headers` carry the gateway key `key` (never, when it is empty).
+fn has_key(headers: &HeaderMap, key: &str) -> bool {
+    !key.is_empty() && key_in(headers) == Some(key)
+}
+
+/// The folder a request's key names (`pansy run`'s), in a header or, as
+/// Gemini's clients may send it, in the URL; empty for any other key.
+pub fn project_of(headers: &HeaderMap, query: Option<&str>) -> String {
+    key_in(headers)
+        .and_then(pansy_core::project::of_key)
+        .or_else(|| {
+            query?
+                .split('&')
+                .filter_map(|p| p.strip_prefix("key="))
+                .find_map(|key| pansy_core::project::of_key(&percent_decode(key)))
+        })
+        .unwrap_or_default()
 }
 
 /// A web page's origin on this computer (`http://localhost:5173`).

@@ -418,7 +418,11 @@ impl Provider {
     }
 
     pub fn enabled_accounts(&self) -> impl Iterator<Item = &Account> {
-        self.accounts.iter().filter(|a| a.enabled)
+        // One whose key is in the system's store and can't be read now is
+        // passed over: a reference is no key to send.
+        self.accounts
+            .iter()
+            .filter(|a| a.enabled && !crate::keystore::is_ref(&a.key))
     }
 
     /// Whether it needs no key: a local server (Ollama, LM Studio), or a
@@ -521,6 +525,9 @@ pub fn slug(name: &str) -> String {
 
 /// Masks a key for display: its first four and last four characters.
 pub fn mask_key(key: &str) -> String {
+    if crate::keystore::is_ref(key) {
+        return "locked in the system's key store".to_owned();
+    }
     let chars: Vec<char> = key.chars().collect();
     if chars.len() <= 10 {
         return "•".repeat(chars.len().max(4));

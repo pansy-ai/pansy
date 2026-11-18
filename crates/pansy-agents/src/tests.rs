@@ -43,7 +43,7 @@ fn wires_and_unwires_every_agent() {
     )
     .unwrap();
 
-    for agent in AGENTS {
+    for agent in AGENTS.iter() {
         connect(agent.id, "deepseek/deepseek-chat").unwrap();
         let v = view(agent, &State::load().unwrap());
         assert!(v.connected, "{} is not connected", agent.id);
@@ -86,7 +86,7 @@ fn wires_and_unwires_every_agent() {
     // A profile, then disconnecting everything.
     profile::save("work").unwrap();
     assert!(profile::list().unwrap()[0].active);
-    for agent in AGENTS {
+    for agent in AGENTS.iter() {
         disconnect(agent.id).unwrap();
         assert!(
             !view(agent, &State::load().unwrap()).connected,
@@ -468,4 +468,156 @@ fn wires_and_unwires_an_agent_a_plugin_adds() {
             .connected
     );
     pansy_plugins::middleware::forget();
+}
+
+/// What every built-in agent sets, reads back and installs with, as text:
+/// the manifests in `agents/` say what the code they replaced did. After a
+/// change that is meant, `PANSY_BLESS=1 cargo test -p pansy-agents` writes
+/// the file again.
+#[test]
+fn the_built_in_agents_set_what_their_manifests_always_did() {
+    let (home, _lock) = scratch();
+    let choices = vec!["a/x".to_owned(), "c/z".to_owned()];
+    let mut out = String::new();
+    for agent in AGENTS.iter() {
+        for small in [None, Some("b/y")] {
+            let w = agent::Wiring {
+                base_url: "http://127.0.0.1:7267",
+                key: "pansy",
+                model: "a/x",
+                small_model: small,
+                choices: &choices,
+            };
+            out.push_str(&format!("{} {:?}\n", agent.id, agent.edits(&w)));
+        }
+        out.push_str(&format!(
+            "{:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {:?} {}\n",
+            agent.name,
+            agent.protocol,
+            agent.programs,
+            agent.dirs,
+            agent.small_model,
+            agent.note,
+            agent.files(),
+            agent.install(),
+            agent.picks_in(),
+            (agent.base_url_key(), agent.model_key()),
+            agent.model_of("pansy/q")
+        ));
+    }
+    let out = out.replace(&home.path().display().to_string(), "HOME");
+    let golden = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("agents/edits.golden");
+    if std::env::var_os("PANSY_BLESS").is_some() {
+        fs::write(&golden, &out).unwrap();
+    }
+    let expected = fs::read_to_string(&golden).unwrap_or_default();
+    // The installers differ by system; the golden file is Linux's.
+    if cfg!(target_os = "linux") {
+        assert_eq!(out, expected, "see the test's comment");
+    }
+}
+
+#[test]
+fn an_agent_is_added_by_a_manifest_of_the_users() {
+    let (home, _lock) = scratch();
+    let dir = home.path().join(".config/pansy/agents");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(
+        dir.join("demo.toml"),
+        r#"
+id = "demo"
+name = "Demo Agent"
+protocol = "chat"
+programs = ["demo"]
+dirs = [".demo"]
+
+[files]
+config = "~/.demo/config.yaml"
+
+[[set]]
+file = "config"
+key = ["api", "base"]
+value = "{v1}"
+
+[[set]]
+file = "config"
+key = ["api", "model"]
+value = "pansy:{model}"
+
+[base_url]
+file = "config"
+key = ["api", "base"]
+
+[model]
+file = "config"
+key = ["api", "model"]
+prefix = "pansy:"
+
+[run]
+args = ["--model", "{model}"]
+
+[run.env]
+DEMO_BASE = "{v1}"
+"#,
+    )
+    .unwrap();
+    fs::write(dir.join("broken.toml"), "id = \"broken\"\n").unwrap();
+    fs::write(
+        dir.join("codex.toml"),
+        fs::read_to_string(dir.join("demo.toml"))
+            .unwrap()
+            .replace("id = \"demo\"", "id = \"codex\""),
+    )
+    .unwrap();
+
+    let ids: Vec<&str> = agent::all().iter().map(|a| a.id).collect();
+    assert_eq!(ids.iter().filter(|id| **id == "codex").count(), 1);
+    assert!(ids.contains(&"demo"), "{ids:?}");
+    assert_eq!(
+        agent::find("codex").unwrap().name,
+        "Codex",
+        "pansy's own stays"
+    );
+    let problems = agent::problems();
+    assert_eq!(problems.len(), 2, "{problems:?}");
+    assert!(problems.iter().any(|p| p.contains("broken.toml")));
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.contains("already has an agent codex"))
+    );
+
+    // It connects and goes back like pansy's own.
+    let config = home.path().join(".demo/config.yaml");
+    fs::create_dir_all(config.parent().unwrap()).unwrap();
+    fs::write(&config, "theme: dark\n").unwrap();
+    connect("demo", "deepseek/deepseek-chat").unwrap();
+    let demo = agent::find("demo").unwrap();
+    let v = view(demo, &State::load().unwrap());
+    assert!(v.connected);
+    assert_eq!(v.model.as_deref(), Some("deepseek/deepseek-chat"));
+    assert!(fs::read_to_string(&config).unwrap().contains("theme: dark"));
+    disconnect("demo").unwrap();
+    assert_eq!(fs::read_to_string(&config).unwrap(), "theme: dark\n");
+
+    // And is run as its manifest says.
+    let run = demo
+        .run(&agent::Wiring {
+            base_url: "http://127.0.0.1:7267",
+            key: "k",
+            model: "a/x",
+            small_model: None,
+            choices: &[],
+        })
+        .unwrap();
+    assert_eq!(run.args, ["--model", "a/x"]);
+    assert_eq!(
+        run.env,
+        [(
+            "DEMO_BASE".to_owned(),
+            "http://127.0.0.1:7267/v1".to_owned()
+        )]
+    );
+    assert_eq!(run.verified, None);
+    assert_eq!(crate::run::by_name("demo").unwrap().id, "demo");
 }

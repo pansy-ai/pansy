@@ -80,6 +80,9 @@ pub struct Settings {
     /// Bun and plugins' packages asked of mirrors in China first
     /// (jsDelivr, npmmirror), their official addresses after.
     pub china_mirror: bool,
+    /// Where API keys are kept: `file` (`providers.json`, 0600) or `system`
+    /// (the login keyring or Keychain; the file then says only where).
+    pub key_store: String,
 }
 
 impl Default for Settings {
@@ -107,6 +110,7 @@ impl Default for Settings {
             agent_sign_ins: true,
             import_ignored: Vec::new(),
             china_mirror: false,
+            key_store: "file".into(),
         }
     }
 }
@@ -178,6 +182,10 @@ impl Settings {
         (
             "chinaMirror",
             "fetch the plugin list, Bun and plugins from mirrors in China first (true/false)",
+        ),
+        (
+            "keyStore",
+            "where API keys are kept: file (providers.json) or system (the login keyring or Keychain)",
         ),
     ];
 
@@ -257,6 +265,9 @@ impl Settings {
         }
         if !["panel", "window"].contains(&self.tray_click.as_str()) {
             return Err("trayClick is panel or window".into());
+        }
+        if !["file", "system"].contains(&self.key_store.as_str()) {
+            return Err("keyStore is file or system".into());
         }
         let proxy = self.proxy.trim();
         if !proxy.is_empty()

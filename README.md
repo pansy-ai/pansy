@@ -62,6 +62,21 @@ in one gateway.
   they were in the answer, streamed or not. Each kind can instead warn or hold
   the request back; Insights › Masking shows what each vendor saw, never
   keeping the values.
+- **A model for one run, a model for one folder.** `pansy run claude` starts
+  an agent on a model without writing its config, so two terminals use two
+  models at once. A project's `.pansy.toml` names the model each agent uses
+  there (model names alone, no keys; one that came with a repository counts
+  only after you say yes to it), and Usage counts requests by project.
+- **Shown before it is done.** *What it changes* on an agent's row, and
+  `pansy <agent> <model> --show`, list every key connecting would set in the
+  agent's files, with what is there now.
+- **Tested between protocols.** [docs/compat.md](docs/compat.md) is written
+  by a test from hand-written requests and answers in all four protocols,
+  and fails the build when it stops being true. What a vendor's models
+  refuse is data (`pansy quirks`, your own in `quirks.toml`).
+- **Agents as files.** An agent is a TOML manifest
+  ([docs/agents.md](docs/agents.md)); one of your own in
+  `~/.config/pansy/agents/` needs no new pansy.
 - **60 presets, as magpie lists them.** Anthropic, OpenAI, Gemini, DeepSeek,
   xAI, Kimi and Kimi Code, Zhipu GLM, Z.ai, MiniMax, StepFun, Xiaomi MiMo,
   LongCat, Baidu Qianfan, Tencent Cloud, Huawei Cloud, Volcengine Ark, Qwen and
@@ -87,6 +102,10 @@ pansy serve                                 # the gateway without a window
 pansy doctor                                # whether the gateway, providers and agents work
 pansy test deepseek/deepseek-chat           # one short message through the gateway
 pansy pause all && pansy resume all         # the agents on their own configs for now, and back
+pansy project init                          # .pansy.toml: this folder's model for each agent
+pansy run claude                            # Claude Code on it, for this run alone
+pansy run --model group/daily codex         # or on another, in another terminal
+pansy codex deepseek/deepseek-chat --show   # what connecting would write, and nothing written
 ```
 
 Or open the window (`pansy` without arguments): **Providers → Add provider**,

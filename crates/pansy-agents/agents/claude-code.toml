@@ -1,0 +1,83 @@
+# Claude Code. Its settings' `env` wins over the environment it is started
+# in, so one run is pointed elsewhere with `--settings`, which wins over both.
+id = "claude-code"
+name = "Claude Code"
+protocol = "anthropic"
+programs = ["claude"]
+dirs = [".claude"]
+small_model = true
+
+[files]
+settings = "~/.claude/settings.json"
+
+[[set]]
+file = "settings"
+key = ["env", "ANTHROPIC_BASE_URL"]
+value = "{base_url}"
+
+[[set]]
+file = "settings"
+key = ["env", "ANTHROPIC_AUTH_TOKEN"]
+value = "{key}"
+
+[[set]]
+file = "settings"
+key = ["env", "ANTHROPIC_MODEL"]
+value = "{model}"
+
+[[set]]
+file = "settings"
+key = ["env", "ANTHROPIC_DEFAULT_OPUS_MODEL"]
+value = "{model}"
+
+[[set]]
+file = "settings"
+key = ["env", "ANTHROPIC_DEFAULT_SONNET_MODEL"]
+value = "{model}"
+
+[[set]]
+file = "settings"
+key = ["env", "ANTHROPIC_DEFAULT_HAIKU_MODEL"]
+value = "{small}"
+
+[[set]]
+file = "settings"
+key = ["env", "ANTHROPIC_SMALL_FAST_MODEL"]
+value = "{small}"
+
+[base_url]
+file = "settings"
+key = ["env", "ANTHROPIC_BASE_URL"]
+
+[model]
+file = "settings"
+key = ["env", "ANTHROPIC_MODEL"]
+
+[[install]]
+via = "powershell"
+command = "irm https://claude.ai/install.ps1 | iex"
+os = ["windows"]
+
+[[install]]
+via = "script"
+command = "curl -fsSL https://claude.ai/install.sh | bash"
+os = ["linux", "macos"]
+
+[[install]]
+via = "npm"
+command = "npm install -g --allow-scripts=@anthropic-ai/claude-code @anthropic-ai/claude-code"
+
+[run]
+verified = "2.1.325"
+
+[[run.json_arg]]
+flag = "--settings"
+
+[run.json_arg.value.env]
+ANTHROPIC_BASE_URL = "{base_url}"
+ANTHROPIC_AUTH_TOKEN = "{key}"
+ANTHROPIC_MODEL = "{model}"
+ANTHROPIC_DEFAULT_OPUS_MODEL = "{model}"
+ANTHROPIC_DEFAULT_SONNET_MODEL = "{model}"
+ANTHROPIC_DEFAULT_HAIKU_MODEL = "{small}"
+ANTHROPIC_SMALL_FAST_MODEL = "{small}"

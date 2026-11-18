@@ -240,6 +240,7 @@ fn provider_views() -> anyhow::Result<Value> {
                 "subscription": p.subscription,
                 "accounts": p.accounts.iter().map(|a| json!({
                     "id": a.id, "label": a.label, "display": a.display(), "masked": mask_key(&a.key), "enabled": a.enabled,
+                    "proxy": a.proxy.clone().unwrap_or_default(),
                     "signIn": a.sign_in,
                 })).collect::<Vec<_>>(),
                 "models": p.models.iter().map(|m| json!({
@@ -408,6 +409,11 @@ impl Providers {
     /// The provider's own proxy; empty uses the global one.
     pub async fn set_proxy(id: String, proxy: String) -> Result<(), String> {
         off(move || manage::set_proxy(&id, &proxy)).await
+    }
+
+    /// One key's own proxy, over the provider's; empty for none of its own.
+    pub async fn set_key_proxy(id: String, account: String, proxy: String) -> Result<(), String> {
+        off(move || manage::set_key_proxy(&id, &account, &proxy)).await
     }
 
     /// Adds a key; its id.
@@ -879,6 +885,12 @@ impl Agents {
         off(|| Ok(pansy_agents::resume_all()? as u32)).await
     }
 
+    /// What connecting the agent with `model` would write, file by file,
+    /// keys masked, and nothing written (JSON, see `pansy_agents::FileChange`).
+    pub async fn preview(id: String, model: String) -> Result<String, String> {
+        off(move || Ok(to_json(&pansy_agents::preview::preview(&id, &model)?))).await
+    }
+
     /// What pansy changed in the agent's config, file by file, keys masked
     /// (JSON, see `pansy_agents::FileChange`).
     pub async fn changes(id: String) -> Result<String, String> {
@@ -1204,6 +1216,11 @@ impl Settings {
     /// into the connected agents' configs too.
     pub async fn set(key: String, value: String) -> Result<(), String> {
         off(move || {
+            // Where the keys are kept: the keys move with the setting.
+            if key == "keyStore" {
+                pansy_core::keystore::move_to(&value)?;
+                return Ok(());
+            }
             config::update_settings(|s| s.set(&key, &value).map_err(|e| anyhow::anyhow!(e)))?;
             if key == "port" {
                 let problems = pansy_agents::reconnect_all()?;
