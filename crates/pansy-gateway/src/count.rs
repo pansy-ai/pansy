@@ -37,7 +37,7 @@ pub fn request_tokens(req: &Request) -> u64 {
     total
 }
 
-fn part_tokens(part: &Part) -> u64 {
+pub(crate) fn part_tokens(part: &Part) -> u64 {
     match part {
         Part::Text(t) => estimate(t),
         Part::Thinking { text, .. } => estimate(text),

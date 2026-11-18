@@ -8,6 +8,7 @@ pub mod count;
 pub mod ir;
 pub mod mask;
 pub mod plugins;
+pub mod prompt;
 pub mod proto;
 pub mod route;
 pub mod server;

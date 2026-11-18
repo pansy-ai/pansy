@@ -2,9 +2,11 @@
 // one picked) on a stage — the agent, pansy, and the accounts routing lined
 // up for it, the one that answered lit; while it is out, pansy's logo turns
 // and data flows along its wires — then what happened in words and where
-// the time went, the requests (live, or a day's) and how each account fared
-// today. Kept in memory, and never a prompt or a reply.
+// the time went, what its prompt held against its model's context window
+// (ui/Context.tsx), the requests (live, or a day's) and how each account
+// fared today. Kept in memory, and never a prompt's text or a reply.
 import { Canvas, computed, createAnimatedValue, effect, reduceMotion, Text, token, View, type AnimatedValue, type CanvasRenderingContext2D } from "nsh";
+import { ContextCard } from "./Context";
 import { tr } from "./i18n";
 import { gateway, go, hideAccounts, routePicked, routes, type Route, type RouteSlot } from "./model";
 import { agentLogo, Icon, Label, Logo, Page, providerLogo, TextButton, type Color } from "./parts";
@@ -501,6 +503,7 @@ export function RoutingPage() {
     <Page testID="page-routing">
       <Head />
       <Card />
+      <ContextCard route={onStage()} />
       <RoutingRequests />
       <RoutingAccounts />
     </Page>

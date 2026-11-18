@@ -499,6 +499,30 @@ export interface RouteSlot {
   used: number;
   /** Past the most tries a request makes: lined up, never tried. */
   spare: boolean;
+  /** Its model's context window in tokens; 0 when not known. */
+  window?: number;
+}
+
+/** A part of a request's prompt (`pansy_gateway::prompt::PromptPart`). */
+export type PromptKind = "system" | "tools" | "skills" | "memory" | "files" | "results" | "chat";
+
+/** What a part holds, by name: a tool, a file, a turn (`tag` `turn`, its number), `n` earlier turns (`turns`) or the `n` smallest left (`more`). */
+export interface PromptItem {
+  name: string;
+  tag?: string;
+  tokens: number;
+  /** How many it stands for: a tool's results, reminders, images. */
+  n?: number;
+}
+
+/** What a request's prompt held, part by part, estimated: names and sizes, never the text (`pansy_gateway::prompt::Prompt`). */
+export interface Prompt {
+  tokens: number;
+  parts: { kind: PromptKind; tokens: number; items: PromptItem[] }[];
+  /** The user's prompts in the conversation. */
+  turns?: number;
+  /** The conversation it is of, by a hash of its first prompt. */
+  conv?: string;
 }
 
 /** One try of a request: an account asked, and what it answered (µs). */
@@ -538,6 +562,8 @@ export interface Route {
   input: number;
   output: number;
   cacheRead: number;
+  /** What its prompt held; none until it was read, and for a day's requests. */
+  prompt?: Prompt;
 }
 
 /** How an account or model fared today: Routing's Accounts and keys. */
@@ -683,6 +709,8 @@ export const routePicked = signal<number | null>(null);
 export const tallies = signal<Tally[]>([]);
 /** Routing shows accounts by their place (key 1) instead of their names. */
 export const hideAccounts = signal(false);
+/** Routing's context window folded to its head. */
+export const contextShut = signal(false);
 export const maskDays = signal(7);
 /** The request the Masking page shows on its own, by its record's key. */
 export const maskOpen = signal<number | null>(null);
