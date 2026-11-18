@@ -644,11 +644,13 @@ fn a_subagent_model_is_a_key_set_and_put_back() {
     let (home, _lock) = scratch();
     let claude = home.path().join(".claude/settings.json");
     fs::create_dir_all(claude.parent().unwrap()).unwrap();
-    let mine = "{\n  // mine\n  \"theme\": \"dark\"\n}\n";
+    // The user's own model for Claude Code's subagents.
+    let mine = "{\n  // mine\n  \"theme\": \"dark\",\n  \"env\": {\"CLAUDE_CODE_SUBAGENT_MODEL\": \"haiku\"}\n}\n";
     fs::write(&claude, mine).unwrap();
     let codex = home.path().join(".codex/config.toml");
     fs::create_dir_all(codex.parent().unwrap()).unwrap();
-    // The user's own model for Codex's subagents, and a setting beside it.
+    // And for Codex's, one of Codex's own models: the only kind that key
+    // takes, so it is theirs and never pansy's to write.
     let theirs = "[agents]\nmax_threads = 4\ndefault_subagent_model = \"gpt-5-mini\" # mine\n";
     fs::write(&codex, theirs).unwrap();
     let env = |key: &str| -> Value {
@@ -659,14 +661,14 @@ fn a_subagent_model_is_a_key_set_and_put_back() {
     let error = set_subagent_model("claude-code", Some("group/cheap")).unwrap_err();
     assert!(error.to_string().contains("not connected"), "{error}");
 
-    // Connected with none: the key isn't there, and Codex's is the user's.
+    // Connected with none: the keys are as the user has them.
     connect("claude-code", "deepseek/deepseek-chat").unwrap();
     connect("codex", "deepseek/deepseek-chat").unwrap();
-    assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), Value::Null);
+    assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), "haiku");
+    let toml = fs::read_to_string(&codex).unwrap();
     assert!(
-        fs::read_to_string(&codex)
-            .unwrap()
-            .contains("default_subagent_model = \"gpt-5-mini\" # mine")
+        toml.contains(theirs) && !toml.contains("http_headers"),
+        "{toml}"
     );
     let v = view(agent::find("claude-code").unwrap(), &State::load().unwrap());
     assert!(v.has_subagent_model);
@@ -680,13 +682,9 @@ fn a_subagent_model_is_a_key_set_and_put_back() {
     assert_eq!(env("ANTHROPIC_MODEL"), "moonshot/kimi-k2");
     assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), "group/cheap");
     let toml = fs::read_to_string(&codex).unwrap();
-    assert!(
-        toml.contains("default_subagent_model = \"group/cheap\" # mine"),
-        "{toml}"
-    );
-    assert!(toml.contains("max_threads = 4"));
     // Codex's lead names its subagents' models itself: the model goes to
-    // the gateway in a header too, which puts every one of them on it.
+    // the gateway in a header, which puts every one of them on it.
+    assert!(toml.contains(theirs), "{toml}");
     assert!(
         toml.contains("x-pansy-subagent-model = \"group/cheap\""),
         "{toml}"
@@ -697,12 +695,12 @@ fn a_subagent_model_is_a_key_set_and_put_back() {
     assert!(!v.subagent_every);
     assert_eq!(v.subagent_model.as_deref(), Some("group/cheap"));
     assert!(
-        changes("codex")
+        changes("claude-code")
             .unwrap()
             .iter()
             .flat_map(|f| &f.keys)
-            .any(|k| k.key == "agents.default_subagent_model"
-                && k.before.as_deref() == Some("gpt-5-mini")
+            .any(|k| k.key == "env.CLAUDE_CODE_SUBAGENT_MODEL"
+                && k.before.as_deref() == Some("haiku")
                 && k.after.as_deref() == Some("group/cheap"))
     );
 
@@ -716,21 +714,19 @@ fn a_subagent_model_is_a_key_set_and_put_back() {
     // Cleared: that key alone goes back to what it was, the others stay.
     set_subagent_model("claude-code", None).unwrap();
     set_subagent_model("codex", None).unwrap();
-    assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), Value::Null);
+    assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), "haiku");
     assert_eq!(env("ANTHROPIC_MODEL"), "moonshot/kimi-k2");
     let toml = fs::read_to_string(&codex).unwrap();
-    assert!(
-        toml.contains("default_subagent_model = \"gpt-5-mini\" # mine"),
-        "{toml}"
-    );
+    assert!(toml.contains(theirs), "{toml}");
     assert!(toml.contains("model = \"deepseek/deepseek-chat\""));
     assert!(!toml.contains("http_headers"), "{toml}");
     assert!(
-        !changes("codex")
+        !changes("claude-code")
             .unwrap()
             .iter()
+            .chain(&changes("codex").unwrap())
             .flat_map(|f| &f.keys)
-            .any(|k| k.key == "agents.default_subagent_model")
+            .any(|k| k.key.to_ascii_lowercase().contains("subagent"))
     );
 
     // The profile puts it on again; disconnecting leaves the files as they were.
