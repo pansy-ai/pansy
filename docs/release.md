@@ -1,7 +1,7 @@
 # Releases and updates
 
 pansy's window updates itself from one place: a Cloudflare R2 bucket behind
-`https://releases.pansy.dev` (`desktop/nsh.json`, `"updater"`). A release is
+`https://releases.pansyai.dev` (`desktop/nsh.json`, `"updater"`). A release is
 files put there; nothing else serves them.
 
 ```
@@ -121,7 +121,7 @@ a pansy will (`nsh verify`, against `nsh.json`'s roots) before it goes up.
 ## Cloudflare, once
 
 1. An R2 bucket, `pansy-releases` (`wrangler r2 bucket create pansy-releases`).
-2. A custom domain on it, `releases.pansy.dev` (the bucket's Settings ›
+2. A custom domain on it, `releases.pansyai.dev` (the bucket's Settings ›
    Custom Domains). The updater needs HTTPS and this exact address: it is in
    every pansy released, so choose it before the first release and change
    `nsh.json`'s `updater.url` to match.
@@ -131,7 +131,7 @@ a pansy will (`nsh verify`, against `nsh.json`'s roots) before it goes up.
    `PANSY_RELEASE_KEY`, `PANSY_UPDATE_KEY`, `CLOUDFLARE_API_TOKEN` and
    `CLOUDFLARE_ACCOUNT_ID`
    (and the variable `PANSY_RELEASE_BUCKET` for another bucket name).
-5. R2 serves no index for `/`: link to `https://releases.pansy.dev/index.html`,
+5. R2 serves no index for `/`: link to `https://releases.pansyai.dev/index.html`,
    or add a redirect rule from `/` to it.
 
 ## When a release is bad

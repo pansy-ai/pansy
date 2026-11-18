@@ -49,7 +49,7 @@ import json, re, sys
 text = open("nsh.json").read()
 updater = json.loads(text)["updater"]
 updater.pop("github", None)
-updater.setdefault("url", "https://releases.pansy.dev/latest.json")
+updater.setdefault("url", "https://releases.pansyai.dev/latest.json")
 updater["publicKey"] = sys.argv[1]
 updater["packages"] = {"roots": [sys.argv[2]]}
 block = json.dumps(updater, indent=2).replace("\n", "\n  ")
