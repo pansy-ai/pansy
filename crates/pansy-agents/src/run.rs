@@ -38,6 +38,8 @@ pub const FILE: &str = ".pansy.toml";
 pub struct Choice {
     pub model: Option<String>,
     pub small: Option<String>,
+    /// For the agent's subagents that name no model.
+    pub subagent: Option<String>,
 }
 
 /// A project file, read.
@@ -62,6 +64,7 @@ impl ProjectFile {
         Choice {
             model: own.model.or_else(|| self.all.model.clone()),
             small: own.small.or_else(|| self.all.small.clone()),
+            subagent: own.subagent.or_else(|| self.all.subagent.clone()),
         }
     }
 
@@ -121,10 +124,11 @@ pub fn read(path: &Path) -> Result<ProjectFile> {
         match key {
             "model" => file.all.model = text_of(item, "model")?,
             "small" => file.all.small = text_of(item, "small")?,
+            "subagent" => file.all.subagent = text_of(item, "subagent")?,
             name => {
                 let agent = by_name(name).ok_or_else(|| {
                     anyhow!(
-                        "{}: pansy knows no agent {name}; a project file holds `model`, `small` and a table for each agent",
+                        "{}: pansy knows no agent {name}; a project file holds `model`, `small`, `subagent` and a table for each agent",
                         path.display()
                     )
                 })?;
@@ -136,8 +140,9 @@ pub fn read(path: &Path) -> Result<ProjectFile> {
                     match key {
                         "model" => choice.model = text_of(item, &format!("{name}.model"))?,
                         "small" => choice.small = text_of(item, &format!("{name}.small"))?,
+                        "subagent" => choice.subagent = text_of(item, &format!("{name}.subagent"))?,
                         other => bail!(
-                            "{}: {name}.{other} is not something a project file holds (model, small)",
+                            "{}: {name}.{other} is not something a project file holds (model, small, subagent)",
                             path.display()
                         ),
                     }
@@ -221,9 +226,12 @@ pub fn init(folder: &Path) -> Result<ProjectFile> {
         if let Some(small) = view.small_model.as_ref().filter(|_| view.has_small_model) {
             text.push_str(&format!("small = {}\n", quoted(small)));
         }
+        if let Some(subagent) = &view.subagent_model {
+            text.push_str(&format!("subagent = {}\n", quoted(subagent)));
+        }
     }
     if !any {
-        text.push_str("\n# model = \"provider/model\"        every agent\n\n# [claude]\n# model = \"provider/model\"\n# small = \"provider/model\"\n");
+        text.push_str("\n# model = \"provider/model\"        every agent\n\n# [claude]\n# model = \"provider/model\"\n# small = \"provider/model\"\n# subagent = \"provider/model\"\n");
     }
     write_atomic(&path, text.as_bytes(), false)?;
     let file = read(&path)?;
@@ -260,6 +268,8 @@ pub struct Launch {
     pub env: Vec<(String, String)>,
     pub model: String,
     pub small: Option<String>,
+    /// The model its subagents start on, when they name none.
+    pub subagent: Option<String>,
     pub source: Source,
     /// The folder its requests are counted under.
     pub project: PathBuf,
@@ -273,6 +283,7 @@ pub struct Launch {
 pub struct Models<'a> {
     pub model: Option<&'a str>,
     pub small: Option<&'a str>,
+    pub subagent: Option<&'a str>,
 }
 
 /// Plans a run of `agent` in `folder`: the model from `asked`, else the
@@ -285,8 +296,11 @@ pub fn launch(
     asked: Models,
     user_args: &[String],
 ) -> Result<Launch> {
-    let Models { model, small } = asked;
-
+    let Models {
+        model,
+        small,
+        subagent,
+    } = asked;
     let given = file.map(|f| f.choice(agent.id)).unwrap_or_default();
     let saved = State::load()
         .ok()
@@ -324,6 +338,16 @@ pub fn launch(
                 .and_then(|s| s.small_model.clone())
         })
         .filter(|s| !s.is_empty() && agent.small_model);
+    let subagent = subagent
+        .map(|s| s.trim().to_owned())
+        .or(given.subagent)
+        .or_else(|| {
+            saved
+                .as_ref()
+                .filter(|_| source == Source::Connected)
+                .and_then(|s| s.subagent_model.clone())
+        })
+        .filter(|s| !s.is_empty() && agent.subagent_model);
     let program = agent
         .programs
         .iter()
@@ -343,6 +367,7 @@ pub fn launch(
             key: &key,
             model: &model,
             small_model: small.as_deref(),
+            subagent_model: subagent.as_deref(),
             choices: &choices,
         })
         .map_err(|why| anyhow!(why))?;
@@ -356,6 +381,7 @@ pub fn launch(
         env: run.env,
         model,
         small,
+        subagent,
         source,
         project,
         verified: run.verified,
@@ -422,6 +448,7 @@ mod tests {
             Choice {
                 model: Some("deepseek/deepseek-chat".into()),
                 small: Some("group/cheap".into()),
+                subagent: None,
             }
         );
         assert_eq!(file.choice("codex").model.as_deref(), Some("group/daily"));
@@ -508,8 +535,22 @@ mod tests {
         assert_eq!(settings["env"]["ANTHROPIC_AUTH_TOKEN"], key.as_str());
         assert_eq!(settings["env"]["ANTHROPIC_MODEL"], "deepseek/deepseek-chat");
         assert_eq!(settings["env"]["ANTHROPIC_SMALL_FAST_MODEL"], "group/cheap");
+        assert!(settings["env"].get("CLAUDE_CODE_SUBAGENT_MODEL").is_none());
         assert_eq!(l.args[2..], ["-p", "hi"]);
         assert_eq!(l.project, project);
+
+        // The subagents' model: the flag's, else the file's; where the agent
+        // has a key for it, and nowhere else.
+        fs::write(
+            project.join(FILE),
+            "model = \"group/daily\"\nsubagent = \"group/cheap\"\n[claude]\nsubagent = \"group/quick\"\n",
+        )
+        .unwrap();
+        let subs = read(&project.join(FILE)).unwrap();
+        let l = launch(claude, &project, Some(&subs), Models::default(), &[]).unwrap();
+        assert_eq!(l.subagent.as_deref(), Some("group/quick"));
+        let settings: serde_json::Value = serde_json::from_str(&l.args[1]).unwrap();
+        assert_eq!(settings["env"]["CLAUDE_CODE_SUBAGENT_MODEL"], "group/quick");
 
         // Codex: `-c`, the flag's model over the file's.
         let _path2 = program(home.path(), "codex");
@@ -536,6 +577,33 @@ mod tests {
             "model_providers.pansy.experimental_bearer_token=\"{key}\""
         )));
         assert_eq!(l.small, None, "Codex has no quick-task model");
+        assert_eq!(l.subagent, None);
+        assert!(!l.args.iter().any(|a| a.contains("default_subagent_model")));
+
+        // And its file's, as Claude Code's above.
+        let l = launch(codex, &project, Some(&subs), Models::default(), &[]).unwrap();
+        assert_eq!(
+            l.args[l.args.len() - 4..],
+            [
+                "-c",
+                "agents.default_subagent_model=\"group/cheap\"",
+                "-c",
+                "model_providers.pansy.http_headers.x-pansy-subagent-model=\"group/cheap\""
+            ]
+        );
+        let asked = Models {
+            subagent: Some("a/sub"),
+            ..Models::default()
+        };
+        let l = launch(codex, &project, Some(&subs), asked, &["exec".into()]).unwrap();
+        assert_eq!(l.subagent.as_deref(), Some("a/sub"));
+        assert_eq!(
+            l.args[l.args.len() - 2..],
+            [
+                "model_providers.pansy.http_headers.x-pansy-subagent-model=\"a/sub\"",
+                "exec"
+            ]
+        );
 
         // Gemini CLI: the environment.
         let _path3 = program(home.path(), "gemini");
@@ -554,6 +622,7 @@ mod tests {
         );
         assert_eq!(env_of(&l, "GEMINI_API_KEY"), key);
         assert_eq!(env_of(&l, "GEMINI_MODEL"), "group/daily");
+        assert_eq!(l.subagent, None, "Gemini CLI has no key for it");
         assert!(l.args.is_empty());
 
         // OpenCode: a config of its own in a variable.

@@ -36,6 +36,10 @@ Agents
   <agent> <provider/model>            point an agent at the gateway with a model
                                       (claude, codex, gemini, opencode, qwen, crush)
   <agent> --small <provider/model>    the agent's quick-task model (Claude Code, OpenCode, Crush)
+  <agent> --subagent <provider/model>|off
+                                      the model its subagents start on when they name none
+                                      (Claude Code), or every one of them whatever its lead
+                                      names (Codex); off leaves that to the agent
   <agent> <provider/model> --show     what connecting would write into the agent's files,
                                       key by key, and nothing written
   <agent> off                         put the agent's config back as it was
@@ -45,7 +49,8 @@ Agents
   pause <agent>|all                   put an agent's config back for now, so it works
                                       without pansy; its model is remembered
   resume <agent>|all                  connect it again with that model
-  run [--model <provider/model>] [--small <provider/model>] [--show] [--yes] <agent> [arguments]
+  run [--model <provider/model>] [--small <provider/model>] [--subagent <provider/model>]
+      [--show] [--yes] <agent> [arguments]
                                       start an agent on a model for this run alone: its
                                       config is not written, so two terminals can use two
                                       models. The model: --model, else this folder's
@@ -450,6 +455,9 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
                         v.name,
                         v.model.as_deref().unwrap_or("not connected to pansy")
                     );
+                    if let Some(subagent) = &v.subagent_model {
+                        println!("Subagents: {subagent}");
+                    }
                     Ok(())
                 }
                 ["off"] => disconnect(id),
@@ -464,10 +472,30 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
                     println!("Set {}'s quick-task model.", agent.name);
                     Ok(())
                 }
+                ["--subagent", model] => {
+                    let agent =
+                        pansy_agents::agent::find(id).ok_or_else(|| anyhow!("no agent {id}"))?;
+                    let model = if *model == "off" { None } else { Some(*model) };
+                    pansy_agents::set_subagent_model(id, model)?;
+                    match model {
+                        Some(model) if agent.subagent_every => println!(
+                            "{}'s subagents go on {model}, whatever model its lead names for them.",
+                            agent.name
+                        ),
+                        Some(model) => println!(
+                            "{}'s subagents start on {model} when they name no model.",
+                            agent.name
+                        ),
+                        None => println!("{}'s subagents are left to it.", agent.name),
+                    }
+                    Ok(())
+                }
                 [model, "--show"] | ["--show", model] => preview(id, model, json),
                 [model] => connect(id, model),
                 _ => {
-                    bail!("usage: pansy {agent} <provider/model> | off | --small <provider/model>")
+                    bail!(
+                        "usage: pansy {agent} <provider/model> | off | --small <provider/model> | --subagent <provider/model>|off"
+                    )
                 }
             },
             None => bail!("no command {agent}; `pansy help` lists them"),

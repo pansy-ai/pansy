@@ -170,6 +170,12 @@ export interface Agent {
   model: string | null;
   smallModel: string | null;
   hasSmallModel: boolean;
+  /** The model its subagents start on when they name none, as pansy set it. */
+  subagentModel: string | null;
+  /** It has a setting for that model. */
+  hasSubagentModel: boolean;
+  /** Every subagent of it goes on that model, whatever one its lead names: the gateway sees to it. */
+  subagentEvery: boolean;
   configFiles: string[];
   recent: string[];
   note: string | null;
@@ -337,7 +343,7 @@ export async function loadRoutings() {
 
 export interface Profile {
   name: string;
-  agents: Record<string, { model: string; smallModel?: string | null }>;
+  agents: Record<string, { model: string; smallModel?: string | null; subagentModel?: string | null }>;
   active: boolean;
 }
 
@@ -515,6 +521,12 @@ export interface Route {
   agent: string;
   requested: string;
   group?: { id: string; name: string; routing: Routing; members: string[] };
+  /** A subagent's request, as its agent says. */
+  subagent?: boolean;
+  /** The model the subagent asked for, when the gateway put it on the one set for the agent's subagents (`requested`). */
+  asked?: string;
+  /** Why it stayed on the model it asked for, though one is set for the agent's subagents. */
+  kept?: string;
   lineup: RouteSlot[];
   tries: RouteTry[];
   maskingUs: number;

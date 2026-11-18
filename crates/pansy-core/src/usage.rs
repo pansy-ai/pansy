@@ -22,7 +22,12 @@ pub struct Record {
     /// The folder it was run in, for one `pansy run` started.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub project: String,
-    /// The model it asked for (`deepseek/deepseek-chat`, `group/daily`).
+    /// A subagent's request, as its agent says.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub subagent: bool,
+    /// The model it asked for (`deepseek/deepseek-chat`, `group/daily`);
+    /// for a subagent the gateway put on the one set for the agent's
+    /// subagents, that one.
     pub requested: String,
     pub provider: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]

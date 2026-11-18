@@ -32,6 +32,17 @@ pub struct Route {
     /// The routing group it asked for, when it asked for one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<Way>,
+    /// A subagent's request, as its agent says.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub subagent: bool,
+    /// The model the subagent asked for, when the gateway put it on the
+    /// one set for the agent's subagents (`requested`).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub asked: String,
+    /// Why it stayed on the model it asked for, though one is set for the
+    /// agent's subagents.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub kept: String,
     /// Every account routing lined up, in the order it tries them.
     pub lineup: Vec<Slot>,
     /// The tries made, in order.
@@ -187,6 +198,16 @@ impl Tracing {
             id: trace.begin(route),
             started,
         }
+    }
+
+    /// The request is a subagent's: the model it asked for when it was
+    /// put on another (`asked`), or why it wasn't (`kept`).
+    pub fn subagent(&self, asked: &str, kept: &str) {
+        self.trace.update(self.id, |r| {
+            r.subagent = true;
+            r.asked = asked.to_owned();
+            r.kept = kept.to_owned();
+        });
     }
 
     pub fn masked(&self) {

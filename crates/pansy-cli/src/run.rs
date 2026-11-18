@@ -11,13 +11,15 @@ use pansy_core::provider::mask_key;
 
 use crate::print_json;
 
-const USAGE: &str = "usage: pansy run [--model <provider/model>] [--small <provider/model>] [--show] [--yes] <agent> [arguments for the agent]";
+const USAGE: &str = "usage: pansy run [--model <provider/model>] [--small <provider/model>] [--subagent <provider/model>] [--show] [--yes] <agent> [arguments for the agent]";
 
 /// What `pansy run` was asked.
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct Asked {
     pub model: Option<String>,
     pub small: Option<String>,
+    /// For the agent's subagents that name no model.
+    pub subagent: Option<String>,
     /// Say what would start, and start nothing.
     pub show: bool,
     /// Say yes to the project file without asking.
@@ -44,11 +46,13 @@ pub(crate) fn parse(args: &[String]) -> Result<Asked> {
         match arg {
             "--model" | "-m" => asked.model = Some(value("--model")?),
             "--small" => asked.small = Some(value("--small")?),
+            "--subagent" => asked.subagent = Some(value("--subagent")?),
             "--show" => asked.show = true,
             "--yes" | "-y" => asked.yes = true,
             "--json" => asked.json = true,
             _ if arg.starts_with("--model=") => asked.model = Some(arg[8..].to_owned()),
             _ if arg.starts_with("--small=") => asked.small = Some(arg[8..].to_owned()),
+            _ if arg.starts_with("--subagent=") => asked.subagent = Some(arg[11..].to_owned()),
             _ if arg.starts_with('-') => bail!("pansy run has no option {arg}; {USAGE}"),
             _ => {
                 asked.agent = arg.to_owned();
@@ -76,6 +80,9 @@ fn lines_of(file: &ProjectFile) -> Vec<String> {
         }
         if let Some(small) = &c.small {
             line.push_str(&format!("  (quick tasks: {small})"));
+        }
+        if let Some(subagent) = &c.subagent {
+            line.push_str(&format!("  (subagents: {subagent})"));
         }
         line
     };
@@ -124,7 +131,8 @@ fn file_for(
     let file = run::read(&path)?;
     let gives = file.choice(agent.id);
     let wanted = (asked.model.is_none() && gives.model.is_some())
-        || (asked.small.is_none() && agent.small_model && gives.small.is_some());
+        || (asked.small.is_none() && agent.small_model && gives.small.is_some())
+        || (asked.subagent.is_none() && agent.subagent_model && gives.subagent.is_some());
     if !wanted {
         return Ok(None);
     }
@@ -168,6 +176,9 @@ fn show(l: &Launch) {
     println!("{} on {} (from {})", l.name, l.model, source(l));
     if let Some(small) = &l.small {
         println!("Quick tasks  {small}");
+    }
+    if let Some(subagent) = &l.subagent {
+        println!("Subagents    {subagent}");
     }
     println!("Project      {}", l.project.display());
     println!("Program      {}", l.program.display());
@@ -231,6 +242,7 @@ fn start(args: &[String]) -> Result<ExitCode> {
         run::Models {
             model: asked.model.as_deref(),
             small: asked.small.as_deref(),
+            subagent: asked.subagent.as_deref(),
         },
         &asked.rest,
     )?;
@@ -382,6 +394,8 @@ mod tests {
             "--model",
             "a/b",
             "--small=c/d",
+            "--subagent",
+            "e/f",
             "claude",
             "--json",
             "-p",
@@ -392,10 +406,13 @@ mod tests {
         .unwrap();
         assert_eq!(asked.model.as_deref(), Some("a/b"));
         assert_eq!(asked.small.as_deref(), Some("c/d"));
+        assert_eq!(asked.subagent.as_deref(), Some("e/f"));
         assert_eq!(asked.agent, "claude");
         assert!(!asked.json, "--json after the agent is the agent's");
         assert_eq!(asked.rest, ["--json", "-p", "hi", "--model", "opus"]);
 
+        let asked = parse(&args(&["--subagent=g/h", "codex"])).unwrap();
+        assert_eq!(asked.subagent.as_deref(), Some("g/h"));
         let asked = parse(&args(&["--show", "-y", "codex", "--", "exec", "hi"])).unwrap();
         assert!(asked.show && asked.yes);
         assert_eq!(asked.rest, ["exec", "hi"]);

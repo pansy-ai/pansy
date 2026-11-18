@@ -163,10 +163,7 @@ pub async fn before(
     }
     if plugin_host::has_hooks() {
         let keyed = headers.contains_key(header::AUTHORIZATION) && !local;
-        let subagent = headers.contains_key("x-claude-code-agent-id")
-            || headers
-                .get("x-openai-subagent")
-                .is_some_and(|v| v.as_bytes() == b"collab_spawn");
+        let subagent = crate::server::subagent_of(headers);
         let context = HookContext {
             protocol: client.as_str().to_owned(),
             model: model.to_owned(),

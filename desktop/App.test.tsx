@@ -179,6 +179,20 @@ test("connects an agent to a model with its switch and disconnects it", async ()
   await app.waitUntil(() => app.texts().some((t) => t.includes("env.ANTHROPIC_BASE_URL = http://127.0.0.1:")));
   expect(app.texts().join(" ")).toContain("env.ANTHROPIC_MODEL = local-relay/model-b");
 
+  // The model its subagents start on: a key more in its settings, then none
+  await app.waitFor("id:subagents-claude-code");
+  expect(app.texts()).toContain("left to Claude Code");
+  await app.press("id:subagent-claude-code");
+  await app.waitFor("id:picker");
+  await app.type("id:picker-search", "model-a");
+  await app.press("id:pick-local-relay/model-a");
+  await app.waitUntil(() => app.texts().some((t) => t.includes("env.CLAUDE_CODE_SUBAGENT_MODEL = local-relay/model-a")));
+  await app.press("id:subagent-claude-code");
+  await app.waitFor("id:pick-reset");
+  await app.press("id:pick-reset");
+  await app.waitUntil(() => app.texts().includes("left to Claude Code"));
+  expect(app.texts().join(" ")).not.toContain("CLAUDE_CODE_SUBAGENT_MODEL");
+
   // Off asks first, with what goes back
   await app.press("id:connect-claude-code");
   await app.waitFor("id:disconnect");
