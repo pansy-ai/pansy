@@ -267,3 +267,47 @@ export function tilesOf(p: Prompt, window: number, W: number, H: number): Tile[]
   }
   return tiles;
 }
+
+/** The grid's cells: one for each 1/400 of the window. */
+export const CELLS = 400;
+
+/** A cell of the grid: the part and item it shows, or null for free space. */
+export type Cell = { kind: PromptKind; it?: PromptItem } | null;
+
+/**
+ * The grid, magpie's other look: the window as `CELLS` cells, the used ones
+ * shared out among the parts by their tokens (largest remainder, a part of
+ * any size at least one), each cell the item its middle falls in. A window
+ * smaller than the prompt (not known, or overrun) is the prompt.
+ */
+export function cellsOf(p: Prompt, window: number): Cell[] {
+  const scale = Math.max(window, p.tokens, 1);
+  const used = Math.min(CELLS, Math.round((p.tokens / scale) * CELLS));
+  const parts = PARTS.map((k) => p.parts.find((x) => x.kind === k)).filter((x) => !!x && x.tokens > 0) as Prompt["parts"];
+  const sum = parts.reduce((s, x) => s + x.tokens, 0) || 1;
+  const want = parts.map((x) => (x.tokens / sum) * used);
+  const got = want.map((w) => Math.max(1, Math.floor(w)));
+  let left = used - got.reduce((s, n) => s + n, 0);
+  const order = want.map((w, i) => [w - Math.floor(w), i] as const).sort((a, b) => b[0] - a[0]);
+  for (let j = 0; left > 0 && order.length; j = (j + 1) % order.length, left--) got[order[j]![1]]!++;
+  for (let j = got.length - 1; left < 0 && j >= 0; j--) {
+    while (left < 0 && got[j]! > 1) {
+      got[j]!--;
+      left++;
+    }
+  }
+  const cells: Cell[] = [];
+  parts.forEach((x, pi) => {
+    const items = [...x.items].sort((a, b) => b.tokens - a.tokens);
+    const isum = items.reduce((s, it) => s + it.tokens, 0) || 1;
+    let at = 0;
+    let acc = 0;
+    for (let c = 0; c < got[pi]!; c++) {
+      const mid = ((c + 0.5) / got[pi]!) * isum;
+      while (at < items.length - 1 && acc + items[at]!.tokens < mid) acc += items[at++]!.tokens;
+      cells.push({ kind: x.kind, it: items[at] });
+    }
+  });
+  while (cells.length < CELLS) cells.push(null);
+  return cells.slice(0, CELLS);
+}

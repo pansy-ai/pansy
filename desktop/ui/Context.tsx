@@ -1,15 +1,16 @@
 // Routing's context window, as magpie draws it under the story: what the
 // request's prompt held against its model's window — how full, how much the
 // vendor read from its cache, the map (each part a tile sized by its
-// tokens, its items inside it, the free space hatched), the contents part
+// tokens, its items inside it, the free space hatched) or, the reader's
+// pick, the grid (a cell for each 1/400 of the window), the contents part
 // by part, and the session's requests one after another. Names and sizes
 // only: the gateway keeps no prompt's text.
 import { Canvas, colorScheme, Scroll, signal, Text, token, View, type JSX } from "nsh";
-import { Tooltip } from "nsh/base";
-import { PARTS, cacheOf, drawnOf, fmtK, headroom, health, pct, seriesOf, tilesOf, type Drawn, type Point, type Tile } from "./contextMap";
+import { Toggle, ToggleGroup, Tooltip } from "nsh/base";
+import { CELLS, PARTS, cacheOf, cellsOf, drawnOf, fmtK, headroom, health, pct, seriesOf, tilesOf, type Cell, type Drawn, type Point, type Tile } from "./contextMap";
 import { tr, trn } from "./i18n";
-import { contextShut, routePicked, type PromptItem, type PromptKind, type Route } from "./model";
-import { agentLogo, Icon, Logo, SHADOW, Segs, TextButton } from "./parts";
+import { contextLook, contextShut, routePicked, type PromptItem, type PromptKind, type Route } from "./model";
+import { agentLogo, Icon, Logo, MOTION, SHADOW, Segs, TextButton, type IconName } from "./parts";
 import { agentName, listed } from "./routeStory";
 
 /** magpie's part colors, light and dark. */
@@ -278,6 +279,111 @@ function ContextMap(props: { p: Drawn; focus: Focus; onFocus: (f: Focus) => void
   );
 }
 
+/** A cell lit by what the pointer is on: its part, its item, or the free space. */
+const cellLit = (f: Focus, c: Cell) => {
+  if (!f || "tile" in f) return true;
+  if ("kind" in f) return f.kind === "free" ? !c : c?.kind === f.kind;
+  return !!c?.it && itemKey(c.kind, c.it) === f.item;
+};
+
+/** A cell's tip: its item, its part and share; or the free space. */
+function CellTip(props: { cell: Cell; p: Drawn }) {
+  const tile = (): Tile => {
+    const c = props.cell;
+    if (!c) return { key: "\u0000free", kind: "free", its: [], tokens: Math.max(0, props.p.window - props.p.tokens), x: 0, y: 0, w: 0, h: 0 };
+    return { key: c.kind, kind: c.kind, it: c.it, its: c.it ? [c.it] : [], tokens: c.it?.tokens ?? 0, x: 0, y: 0, w: 0, h: 0 };
+  };
+  return <TileTip tile={tile()} p={props.p} />;
+}
+
+/** The grid, magpie's other look: a cell for each 1/400 of the window, 50 across (25, narrow). */
+function Grid(props: { p: Drawn; focus: Focus; onFocus: (f: Focus) => void }) {
+  const GAP = 2;
+  const wide = signal(0);
+  const at = signal(-1);
+  const cells = () => cellsOf(props.p, props.p.window);
+  const across = () => (wide() <= 520 ? 25 : 50);
+  const side = () => Math.max(1, (wide() - GAP * (across() - 1)) / across());
+  const high = () => Math.ceil(CELLS / across()) * (side() + GAP) - GAP;
+  const cellAt = (x: number, y: number) => {
+    const col = Math.floor(x / (side() + GAP));
+    const row = Math.floor(y / (side() + GAP));
+    const i = row * across() + col;
+    return col >= 0 && col < across() && i >= 0 && i < CELLS ? i : -1;
+  };
+  const point = (i: number) => {
+    if (i === at()) return;
+    at.set(i);
+    const c = cells()[i];
+    props.onFocus(i < 0 ? null : c ? (c.it ? { item: itemKey(c.kind, c.it) } : { kind: c.kind }) : { kind: "free" });
+  };
+  return (
+    <View testID="context-grid" onLayout={(e) => wide.set(e.bounds.size.width)}>
+      <Canvas
+        style={{ height: wide() ? high() : 0 }}
+        onMouseMove={(e) => point(cellAt(e.position.x, e.position.y))}
+        onMouseLeave={() => point(-1)}
+        tooltip={
+          <If when={at() >= 0}>
+            <CellTip cell={cells()[at()] ?? null} p={props.p} />
+          </If>
+        }
+        draw={(cx) => {
+          const s = side();
+          const free = token("foreground");
+          cells().forEach((c, i) => {
+            const x = (i % across()) * (s + GAP);
+            const y = Math.floor(i / across()) * (s + GAP);
+            const on = cellLit(props.focus, c);
+            cx.globalAlpha = (c ? 1 : 0.07) * (on ? 1 : 0.16);
+            cx.fillStyle = c ? inkOf(c.kind) : free;
+            cx.beginPath();
+            cx.roundRect(x, y, s, s, 2);
+            cx.fill();
+          });
+        }}
+      />
+    </View>
+  );
+}
+
+/** The look switch: the map or the grid, by their marks; switched, nothing stays lit. */
+function LookSwitch(props: { onFocus: (f: Focus) => void }) {
+  const looks: { k: "map" | "grid"; icon: IconName; name: () => string }[] = [
+    { k: "map", icon: "look-map", name: () => tr("Context map") },
+    { k: "grid", icon: "look-grid", name: () => tr("Block grid") },
+  ];
+  return (
+    <ToggleGroup testID="context-look" class="flex-row self-center rounded-[7px] bg-pill p-[2px]">
+      <Each of={looks} key={(l) => l.k}>
+        {(l) => {
+          const on = () => contextLook() === l().k;
+          return (
+            <Toggle
+              pressed={on()}
+              testID={`context-look-${l().k}`}
+              accessibilityLabel={l().name()}
+              onChange={() => {
+                props.onFocus(null);
+                contextLook.set(l().k);
+              }}
+              class={`group h-[20px] w-[24px] items-center justify-center rounded-[5px] ${MOTION} ${on() ? "bg-seg-thumb" : ""}`}
+              style={on() ? { boxShadow: SHADOW.thumb() } : undefined}
+              tooltip={
+                <Tooltip class="rounded-[7px] bg-popover px-[9px] py-[6px]" style={{ boxShadow: SHADOW.pop() }}>
+                  <Text class="text-[11.5px] text-foreground">{l().name()}</Text>
+                </Tooltip>
+              }
+            >
+              <Icon name={l().icon} size={14} color={on() ? "foreground" : "muted-foreground"} hover={on() ? undefined : "fg-2"} />
+            </Toggle>
+          );
+        }}
+      </Each>
+    </ToggleGroup>
+  );
+}
+
 /** The session's prompts against the window, this request's marked; a point pressed puts its request on the stage. */
 function Spark(props: { series: Point[]; at: number; window: number; ink: string }) {
   let wide = 0;
@@ -418,36 +524,39 @@ function Top(props: { r: Route; p: Drawn; series: Point[] }) {
   );
 }
 
-/** The parts by color and tokens, the free space after them; one pointed at lights its tiles. */
+/** The parts by color and tokens, the free space after them, and the look switch; a part pointed at lights its tiles. */
 function Legend(props: { p: Drawn; onFocus: (f: Focus) => void }) {
   return (
-    <View class="flex-row flex-wrap gap-x-[14px] gap-y-[4px]">
-      <Each of={PARTS.filter((k) => (props.p.parts.find((x) => x.kind === k)?.tokens ?? 0) > 0)} key={(k) => k}>
-        {(k) => (
-          <View
-            testID={`context-legend-${k()}`}
-            class="flex-row items-center gap-[5px]"
-            onMouseEnter={() => props.onFocus({ kind: k() })}
-            onMouseLeave={() => props.onFocus(null)}
-            tooltip={
-              <Tooltip class="max-w-[280px] rounded-[7px] bg-popover px-[9px] py-[6px]" style={{ boxShadow: SHADOW.pop() }}>
-                <Text class="text-[11.5px] text-foreground">{PART_NOTES[k()]()}</Text>
-              </Tooltip>
-            }
-          >
-            <Dot kind={k()} />
-            <Text class="text-[12px] text-fg-2">{partName(k())}</Text>
-            <Text class="text-[12px] text-muted-foreground">{fmtK(props.p.parts.find((x) => x.kind === k())?.tokens ?? 0)}</Text>
+    <View class="flex-row items-center gap-3">
+      <View class="min-w-0 flex-1 flex-row flex-wrap gap-x-[14px] gap-y-[4px]">
+        <Each of={PARTS.filter((k) => (props.p.parts.find((x) => x.kind === k)?.tokens ?? 0) > 0)} key={(k) => k}>
+          {(k) => (
+            <View
+              testID={`context-legend-${k()}`}
+              class="flex-row items-center gap-[5px]"
+              onMouseEnter={() => props.onFocus({ kind: k() })}
+              onMouseLeave={() => props.onFocus(null)}
+              tooltip={
+                <Tooltip class="max-w-[280px] rounded-[7px] bg-popover px-[9px] py-[6px]" style={{ boxShadow: SHADOW.pop() }}>
+                  <Text class="text-[11.5px] text-foreground">{PART_NOTES[k()]()}</Text>
+                </Tooltip>
+              }
+            >
+              <Dot kind={k()} />
+              <Text class="text-[12px] text-fg-2">{partName(k())}</Text>
+              <Text class="text-[12px] text-muted-foreground">{fmtK(props.p.parts.find((x) => x.kind === k())?.tokens ?? 0)}</Text>
+            </View>
+          )}
+        </Each>
+        <If when={props.p.window > props.p.tokens}>
+          <View class="flex-row items-center gap-[5px]" onMouseEnter={() => props.onFocus({ kind: "free" })} onMouseLeave={() => props.onFocus(null)}>
+            <Dot kind="free" />
+            <Text class="text-[12px] text-fg-2">{tr("Free space")}</Text>
+            <Text class="text-[12px] text-muted-foreground">{fmtK(props.p.window - props.p.tokens)}</Text>
           </View>
-        )}
-      </Each>
-      <If when={props.p.window > props.p.tokens}>
-        <View class="flex-row items-center gap-[5px]" onMouseEnter={() => props.onFocus({ kind: "free" })} onMouseLeave={() => props.onFocus(null)}>
-          <Dot kind="free" />
-          <Text class="text-[12px] text-fg-2">{tr("Free space")}</Text>
-          <Text class="text-[12px] text-muted-foreground">{fmtK(props.p.window - props.p.tokens)}</Text>
-        </View>
-      </If>
+        </If>
+      </View>
+      <LookSwitch onFocus={props.onFocus} />
     </View>
   );
 }
@@ -595,7 +704,9 @@ export function ContextCard(props: { route?: Route }) {
         <Head r={r()!} p={p()!} />
         <If when={!contextShut()}>
           <Top r={r()!} p={p()!} series={series()} />
-          <ContextMap p={p()!} focus={focus()} onFocus={(f) => focus.set(f)} />
+          <If when={contextLook() === "grid"} else={<ContextMap p={p()!} focus={focus()} onFocus={(f) => focus.set(f)} />}>
+            <Grid p={p()!} focus={focus()} onFocus={(f) => focus.set(f)} />
+          </If>
           <Legend p={p()!} onFocus={(f) => focus.set(f)} />
           <Contents p={p()!} onFocus={(f) => focus.set(f)} />
           <View class="flex-row items-center gap-3 border-t border-border pt-[10px]">
