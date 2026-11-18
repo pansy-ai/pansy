@@ -439,6 +439,54 @@ fn quirks_of(attempt: &Attempt) -> Quirks {
     }
 }
 
+/// The efforts a model's name may end in.
+const EFFORTS: [&str; 7] = ["none", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+/// The model `requested` names without the effort it ends in (`a/x:high`:
+/// an agent whose config has no key for a model's effort writes it after
+/// the name, as Claude Code's tiers do), and that effort. Only when pansy
+/// has no model by the whole name and has one without it: a model's own
+/// name may end the same way.
+fn effort_named<'a>(config: &Config, requested: &'a str) -> Option<(&'a str, &'a str)> {
+    let (model, effort) = requested.rsplit_once(':')?;
+    let named = EFFORTS.contains(&effort)
+        && !route::listed(config, requested)
+        && route::listed(config, model);
+    named.then_some((model, effort))
+}
+
+/// Writes `effort` into a request as its protocol asks for one, so a try
+/// that passes it through and one that translates it both carry it.
+fn set_effort(body: &mut Value, client: Protocol, effort: &str) {
+    if !body.is_object() {
+        return;
+    }
+    match client {
+        Protocol::Anthropic => {
+            if effort == "none" {
+                body["thinking"] = json!({"type": "disabled"});
+                return;
+            }
+            // A budget of its own gives way: the effort says how much.
+            if body.get("thinking").is_some() {
+                body["thinking"] = json!({"type": "adaptive"});
+            }
+            if !body.get("output_config").is_some_and(Value::is_object) {
+                body["output_config"] = json!({});
+            }
+            body["output_config"]["effort"] = json!(effort);
+        }
+        Protocol::Responses => {
+            if !body.get("reasoning").is_some_and(Value::is_object) {
+                body["reasoning"] = json!({});
+            }
+            body["reasoning"]["effort"] = json!(effort);
+        }
+        Protocol::Chat => body["reasoning_effort"] = json!(effort),
+        Protocol::Gemini => {}
+    }
+}
+
 /// The client's body for a provider that speaks its protocol: as it came,
 /// with the provider's name for the model, and only that vendor's seals.
 fn passthrough_body(body: &Value, client: Protocol, model: &str, stream: bool) -> Value {
@@ -609,6 +657,16 @@ impl Gateway {
             {
                 requested = model.to_owned();
             }
+        }
+        // An effort after the model's name is the request's.
+        if gemini.is_none()
+            && let Some((model, effort)) = effort_named(&config, &requested)
+        {
+            let model = model.to_owned();
+            set_effort(&mut value, client, effort);
+            value["model"] = json!(model);
+            body = Bytes::from(serde_json::to_vec(&value).unwrap_or_default());
+            requested = model;
         }
         // A subagent goes on the model its agent set for its subagents
         // (SUBAGENT_MODEL), whatever it asked for; on the one it asked for
@@ -1687,6 +1745,49 @@ async fn watch_allowances(gateway: Arc<Gateway>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writes_an_effort_as_each_protocol_asks_for_one() {
+        let effort = |client, body: Value, effort| {
+            let mut body = body;
+            set_effort(&mut body, client, effort);
+            body
+        };
+        // Claude Code's budget gives way; a request that asked for no
+        // thinking is given none.
+        assert_eq!(
+            effort(
+                Protocol::Anthropic,
+                json!({"thinking": {"type": "enabled", "budget_tokens": 2000}}),
+                "high"
+            ),
+            json!({"thinking": {"type": "adaptive"}, "output_config": {"effort": "high"}})
+        );
+        assert_eq!(
+            effort(Protocol::Anthropic, json!({"max_tokens": 5}), "low"),
+            json!({"max_tokens": 5, "output_config": {"effort": "low"}})
+        );
+        assert_eq!(
+            effort(
+                Protocol::Anthropic,
+                json!({"thinking": {"type": "adaptive"}}),
+                "none"
+            ),
+            json!({"thinking": {"type": "disabled"}})
+        );
+        assert_eq!(
+            effort(
+                Protocol::Responses,
+                json!({"reasoning": {"summary": "auto"}}),
+                "xhigh"
+            ),
+            json!({"reasoning": {"summary": "auto", "effort": "xhigh"}})
+        );
+        assert_eq!(
+            effort(Protocol::Chat, json!({}), "medium"),
+            json!({"reasoning_effort": "medium"})
+        );
+    }
 
     #[test]
     fn knows_agents_by_their_user_agent() {

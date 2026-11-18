@@ -836,13 +836,30 @@ impl Agents {
         off(|| Ok(to_json(&pansy_agents::list()))).await
     }
 
-    /// The versions of the agents' programs known within three seconds:
-    /// `{versions: {id: version}, pending}`; pending, some are still being
-    /// asked, and are ready the next time (JSON).
+    /// The agents' programs as far as they are known within three seconds:
+    /// `{clis: {id: {version, via, command, latest, update}}, pending}`
+    /// (`pansy_agents::cli::Cli`); pending, some are still being asked (a
+    /// version, or over the network the one that is out), and are ready the
+    /// next time (JSON).
     pub async fn versions() -> Result<String, String> {
         off(|| {
-            let (versions, pending) = pansy_agents::versions(std::time::Duration::from_secs(3));
-            Ok(json!({ "versions": versions, "pending": pending }).to_string())
+            let (clis, pending) = pansy_agents::clis(std::time::Duration::from_secs(3));
+            Ok(json!({ "clis": clis, "pending": pending }).to_string())
+        })
+        .await
+    }
+
+    /// Updates the agent's program with the command its install tells,
+    /// which may take minutes: what it is now (JSON, as in `versions`).
+    pub async fn update_cli(id: String) -> Result<String, String> {
+        off(move || Ok(to_json(&pansy_agents::update_cli(&id)?))).await
+    }
+
+    /// Gives the agent's field `key` a value (a tier's model, an effort);
+    /// empty takes it back.
+    pub async fn set_field(id: String, key: String, value: String) -> Result<(), String> {
+        off(move || {
+            pansy_agents::set_field(&id, &key, Some(value.as_str()).filter(|v| !v.is_empty()))
         })
         .await
     }

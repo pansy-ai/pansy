@@ -45,6 +45,16 @@ args = ["-c", "model={model:q}"]
   with comments. In a path, `~/` is the home folder and `{env:NAME|else}` a
   variable's value or what follows the bar; several paths are the first that
   is there, else the last.
+- **`[[field]]`** is a setting of the agent's own beside its model: a `key`
+  (small letters, digits, `_`), a `kind` (`model` or `effort`) and, for an
+  effort, its `levels`. A value names it as `{key}`; a `[[set]]` that names a
+  field left unset is left out, and what the key held is put back. A model
+  with `follows = true` is the agent's model when unset; an effort with
+  `joins = ":"` is written as `:high` after a model's name, or as nothing.
+  `pansy <agent> <key> <value>` sets one, `default` unsets it.
+- **`npm`** is the agent's package in npm's registry, where its newest
+  version is looked up; **`self_update`** the arguments of its own updater
+  (`["update"]`), run when it was not installed by a package manager.
 - **`[run]`** takes `args` (put before the user's), `[run.env]`,
   `[run.json_env.NAME]` (a variable whose value is JSON, laid over what it
   holds already), `[[run.json_arg]]` (`flag` and the JSON `value` after it),

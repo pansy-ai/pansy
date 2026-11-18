@@ -279,6 +279,24 @@ pub fn members_with(
     Ok(offering)
 }
 
+/// Whether `requested` is a name pansy has: a group, a model one of its
+/// providers lists, or `provider/model` for one that provider lists.
+pub fn listed(config: &Config, requested: &str) -> bool {
+    let requested = bare(requested);
+    if let Some(id) = requested.strip_prefix("group/") {
+        return config.group(id).is_some();
+    }
+    if let Some((provider, model)) = requested.split_once('/')
+        && let Some(provider) = config.provider(provider)
+    {
+        return provider.has_model(model);
+    }
+    config
+        .providers
+        .iter()
+        .any(|p| p.enabled && p.has_model(requested))
+}
+
 /// The protocol to speak to `provider` for a client speaking `client`: its
 /// own if the provider has it (the request passes through), else the
 /// nearest one.

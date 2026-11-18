@@ -417,6 +417,175 @@ fn asks_versions_without_holding_up_the_list() {
     }
 }
 
+/// A registry that says `version` is out for every package, and how many
+/// times it was asked.
+fn fake_registry(
+    version: &'static str,
+) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let asked = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = std::sync::Arc::clone(&asked);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut buf = [0u8; 2048];
+            let _ = stream.read(&mut buf);
+            count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let body = format!("{{\"name\":\"x\",\"version\":\"{version}\"}}");
+            let _ = write!(
+                stream,
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len()
+            );
+        }
+    });
+    (format!("http://{addr}"), asked)
+}
+
+#[cfg(unix)]
+#[test]
+fn says_an_agents_update_and_runs_it_when_asked() {
+    use std::os::unix::fs::PermissionsExt;
+    let (home, _lock) = scratch();
+    // Codex as npm installs it under a prefix, and an npm that "installs"
+    // the version it is asked for by writing the package's file.
+    let prefix = home.path().join("prefix");
+    let pkg = prefix.join("lib/node_modules/@openai/codex");
+    fs::create_dir_all(pkg.join("bin")).unwrap();
+    fs::create_dir_all(prefix.join("bin")).unwrap();
+    fs::write(
+        pkg.join("package.json"),
+        r#"{"name":"@openai/codex","version":"0.168.0"}"#,
+    )
+    .unwrap();
+    fs::write(pkg.join("bin/codex.js"), "#!/bin/sh\n").unwrap();
+    std::os::unix::fs::symlink(pkg.join("bin/codex.js"), prefix.join("bin/codex")).unwrap();
+    let ran = home.path().join("npm-ran");
+    let npm = format!(
+        "#!/bin/sh\necho \"$@\" >> '{}'\nprintf '{{\"version\":\"0.170.0\"}}' > '{}'\n",
+        ran.display(),
+        pkg.join("package.json").display()
+    );
+    for (file, text) in [
+        (prefix.join("bin/npm"), npm.as_str()),
+        (pkg.join("bin/codex.js"), "#!/bin/sh\n"),
+    ] {
+        fs::write(&file, text).unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let (registry, asked) = fake_registry("0.170.0");
+    let path = std::env::var_os("PATH");
+    // SAFETY: the test holds LOCK.
+    unsafe {
+        std::env::set_var("PATH", prefix.join("bin"));
+        std::env::set_var("PANSY_NPM_REGISTRY", &registry);
+    }
+
+    // Its place tells how it was installed, and so how it is updated.
+    let real = cli::real_of(&["codex"]).unwrap();
+    let how = cli::how(&real, "codex", None).unwrap();
+    assert_eq!(how.via, "npm");
+    assert_eq!(how.latest, cli::Latest::Npm("@openai/codex".into()));
+    assert_eq!(
+        how.command,
+        [
+            prefix.join("bin/npm").display().to_string().as_str(),
+            "install",
+            "-g",
+            "@openai/codex@latest"
+        ]
+    );
+    // The version first, the one that is out once the registry said it.
+    let mut codex = cli::Cli::default();
+    for _ in 0..50 {
+        let (known, pending) = clis(Duration::from_secs(5));
+        codex = known.get("codex").cloned().unwrap();
+        assert_eq!(codex.version.as_deref(), Some("0.168.0"));
+        if !pending {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert_eq!(codex.latest.as_deref(), Some("0.170.0"));
+    assert!(codex.update);
+    assert_eq!(codex.via, Some("npm"));
+    assert!(!ran.exists(), "nothing is run before the user says so");
+    assert_eq!(asked.load(std::sync::atomic::Ordering::SeqCst), 1);
+
+    // Asked: the command is run, and the version read again.
+    let now = update_cli("codex").unwrap();
+    assert_eq!(now.version.as_deref(), Some("0.170.0"));
+    assert!(!now.update);
+    assert_eq!(
+        fs::read_to_string(&ran).unwrap().trim(),
+        "install -g @openai/codex@latest"
+    );
+    // One whose install tells nothing has no update to run.
+    let error = update_cli("claude-code").unwrap_err();
+    assert!(error.to_string().contains("can't tell how"), "{error}");
+
+    // SAFETY: as above.
+    unsafe {
+        std::env::remove_var("PANSY_NPM_REGISTRY");
+        match path {
+            Some(p) => std::env::set_var("PATH", p),
+            None => std::env::remove_var("PATH"),
+        }
+    }
+}
+
+#[test]
+fn tells_how_a_program_was_installed_by_its_place() {
+    use std::path::Path;
+    let how = |path: &str, own| cli::how(Path::new(path), "claude", own);
+    let mise = how(
+        "/home/u/.local/share/mise/installs/codex/0.169.0/bin/codex",
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        (mise.via, mise.command.join(" ").as_str()),
+        ("mise", "mise upgrade codex")
+    );
+    assert_eq!(mise.latest, cli::Latest::Mise("codex".into()));
+    let bun = how(
+        "/home/u/.bun/install/global/node_modules/@google/gemini-cli/dist/index.js",
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        (bun.via, bun.command.join(" ").as_str()),
+        ("bun", "bun add -g @google/gemini-cli@latest")
+    );
+    let pnpm = how(
+        "/home/u/.local/share/pnpm/global/5/node_modules/opencode-ai/bin/opencode",
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        (pnpm.via, pnpm.command.join(" ").as_str()),
+        ("pnpm", "pnpm add -g opencode-ai@latest")
+    );
+    // Claude Code's own installer keeps a folder for each version; its own
+    // updater updates it.
+    let own: Option<(&[&str], &str)> = Some((&["update"], "@anthropic-ai/claude-code"));
+    let claude = how("/home/u/.local/share/claude/versions/2.1.3", own).unwrap();
+    assert_eq!(
+        (claude.via, claude.command.join(" ").as_str()),
+        ("own", "claude update")
+    );
+    assert!(how("/usr/bin/claude", own).is_none());
+    assert!(how("/usr/bin/codex", None).is_none());
+
+    assert!(cli::newer("0.170.0", "0.168.0"));
+    assert!(cli::newer("2.1.10", "2.1.9"));
+    assert!(cli::newer("1.0.0", "1.0.0-beta.2"));
+    assert!(!cli::newer("1.0.0", "1.0.0"));
+    assert!(!cli::newer("0.9", "0.10.1"));
+}
+
 /// Bun for the tests that run plugins: `PANSY_BUN`, else one on `PATH`.
 fn bun() -> Option<std::path::PathBuf> {
     if let Some(b) = std::env::var_os("PANSY_BUN").filter(|v| !v.is_empty()) {
@@ -502,6 +671,7 @@ fn the_built_in_agents_set_what_their_manifests_always_did() {
                 model: "a/x",
                 small_model: small,
                 subagent_model: None,
+                fields: agent::no_fields(),
                 choices: &choices,
             };
             out.push_str(&format!("{} {:?}\n", agent.id, agent.edits(&w)));
@@ -624,6 +794,7 @@ DEMO_BASE = "{v1}"
             model: "a/x",
             small_model: None,
             subagent_model: None,
+            fields: agent::no_fields(),
             choices: &[],
         })
         .unwrap();
@@ -775,4 +946,149 @@ fn a_manifest_names_the_subagent_model_only_when_it_has_one() {
         let error = of(sub, set, run).unwrap_err().to_string();
         assert!(error.contains(says), "{error}");
     }
+}
+
+#[test]
+fn a_tiers_model_and_an_effort_are_keys_set_and_put_back() {
+    let (home, _lock) = scratch();
+    let claude = home.path().join(".claude/settings.json");
+    fs::create_dir_all(claude.parent().unwrap()).unwrap();
+    // The user's own effort.
+    let mine = "{\n  // mine\n  \"effortLevel\": \"low\",\n  \"env\": {\"ANTHROPIC_DEFAULT_OPUS_MODEL\": \"opus\"}\n}\n";
+    fs::write(&claude, mine).unwrap();
+    let codex = home.path().join(".codex/config.toml");
+    fs::create_dir_all(codex.parent().unwrap()).unwrap();
+    fs::write(&codex, "approval_policy = \"never\"\n").unwrap();
+    let settings =
+        || -> Value { jsonedit::to_value(&fs::read_to_string(&claude).unwrap()).unwrap() };
+    let env = |key: &str| settings()["env"][key].clone();
+
+    // Not while the agent isn't connected, and not what it has none of.
+    let error = set_field("claude-code", "effort", Some("high")).unwrap_err();
+    assert!(error.to_string().contains("not connected"), "{error}");
+    connect("claude-code", "deepseek/deepseek-chat").unwrap();
+    connect("codex", "deepseek/deepseek-chat").unwrap();
+    let error = set_field("claude-code", "mood", Some("high")).unwrap_err();
+    assert!(error.to_string().contains("no setting mood"), "{error}");
+    let error = set_field("claude-code", "effort", Some("frantic")).unwrap_err();
+    assert!(error.to_string().contains("low, medium, high"), "{error}");
+
+    // Connected with none: every tier on the main model, the effort the user's.
+    assert_eq!(
+        env("ANTHROPIC_DEFAULT_OPUS_MODEL"),
+        "deepseek/deepseek-chat"
+    );
+    assert_eq!(settings()["effortLevel"], "low");
+    assert_eq!(env("ANTHROPIC_DEFAULT_FABLE_MODEL"), Value::Null);
+    assert_eq!(env("CLAUDE_CODE_AUTO_MODE_MODEL"), Value::Null);
+
+    // A tier's own model, its effort after it; the session's effort; the
+    // model auto mode checks with.
+    set_field("claude-code", "opus", Some(" anthropic/claude-opus-4-5 ")).unwrap();
+    set_field("claude-code", "opus_effort", Some("max")).unwrap();
+    set_field("claude-code", "sonnet_effort", Some("high")).unwrap();
+    set_field("claude-code", "haiku_effort", Some("low")).unwrap();
+    set_field("claude-code", "effort", Some("xhigh")).unwrap();
+    set_field("claude-code", "auto_mode", Some("group/cheap")).unwrap();
+    assert_eq!(
+        env("ANTHROPIC_DEFAULT_OPUS_MODEL"),
+        "anthropic/claude-opus-4-5:max"
+    );
+    assert_eq!(
+        env("ANTHROPIC_DEFAULT_SONNET_MODEL"),
+        "deepseek/deepseek-chat:high"
+    );
+    assert_eq!(
+        env("ANTHROPIC_DEFAULT_HAIKU_MODEL"),
+        "deepseek/deepseek-chat:low"
+    );
+    assert_eq!(env("CLAUDE_CODE_AUTO_MODE_MODEL"), "group/cheap");
+    assert_eq!(settings()["effortLevel"], "xhigh");
+    // A tier with no model of its own takes no effort alone, and the
+    // subagents' goes with their model.
+    set_field("claude-code", "fable_effort", Some("high")).unwrap();
+    set_field("claude-code", "subagent_effort", Some("medium")).unwrap();
+    assert_eq!(env("ANTHROPIC_DEFAULT_FABLE_MODEL"), Value::Null);
+    assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), Value::Null);
+    set_subagent_model("claude-code", Some("group/cheap")).unwrap();
+    assert_eq!(env("CLAUDE_CODE_SUBAGENT_MODEL"), "group/cheap:medium");
+
+    // A new main model keeps them, and moves the tiers that follow it.
+    connect("claude-code", "moonshot/kimi-k2").unwrap();
+    assert_eq!(
+        env("ANTHROPIC_DEFAULT_OPUS_MODEL"),
+        "anthropic/claude-opus-4-5:max"
+    );
+    assert_eq!(
+        env("ANTHROPIC_DEFAULT_SONNET_MODEL"),
+        "moonshot/kimi-k2:high"
+    );
+    let v = view(agent::find("claude-code").unwrap(), &State::load().unwrap());
+    let field = |key: &str| v.fields.iter().find(|f| f.key == key).unwrap();
+    assert_eq!(
+        field("opus").value.as_deref(),
+        Some("anthropic/claude-opus-4-5")
+    );
+    assert!(field("opus").follows && field("sonnet").value.is_none());
+    assert_eq!(
+        field("effort").levels,
+        ["low", "medium", "high", "xhigh", "max"]
+    );
+
+    // Codex's effort is a key of its config.
+    set_field("codex", "effort", Some("high")).unwrap();
+    let toml = fs::read_to_string(&codex).unwrap();
+    assert!(toml.contains("model_reasoning_effort = \"high\""), "{toml}");
+
+    // A profile keeps them; put back for now and connected again they are there.
+    profile::save("work").unwrap();
+    pause("claude-code").unwrap();
+    assert_eq!(fs::read_to_string(&claude).unwrap(), mine);
+    resume("claude-code").unwrap();
+    assert_eq!(settings()["effortLevel"], "xhigh");
+
+    // Taken back: each key alone goes back, to what it was or to the main model.
+    set_field("claude-code", "effort", None).unwrap();
+    set_field("claude-code", "opus", None).unwrap();
+    set_field("claude-code", "auto_mode", None).unwrap();
+    set_field("codex", "effort", None).unwrap();
+    assert_eq!(settings()["effortLevel"], "low");
+    assert_eq!(env("ANTHROPIC_DEFAULT_OPUS_MODEL"), "moonshot/kimi-k2:max");
+    assert_eq!(env("CLAUDE_CODE_AUTO_MODE_MODEL"), Value::Null);
+    assert!(!fs::read_to_string(&codex).unwrap().contains("effort"));
+    profile::apply("work").unwrap();
+    assert_eq!(settings()["effortLevel"], "xhigh");
+    assert_eq!(
+        env("ANTHROPIC_DEFAULT_OPUS_MODEL"),
+        "anthropic/claude-opus-4-5:max"
+    );
+
+    // Disconnected: the files as they were.
+    disconnect("claude-code").unwrap();
+    disconnect("codex").unwrap();
+    assert_eq!(fs::read_to_string(&claude).unwrap(), mine);
+    assert_eq!(
+        fs::read_to_string(&codex).unwrap(),
+        "approval_policy = \"never\"\n"
+    );
+}
+
+#[test]
+fn a_manifests_fields_are_checked() {
+    let good = "id = \"x\"\nname = \"X\"\nprotocol = \"chat\"\n[files]\nc = \"~/.x/c.json\"\n[base_url]\nfile = \"c\"\nkey = [\"url\"]\n[model]\nfile = \"c\"\nkey = [\"model\"]\n";
+    let with = |field: &str| manifest::parse(&format!("{good}\n[[field]]\n{field}\n"));
+    let m = with("key = \"effort\"\nkind = \"effort\"\nlevels = [\"low\", \"high\"]").unwrap();
+    assert_eq!(m.fields[0].levels, ["low", "high"]);
+    assert!(m.fields[0].refuses("high").is_none());
+    assert!(m.fields[0].refuses("max").is_some());
+    let said = |field: &str| format!("{:#}", with(field).unwrap_err());
+    assert!(said("key = \"model\"\nkind = \"model\"").contains("already taken"));
+    assert!(said("key = \"Effort\"\nkind = \"effort\"").contains("small letters"));
+    assert!(said("key = \"e\"\nkind = \"effort\"").contains("has levels"));
+    assert!(said("key = \"m\"\nkind = \"model\"\nlevels = [\"a\"]").contains("has levels"));
+    assert!(said("key = \"m\"\nkind = \"mood\"").contains("no kind of field mood"));
+    assert!(
+        said("key = \"e\"\nkind = \"effort\"\nlevels = [\"a\"]\nfollows = true")
+            .contains("for a model")
+    );
 }

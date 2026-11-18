@@ -154,6 +154,31 @@ export interface Preset {
   endpointHint: string;
 }
 
+/** One more thing an agent may be given (`pansy_agents::FieldView`): a model of pansy's or how hard a model thinks. */
+export interface AgentField {
+  /** How its manifest names it: `effort`, `opus`, `opus_effort`. */
+  key: string;
+  kind: "model" | "effort";
+  /** An effort's levels, the lowest first. */
+  levels: string[];
+  /** With none given, the main model's. */
+  follows: boolean;
+  /** What the user gave it, while the agent is connected. */
+  value: string | null;
+}
+
+/** An agent's program (`pansy_agents::cli::Cli`): its version, what installed it and the version that is out. */
+export interface Cli {
+  version: string | null;
+  /** `npm`, `bun`, `pnpm`, `mise`, or `own` for its own updater; null when its install doesn't tell. */
+  via: string | null;
+  /** The command that updates it. */
+  command: string | null;
+  latest: string | null;
+  /** A newer version is out. */
+  update: boolean;
+}
+
 /** One agent as `pansy_agents::AgentView` serializes it. */
 export interface Agent {
   id: string;
@@ -176,6 +201,8 @@ export interface Agent {
   hasSubagentModel: boolean;
   /** Every subagent of it goes on that model, whatever one its lead names: the gateway sees to it. */
   subagentEvery: boolean;
+  /** What else may be set for it: a tier's model, an effort. */
+  fields: AgentField[];
   configFiles: string[];
   recent: string[];
   note: string | null;
@@ -343,7 +370,7 @@ export async function loadRoutings() {
 
 export interface Profile {
   name: string;
-  agents: Record<string, { model: string; smallModel?: string | null; subagentModel?: string | null }>;
+  agents: Record<string, { model: string; smallModel?: string | null; subagentModel?: string | null; fields?: Record<string, string> }>;
   active: boolean;
 }
 
@@ -686,8 +713,8 @@ export const presets = signal<Preset[]>(JSON.parse(Providers.presets()) as Prese
 export const agents = signal<Agent[]>([]);
 /** The agents have been looked for once: until then their page shows where rows will be. */
 export const agentsRead = signal(false);
-/** Each agent's program's version, asked after its rows: it can take a while. */
-export const versions = signal<Record<string, string>>({});
+/** Each agent's program, asked after its rows: its version can take a while, the one that is out longer. */
+export const clis = signal<Record<string, Cli>>({});
 export const choices = signal<Choice[]>([]);
 export const groups = signal<Group[]>([]);
 export const profiles = signal<Profile[]>([]);
@@ -867,14 +894,14 @@ export async function loadAgents() {
 }
 
 let askingVersions = false;
-/** The agents' versions; some still being asked are asked again in a moment, three times at most. */
-async function loadVersions(again = 0) {
+/** The agents' programs; some still being asked are asked again in a moment, five times at most. */
+export async function loadVersions(again = 0) {
   if (askingVersions) return;
   askingVersions = true;
   try {
-    const said = JSON.parse(await Agents.versions()) as { versions: Record<string, string>; pending: boolean };
-    versions.set(said.versions);
-    if (said.pending && again < 3) setTimeout(() => void loadVersions(again + 1), 4000);
+    const said = JSON.parse(await Agents.versions()) as { clis: Record<string, Cli>; pending: boolean };
+    clis.set(said.clis);
+    if (said.pending && again < 5) setTimeout(() => void loadVersions(again + 1), 3000);
   } catch {
     // a version just isn't shown
   } finally {

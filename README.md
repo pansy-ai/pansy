@@ -94,6 +94,8 @@ pansy claude deepseek/deepseek-chat         # Claude Code on DeepSeek
 pansy codex moonshot/kimi-k2-0905-preview   # Codex on Kimi
 pansy group add "Daily" models=deepseek/deepseek-chat,moonshot/kimi-k2-0905-preview
 pansy gemini group/daily                    # fails over between them
+pansy claude opus anthropic/claude-opus-4-5 # Claude Code's opus tier; `pansy claude effort high`
+pansy agents update all                     # the agents' own CLIs, to their newest
 pansy save work && pansy use work           # profiles
 pansy usage                                 # what went through the gateway
 pansy settings set masking '{"secrets": true}'   # keys go to vendors as placeholders

@@ -361,6 +361,11 @@ pub fn launch(
         .into_iter()
         .map(|c| c.id)
         .collect();
+    // A connected agent's tiers and efforts go with a run of it too.
+    let fields = saved
+        .as_ref()
+        .filter(|_| source == Source::Connected)
+        .map_or(crate::agent::no_fields(), |s| &s.fields);
     let run = agent
         .run(&Wiring {
             base_url: &base,
@@ -368,6 +373,7 @@ pub fn launch(
             model: &model,
             small_model: small.as_deref(),
             subagent_model: subagent.as_deref(),
+            fields,
             choices: &choices,
         })
         .map_err(|why| anyhow!(why))?;

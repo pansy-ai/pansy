@@ -1,16 +1,17 @@
 // Agents, as magpie lists them: what connecting does, said once above one
-// card of rows. The agents in use stay in view; the rest fold under the
+// card of rows; over the card, the agents whose programs are behind, with
+// Update all. The agents in use stay in view; the rest fold under the
 // card's foot (Show N more), the ones hidden by hand last, and Manage
 // hides or shows many at once. Under the card, how to install the agents
 // not on this computer, and the profiles.
 import { Clipboard, Text, View } from "nsh";
-import { arrange, here, installsOpen, isHidden, managing, showAll, showHidden } from "./agentState";
+import { arrange, cliOf, here, installsOpen, isHidden, managing, showAll, showHidden, updatable, updateAll, updating, updatingAll } from "./agentState";
 import { AgentRow, SkeletonRow } from "./AgentRow";
 import { tr } from "./i18n";
 import { agents, agentsRead, go, providers, toast, type Agent } from "./model";
 import { ProfilesBar } from "./ProfilesBar";
 import { adding } from "./Providers";
-import { agentLogo, CopyButton, Icon, List, Logo, MOTION, Page, PrimaryButton } from "./parts";
+import { agentLogo, CopyButton, Hint, Icon, List, Logo, MOTION, Page, PrimaryButton } from "./parts";
 
 /** Above the list: what connecting does, or, before any agent is connected, the welcome. */
 function Lead() {
@@ -45,6 +46,70 @@ function Lead() {
         <Text class="font-semibold text-foreground">pansy</Text>
         {said()[1] ?? ""}
       </Text>
+    </If>
+  );
+}
+
+/**
+ * Above the list once two agents' programs are behind: which, and Update
+ * all, which updates them one at a time; then how far it is, and how it
+ * went, with each agent's versions from and to.
+ */
+function Updates() {
+  const all = () => updatingAll();
+  const running = () => {
+    const s = all();
+    return !!s && s.done < s.n;
+  };
+  const behind = () => here().filter((a) => cliOf(a)?.update || updating().includes(a.id));
+  const failed = () => !running() && (all()?.failed.length ?? 0) > 0;
+  const said = () => {
+    const s = all();
+    if (s && s.done < s.n) return tr("Updating %s… (%d of %d)", s.now, s.done + 1, s.n);
+    if (s) {
+      const ok = s.n - s.failed.length;
+      const list = s.changed.join(", ");
+      const names = s.failed.map((f) => f.name).join(", ");
+      if (s.failed.length === 0) return tr("%d agents updated: %s", ok, list);
+      return ok > 0 ? tr("%d of %d agents updated: %s · %d didn't: %s", ok, s.n, list, s.failed.length, names) : tr("%d of %d agents updated · %d didn't: %s", ok, s.n, s.failed.length, names);
+    }
+    return tr("%d agents have updates: %s", behind().length, behind().map((a) => a.name).join(", "));
+  };
+  /** Every change and every error whole, where the line is cut short. */
+  const whole = () => [...(all()?.changed ?? []), ...(all()?.failed ?? []).map((f) => f.why)].join("\n") || said();
+  return (
+    <If when={running() || !!all() || behind().length >= 2}>
+      <View testID="agents-updates" class="mx-[2px] min-h-[22px] flex-row items-center gap-[10px]">
+        <View class="min-w-0 flex-1">
+          <Hint text={whole()}>
+            <Text testID="agents-updates-said" class={`text-[12.5px] line-clamp-1 ${failed() ? "text-destructive" : "text-fg-2"}`}>
+              {said()}
+            </Text>
+          </Hint>
+        </View>
+        <If when={running() || updatable().length >= 2}>
+          <Hint
+            text={
+              running()
+                ? tr("Updating…")
+                : updatable()
+                    .map((a) => `${a.name}: ${cliOf(a)?.version ?? ""} → ${cliOf(a)?.latest ?? ""}`)
+                    .join("\n")
+            }
+          >
+            <View
+              role="button"
+              testID="agents-update-all"
+              disabled={running()}
+              onPress={() => void updateAll()}
+              class={`group h-5 flex-row items-center gap-1 rounded-full border border-border bg-card pl-[6px] pr-2 hover:bg-pill active:scale-96 ${MOTION}`}
+            >
+              <Icon name={running() ? "sync" : "bottom"} color="muted-foreground" size={11} />
+              <Text class={`text-[11.5px] font-medium ${running() ? "text-muted-foreground" : "text-fg-2 group-hover:text-foreground"} ${MOTION}`}>{running() ? tr("Updating…") : tr("Update all")}</Text>
+            </View>
+          </Hint>
+        </If>
+      </View>
     </If>
   );
 }
@@ -189,6 +254,7 @@ export function AgentsPage() {
   return (
     <Page testID="page-agents">
       <Lead />
+      <Updates />
       <List testID="agents">
         <If
           when={agentsRead()}

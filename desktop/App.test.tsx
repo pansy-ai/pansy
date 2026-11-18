@@ -15,6 +15,26 @@ test("starts on the agents page and asks for a provider first", async () => {
   expect(app.texts()).toContain("Providers");
 });
 
+test("says an agent's update, runs it when asked, and moves a row dragged by its logo", async () => {
+  const app = await launch();
+  await app.waitFor("id:agent-codex");
+  // test.sh's Codex is an npm package a newer version is out for, by its registry
+  await app.waitFor("id:update-codex");
+  expect(app.texts()).toContain("0.168.0");
+  expect(app.texts()).toContain("Update to 0.170.0");
+  await app.press("id:update-codex");
+  await app.waitUntil(() => app.texts().includes("0.170.0") && !app.texts().includes("Update to 0.170.0"));
+  expect(app.texts()).toContain("Codex updated: 0.168.0 → 0.170.0");
+
+  // Claude Code first, as pansy lists them; Codex dragged over it goes first
+  const order = () => app.texts().filter((t) => t === "Claude Code" || t === "Codex");
+  expect(order()).toEqual(["Claude Code", "Codex"]);
+  await app.drag("id:handle-codex", { y: -50 });
+  await app.waitUntil(() => order()[0] === "Codex");
+  await app.drag("id:handle-codex", { y: 50 });
+  await app.waitUntil(() => order()[0] === "Claude Code");
+});
+
 test("adds a provider of the user's own, then a group of its models", async () => {
   const app = await launch();
   await app.press("id:nav-providers");
@@ -169,7 +189,7 @@ test("connects an agent to a model with its switch and disconnects it", async ()
   await app.waitFor("id:picker");
   await app.type("id:picker-search", "model-b");
   await app.press("id:pick-local-relay/model-b");
-  await app.waitUntil(() => app.texts().includes("Connected · new sessions take it"));
+  await app.waitUntil(() => app.texts().includes("Connected · switch the opus · sonnet · haiku tiers in /model"));
   expect(app.texts()).toContain("model-b");
 
   // Details: where it picks, and what pansy changed in its settings.json
@@ -178,6 +198,34 @@ test("connects an agent to a model with its switch and disconnects it", async ()
   await app.press("id:changes-claude-code");
   await app.waitUntil(() => app.texts().some((t) => t.includes("env.ANTHROPIC_BASE_URL = http://127.0.0.1:")));
   expect(app.texts().join(" ")).toContain("env.ANTHROPIC_MODEL = local-relay/model-b");
+
+  // Its tiers, each on the main model until it is given its own; a tier's
+  // effort goes after its model's name, the session's is a key of its own
+  const wrote = (line: string) => app.texts().some((t) => t.includes(line));
+  await app.waitFor("id:tiers-claude-code");
+  expect(app.texts()).toContain("/model opus");
+  expect(app.texts()).toContain("same as model");
+  await app.press("id:field-claude-code-opus");
+  await app.waitFor("id:picker");
+  await app.type("id:picker-search", "model-a");
+  await app.press("id:pick-local-relay/model-a");
+  await app.waitUntil(() => wrote("env.ANTHROPIC_DEFAULT_OPUS_MODEL = local-relay/model-a"));
+  await app.press("id:effort-claude-code-opus_effort");
+  await app.waitFor("id:effort-picker");
+  await app.press("id:effort-top");
+  await app.waitUntil(() => wrote("env.ANTHROPIC_DEFAULT_OPUS_MODEL = local-relay/model-a:max"));
+  await app.press("id:effort-claude-code-effort");
+  await app.waitFor("id:effort-picker");
+  await app.press("id:effort-top");
+  await app.waitUntil(() => wrote("effortLevel = max"));
+  await app.press("id:effort-claude-code-effort");
+  await app.waitFor("id:effort-picker");
+  await app.press("id:effort-default");
+  await app.waitUntil(() => !wrote("effortLevel"));
+  await app.press("id:field-claude-code-opus");
+  await app.waitFor("id:pick-reset");
+  await app.press("id:pick-reset");
+  await app.waitUntil(() => wrote("env.ANTHROPIC_DEFAULT_OPUS_MODEL = local-relay/model-b:max"));
 
   // The model its subagents start on: a key more in its settings, then none
   await app.waitFor("id:subagents-claude-code");
@@ -206,7 +254,7 @@ test("checks the agents in Diagnostics, and restores one for now and connects it
   await app.press("id:nav-agents");
   // On again with the model it had
   await app.press("id:connect-claude-code");
-  await app.waitUntil(() => app.texts().includes("Connected · new sessions take it"));
+  await app.waitUntil(() => app.texts().includes("Connected · switch the opus · sonnet · haiku tiers in /model"));
 
   await app.press("id:nav-settings");
   await app.press("id:settings-tab-diagnostics");

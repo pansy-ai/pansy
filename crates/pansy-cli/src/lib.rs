@@ -40,11 +40,21 @@ Agents
                                       the model its subagents start on when they name none
                                       (Claude Code), or every one of them whatever its lead
                                       names (Codex); off leaves that to the agent
+  <agent> <setting> [<value>|default] one more thing of a connected agent's: effort (Claude
+                                      Code: low to max; Codex: low to xhigh); Claude Code's
+                                      tiers opus, sonnet and fable and its auto_mode, each a
+                                      provider/model, and opus_effort, sonnet_effort,
+                                      haiku_effort, fable_effort and subagent_effort.
+                                      default takes it back; alone, what it is set to
   <agent> <provider/model> --show     what connecting would write into the agent's files,
                                       key by key, and nothing written
   <agent> off                         put the agent's config back as it was
   connect <agent> <provider/model> | disconnect <agent>
                                       the same, by the agent's name
+  agents versions                     each agent's version, the one that is out, and the
+                                      command that updates it
+  agents update <agent>|all           run that command: the agent's own updater, npm, bun,
+                                      pnpm or mise, as it was installed
   models                              every model an agent can be given
   pause <agent>|all                   put an agent's config back for now, so it works
                                       without pansy; its model is remembered
@@ -275,6 +285,8 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
         ["serve", ..] => serve(),
         ["status"] => status(json),
         ["agents"] => agents(json),
+        ["agents", "versions"] => agent_versions(json),
+        ["agents", "update", which] => agent_update(which),
         ["models"] => models(json),
         ["provider", rest @ ..] => provider(rest, &args[1..], json),
         ["providers"] => provider(&["list"], &[], json),
@@ -458,9 +470,38 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
                     if let Some(subagent) = &v.subagent_model {
                         println!("Subagents: {subagent}");
                     }
+                    for f in v.fields.iter().filter(|f| f.value.is_some()) {
+                        println!("{}: {}", f.key, f.value.as_deref().unwrap_or_default());
+                    }
                     Ok(())
                 }
                 ["off"] => disconnect(id),
+                [key, rest @ ..]
+                    if rest.len() <= 1
+                        && pansy_agents::agent::find(id)
+                            .is_some_and(|a| a.fields().iter().any(|f| f.key == *key)) =>
+                {
+                    let name = pansy_agents::agent::find(id).map_or(id, |a| a.name);
+                    match rest {
+                        [] => {
+                            let v = pansy_agents::list().into_iter().find(|v| v.id == id);
+                            let value = v
+                                .and_then(|v| v.fields.into_iter().find(|f| f.key == *key))
+                                .and_then(|f| f.value);
+                            println!("{}", value.as_deref().unwrap_or("default"));
+                        }
+                        [value] => {
+                            let value = (*value != "default" && *value != "off").then_some(*value);
+                            pansy_agents::set_field(id, key, value)?;
+                            match value {
+                                Some(value) => println!("Set {name}'s {key} to {value}."),
+                                None => println!("{name}'s {key} is its own again."),
+                            }
+                        }
+                        _ => unreachable!("one value at most"),
+                    }
+                    Ok(())
+                }
                 ["--small", model] => {
                     let agent =
                         pansy_agents::agent::find(id).ok_or_else(|| anyhow!("no agent {id}"))?;
@@ -494,7 +535,7 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
                 [model] => connect(id, model),
                 _ => {
                     bail!(
-                        "usage: pansy {agent} <provider/model> | off | --small <provider/model> | --subagent <provider/model>|off"
+                        "usage: pansy {agent} <provider/model> | off | --small <provider/model> | --subagent <provider/model>|off | <setting> [<value>|default]"
                     )
                 }
             },
@@ -709,6 +750,87 @@ fn agents(json: bool) -> Result<()> {
             a.protocol.label(),
             a.model.as_deref().unwrap_or("-")
         );
+    }
+    Ok(())
+}
+
+/// Each agent's program with the version that is out, waited for up to
+/// half a minute: it is asked over the network.
+fn clis_asked() -> std::collections::BTreeMap<&'static str, pansy_agents::cli::Cli> {
+    let mut known = Default::default();
+    for _ in 0..120 {
+        let (now, pending) = pansy_agents::clis(std::time::Duration::from_secs(3));
+        known = now;
+        if !pending {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(250));
+    }
+    known
+}
+
+/// Each agent's program: its version, the one that is out and what updates it.
+fn agent_versions(json: bool) -> Result<()> {
+    // The versions that are out are asked over the network: waited for here.
+    let known = clis_asked();
+    if json {
+        return print_json(&known);
+    }
+    let names: std::collections::BTreeMap<&str, &str> = pansy_agents::agent::all()
+        .into_iter()
+        .map(|a| (a.id, a.name))
+        .collect();
+    println!("{:14} {:12} {:12} UPDATE WITH", "AGENT", "VERSION", "OUT");
+    for (id, cli) in &known {
+        println!(
+            "{:14} {:12} {:12} {}",
+            names.get(id).copied().unwrap_or(id),
+            cli.version.as_deref().unwrap_or("-"),
+            cli.latest.as_deref().unwrap_or("-"),
+            match (&cli.command, cli.update) {
+                (Some(command), true) => command.as_str(),
+                (Some(_), false) => "up to date",
+                (None, _) => "the way it was installed",
+            }
+        );
+    }
+    Ok(())
+}
+
+/// Updates one agent's program, or every one a newer version is out for.
+fn agent_update(which: &str) -> Result<()> {
+    let ids: Vec<&str> = if which == "all" {
+        let behind: Vec<&str> = clis_asked()
+            .into_iter()
+            .filter(|(_, cli)| cli.update)
+            .map(|(id, _)| id)
+            .collect();
+        if behind.is_empty() {
+            println!("Every agent is up to date.");
+        }
+        behind
+    } else {
+        let id = AGENT_ALIASES
+            .iter()
+            .find(|(alias, _)| *alias == which)
+            .map(|(_, id)| *id)
+            .or_else(|| pansy_agents::run::by_name(which).map(|a| a.id))
+            .ok_or_else(|| anyhow!("no agent {which}; `pansy agents` lists them"))?;
+        vec![id]
+    };
+    let mut failed = Vec::new();
+    // One at a time: npm installs side by side collide.
+    for id in ids {
+        match pansy_agents::update_cli(id) {
+            Ok(cli) => println!(
+                "{id} is {} now.",
+                cli.version.as_deref().unwrap_or("updated")
+            ),
+            Err(e) => failed.push(format!("{id}: {e:#}")),
+        }
+    }
+    if !failed.is_empty() {
+        bail!("{}", failed.join("; "));
     }
     Ok(())
 }

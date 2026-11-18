@@ -14,6 +14,22 @@ trap 'rm -rf -- "$scratch"' EXIT
 mkdir -p "$scratch/home/.claude" "$scratch/bin"
 printf '#!/bin/sh\necho "2.1.0 (Claude Code)"\n' > "$scratch/bin/claude"
 chmod +x "$scratch/bin/claude"
+# And one whose install tells how it is updated: Codex as npm installs it
+# under a prefix, an npm that "installs" the version asked for by writing
+# the package's file, and a registry (a folder, served) that says which
+# version is out. Neither the user's npm nor npm's registry is asked.
+pkg="$scratch/prefix/lib/node_modules/@openai/codex"
+mkdir -p "$pkg/bin" "$scratch/prefix/bin" "$scratch/home/.codex" "$scratch/registry/@openai/codex"
+printf '{"name":"@openai/codex","version":"0.168.0"}\n' > "$pkg/package.json"
+printf '#!/bin/sh\necho "codex-cli 0.168.0"\n' > "$pkg/bin/codex.js"
+printf '#!/bin/sh\nprintf %%s '"'"'{"name":"@openai/codex","version":"0.170.0"}'"'"' > "%s/package.json"\n' "$pkg" > "$scratch/prefix/bin/npm"
+chmod +x "$pkg/bin/codex.js" "$scratch/prefix/bin/npm"
+ln -s "$pkg/bin/codex.js" "$scratch/bin/codex"
+printf '{"name":"@openai/codex","version":"0.170.0"}\n' > "$scratch/registry/@openai/codex/latest"
+registry_port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+python3 -m http.server "$registry_port" --bind 127.0.0.1 --directory "$scratch/registry" > /dev/null 2>&1 &
+registry_pid=$!
+trap 'kill "$registry_pid" 2> /dev/null; rm -rf -- "$scratch"' EXIT
 # A session of it for the Sessions page, written days ago (one written in
 # the last minute may still be running, and is not deleted).
 session="$scratch/home/.claude/projects/-work-app/11111111-2222-4333-8444-555555555555.jsonl"
@@ -45,4 +61,5 @@ env PATH="$scratch/bin:$PATH" HOME="$scratch/home" PANSY_HOME="$scratch/home/.co
   XDG_STATE_HOME="$scratch/home/.local/state" XDG_CACHE_HOME="$scratch/home/.cache" \
   CODEX_HOME= OPENCODE_DB= ANTHROPIC_BASE_URL= ANTHROPIC_API_KEY= OPENAI_BASE_URL= OPENAI_API_KEY= \
   LANG=en_US.UTF-8 LC_ALL= LC_MESSAGES= LANGUAGE= PANSY_LANGUAGE= \
+  PANSY_NPM_REGISTRY="http://127.0.0.1:$registry_port" \
   nsh test "$@"

@@ -39,6 +39,20 @@ use state::{State, Touched};
 /// The key agents send the gateway; it takes any from this computer.
 pub const AGENT_KEY: &str = "pansy";
 
+/// One of an agent's fields as the window and the command line show it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldView {
+    pub key: &'static str,
+    pub kind: manifest::FieldKind,
+    /// An effort's levels, the lowest first.
+    pub levels: Vec<&'static str>,
+    /// With none given, the main model's.
+    pub follows: bool,
+    /// What the user gave it, while the agent is connected.
+    pub value: Option<String>,
+}
+
 /// One agent as the window and `pansy agents` show it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,6 +80,8 @@ pub struct AgentView {
     /// Every subagent of it goes on that model, whatever one its lead
     /// names: the gateway sees to it.
     pub subagent_every: bool,
+    /// What else may be set for it: a tier's model, an effort.
+    pub fields: Vec<FieldView>,
     pub config_files: Vec<String>,
     pub recent: Vec<String>,
     pub note: Option<&'static str>,
@@ -128,6 +144,19 @@ pub fn view(agent: &Agent, state: &State) -> AgentView {
             .filter(|_| connected && agent.subagent_model),
         has_subagent_model: agent.subagent_model,
         subagent_every: agent.subagent_every,
+        fields: agent
+            .fields()
+            .iter()
+            .map(|f| FieldView {
+                key: f.key,
+                kind: f.kind,
+                levels: f.levels.clone(),
+                follows: f.follows,
+                value: saved
+                    .and_then(|s| s.fields.get(f.key).cloned())
+                    .filter(|_| connected),
+            })
+            .collect(),
         config_files: agent
             .files()
             .iter()
@@ -147,37 +176,61 @@ pub fn list() -> Vec<AgentView> {
     views
 }
 
-/// The agents whose versions are being asked, and what each said.
+/// The agents whose programs are being looked at, and what is known of each.
 struct Asking {
+    /// Its version is being read.
     running: BTreeSet<&'static str>,
-    said: BTreeMap<&'static str, Option<String>>,
+    /// The version that is out is being asked, or it is being updated.
+    looking: BTreeSet<&'static str>,
+    said: BTreeMap<&'static str, cli::Cli>,
 }
 
 static ASKING: Mutex<Asking> = Mutex::new(Asking {
     running: BTreeSet::new(),
+    looking: BTreeSet::new(),
     said: BTreeMap::new(),
 });
 static ANSWERED: Condvar = Condvar::new();
 
-/// The version of each agent's program on `PATH`, as far as it is known
-/// within `wait`, and whether some are still being asked: those go on, and
-/// are ready the next time. One asking per agent at a time.
-pub fn versions(wait: Duration) -> (BTreeMap<&'static str, String>, bool) {
+/// Each agent's program on `PATH`: its version as far as it is known
+/// within `wait`, how it is updated and the version that is out, and
+/// whether some are still being asked: those go on, and are ready the next
+/// time. One asking per agent at a time; the version that is out, asked
+/// over the network, never holds a version up.
+pub fn clis(wait: Duration) -> (BTreeMap<&'static str, cli::Cli>, bool) {
     let here: Vec<&'static Agent> = agent::all().into_iter().filter(|a| a.on_path()).collect();
     let Ok(mut asking) = ASKING.lock() else {
         return (BTreeMap::new(), false);
     };
     for &a in &here {
-        if asking.running.insert(a.id) {
-            std::thread::spawn(move || {
-                let said = cli::version_of(a.programs);
-                if let Ok(mut asking) = ASKING.lock() {
-                    asking.running.remove(a.id);
-                    asking.said.insert(a.id, said);
-                }
-                ANSWERED.notify_all();
-            });
+        if asking.looking.contains(a.id) || !asking.running.insert(a.id) {
+            continue;
         }
+        std::thread::spawn(move || {
+            let (mut cli, how) = cli::installed(a.programs, a.own_updater());
+            if let Ok(mut asking) = ASKING.lock() {
+                asking.running.remove(a.id);
+                // What was out stays said while it is asked again.
+                if let Some(was) = asking.said.get(a.id).filter(|w| w.version == cli.version) {
+                    cli.latest = was.latest.clone();
+                    cli.update = was.update;
+                }
+                asking.said.insert(a.id, cli.clone());
+                if how.is_some() {
+                    asking.looking.insert(a.id);
+                }
+            }
+            ANSWERED.notify_all();
+            let Some(how) = how else {
+                return;
+            };
+            let cli = cli::with_latest(cli, &how);
+            if let Ok(mut asking) = ASKING.lock() {
+                asking.looking.remove(a.id);
+                asking.said.insert(a.id, cli);
+            }
+            ANSWERED.notify_all();
+        });
     }
     let running = |asking: &mut Asking| here.iter().any(|a| asking.running.contains(a.id));
     let Ok((asking, _)) = ANSWERED.wait_timeout_while(asking, wait, running) else {
@@ -185,9 +238,74 @@ pub fn versions(wait: Duration) -> (BTreeMap<&'static str, String>, bool) {
     };
     let known = here
         .iter()
-        .filter_map(|a| Some((a.id, asking.said.get(a.id)?.clone()?)))
+        .filter_map(|a| Some((a.id, asking.said.get(a.id)?.clone())))
         .collect();
-    (known, here.iter().any(|a| asking.running.contains(a.id)))
+    let pending = here
+        .iter()
+        .any(|a| asking.running.contains(a.id) || asking.looking.contains(a.id));
+    (known, pending)
+}
+
+/// The version of each agent's program on `PATH`, as far as it is known
+/// within `wait`, and whether some are still being read ([`clis`]).
+pub fn versions(wait: Duration) -> (BTreeMap<&'static str, String>, bool) {
+    let (known, _) = clis(wait);
+    let reading = ASKING
+        .lock()
+        .map(|asking| !asking.running.is_empty())
+        .unwrap_or(false);
+    let known = known
+        .into_iter()
+        .filter_map(|(id, cli)| Some((id, cli.version?)))
+        .collect();
+    (known, reading)
+}
+
+/// Updates the agent's program with the command its install tells
+/// ([`cli::how`]), which may take minutes, and reads its version again.
+/// One update of an agent at a time.
+pub fn update_cli(id: &str) -> Result<cli::Cli> {
+    let agent = find(id)?;
+    let (was, how) = cli::installed(agent.programs, agent.own_updater());
+    let how = how.ok_or_else(|| {
+        anyhow!(
+            "pansy can't tell how {} was installed: update it the way you installed it",
+            agent.name
+        )
+    })?;
+    {
+        let mut asking = ASKING.lock().map_err(|_| anyhow!("the agents' state"))?;
+        if !asking.looking.insert(agent.id) {
+            bail!("{} is being looked at or updated already", agent.name);
+        }
+    }
+    let before = cli::real_of(agent.programs);
+    let done = cli::update(&how);
+    // Its version where the update left it: the program may be another
+    // file, or the same one beside a package that changed.
+    for real in before.into_iter().chain(cli::real_of(agent.programs)) {
+        cli::forget(&real);
+    }
+    let (now, how_now) = cli::installed(agent.programs, agent.own_updater());
+    let now = match &how_now {
+        Some(how) => cli::with_latest(now, how),
+        None => now,
+    };
+    if let Ok(mut asking) = ASKING.lock() {
+        asking.looking.remove(agent.id);
+        asking.said.insert(agent.id, now.clone());
+    }
+    ANSWERED.notify_all();
+    done.map_err(|why| anyhow!(why))?;
+    if now.version.is_some() && now.version == was.version && now.update {
+        bail!(
+            "{} is still {} after `{}`",
+            agent.name,
+            now.version.as_deref().unwrap_or_default(),
+            how.command.join(" ")
+        );
+    }
+    Ok(now)
 }
 
 /// One key pansy set in an agent's config: what was there before, and
@@ -254,7 +372,13 @@ fn formats(agent: &Agent) -> BTreeMap<String, files::Format> {
             out.insert(file.display().to_string(), *format);
         }
     }
-    // With a model for subagents, so the keys for one are among them.
+    // With a model for subagents and every field given, so the keys for
+    // them are among them.
+    let fields: BTreeMap<String, String> = agent
+        .fields()
+        .iter()
+        .map(|f| (f.key.to_owned(), String::new()))
+        .collect();
     out.extend(
         agent
             .edits(&agent::Wiring {
@@ -263,6 +387,7 @@ fn formats(agent: &Agent) -> BTreeMap<String, files::Format> {
                 model: "",
                 small_model: None,
                 subagent_model: Some(""),
+                fields: &fields,
                 choices: &[],
             })
             .into_iter()
@@ -333,13 +458,15 @@ fn back_up(agent: &str, file: &Path) -> Result<()> {
     Ok(())
 }
 
-/// The models an agent is wired with beside its main one.
-#[derive(Debug, Clone, Copy, Default)]
+/// What an agent is wired with beside its main model.
+#[derive(Debug, Clone, Default)]
 struct Others<'a> {
-    /// For quick tasks.
+    /// The model for quick tasks.
     small: Option<&'a str>,
-    /// For subagents that name none.
+    /// The model for subagents that name none.
     subagent: Option<&'a str>,
+    /// Its fields' values, by their keys.
+    fields: BTreeMap<String, String>,
 }
 
 impl<'a> Others<'a> {
@@ -349,6 +476,7 @@ impl<'a> Others<'a> {
         Others {
             small: saved.and_then(|s| s.small_model.as_deref()),
             subagent: saved.and_then(|s| s.subagent_model.as_deref()),
+            fields: saved.map(|s| s.fields.clone()).unwrap_or_default(),
         }
     }
 }
@@ -359,6 +487,9 @@ impl<'a> Others<'a> {
 fn wire(agent: &Agent, model: &str, others: Others, state: &mut State) -> Result<()> {
     let small = others.small;
     let subagent = others.subagent.filter(|_| agent.subagent_model);
+    // A field the agent has no more (its manifest changed) is let go.
+    let mut fields = others.fields;
+    fields.retain(|key, _| agent.fields().iter().any(|f| f.key == key));
     let base = gateway_url();
     let choices: Vec<String> = pansy_core::manage::choices()
         .unwrap_or_default()
@@ -371,6 +502,7 @@ fn wire(agent: &Agent, model: &str, others: Others, state: &mut State) -> Result
         model,
         small_model: small,
         subagent_model: subagent,
+        fields: &fields,
         choices: &choices,
     };
     let edits = agent.edits_checked(&wiring)?;
@@ -456,6 +588,7 @@ fn wire(agent: &Agent, model: &str, others: Others, state: &mut State) -> Result
     record.model = Some(model.to_owned());
     record.small_model = small.map(str::to_owned);
     record.subagent_model = subagent.map(str::to_owned);
+    record.fields = fields;
     record.paused = None;
     record.remember(model);
     Ok(())
@@ -509,6 +642,34 @@ pub fn set_subagent_model(id: &str, model: Option<&str>) -> Result<()> {
     let others = Others {
         subagent: model,
         ..Others::saved(&saved, id)
+    };
+    wire(agent, &current, others, &mut state)?;
+    state.save()
+}
+
+/// Gives the agent's field `key` a value (a tier's model, an effort);
+/// `None` takes it back: its keys go back to what they were, or to what
+/// they are without it.
+pub fn set_field(id: &str, key: &str, value: Option<&str>) -> Result<()> {
+    let agent = find(id)?;
+    let field = agent
+        .fields()
+        .iter()
+        .find(|f| f.key == key)
+        .ok_or_else(|| anyhow!("{} has no setting {key} that pansy knows", agent.name))?;
+    let value = value.map(str::trim).filter(|v| !v.is_empty());
+    if let Some(why) = value.and_then(|v| field.refuses(v)) {
+        bail!("{why}");
+    }
+    let mut state = State::load()?;
+    let current = view(agent, &state)
+        .model
+        .ok_or_else(|| anyhow!("{} is not connected to pansy", agent.name))?;
+    let saved = state.clone();
+    let mut others = Others::saved(&saved, id);
+    match value {
+        Some(value) => others.fields.insert(key.to_owned(), value.to_owned()),
+        None => others.fields.remove(key),
     };
     wire(agent, &current, others, &mut state)?;
     state.save()

@@ -3,6 +3,11 @@
 //! named for it) and only else asked of the program (`--version`). A
 //! version manager's shim (mise's, asdf's) is looked through and never run:
 //! running one can install the tool it stands for.
+//!
+//! And its update: where the install tells how it was made (npm's, bun's or
+//! pnpm's global packages, mise, the program's own updater), the version
+//! that is out is asked of the npm registry or of mise, and the command
+//! that updates it is run when the user says so, never before.
 
 use std::collections::HashMap;
 use std::fs;
@@ -10,6 +15,264 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
+
+/// An agent's program as the Agents page shows it.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Cli {
+    pub version: Option<String>,
+    /// What installed it, when its install tells: `npm`, `bun`, `pnpm`,
+    /// `mise`, or `own` for its own updater.
+    pub via: Option<&'static str>,
+    /// The command that updates it, as a terminal would take it.
+    pub command: Option<String>,
+    /// The version that is out, once asked.
+    pub latest: Option<String>,
+    /// A newer one is out.
+    pub update: bool,
+}
+
+/// How a program was installed: what updates it, and where the version
+/// that is out is asked.
+#[derive(Debug, Clone, PartialEq)]
+pub struct How {
+    pub via: &'static str,
+    /// The command that updates it: a program and its arguments.
+    pub command: Vec<String>,
+    pub latest: Latest,
+}
+
+/// Where the version that is out is asked.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Latest {
+    /// The npm registry, of this package.
+    Npm(String),
+    /// mise, of this tool.
+    Mise(String),
+}
+
+/// The package `real` is a file of, and the folder its `node_modules` is in.
+fn npm_package(real: &Path) -> Option<(String, PathBuf)> {
+    let parts: Vec<String> = real
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    let at = parts.iter().rposition(|p| p == "node_modules")?;
+    let first = parts.get(at + 1)?;
+    let package = if first.starts_with('@') {
+        format!("{first}/{}", parts.get(at + 2)?)
+    } else {
+        first.clone()
+    };
+    Some((package, real.components().take(at).collect()))
+}
+
+/// How `program`, the file at `real` (links followed), was installed, when
+/// its place tells. `own`: the arguments of its own updater and its npm
+/// package, for one whose installer keeps a folder named for each version
+/// (Claude Code's `versions/2.1.3`).
+pub fn how(real: &Path, program: &str, own: Option<(&[&str], &str)>) -> Option<How> {
+    let text = real.to_string_lossy().replace('\\', "/");
+    let argv = |items: &[&str]| items.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+    // mise's installs/<tool>/<version>/…
+    if let Some(rest) = text.split("/mise/installs/").nth(1)
+        && let Some(tool) = rest.split('/').next().filter(|t| !t.is_empty())
+    {
+        return Some(How {
+            via: "mise",
+            command: argv(&["mise", "upgrade", tool]),
+            latest: Latest::Mise(tool.to_owned()),
+        });
+    }
+    if let Some((package, above)) = npm_package(real) {
+        let latest = format!("{package}@latest");
+        let (via, command) = if text.contains("/.bun/") {
+            ("bun", argv(&["bun", "add", "-g", &latest]))
+        } else if text.contains("/pnpm/") {
+            ("pnpm", argv(&["pnpm", "add", "-g", &latest]))
+        } else {
+            // The npm beside the Node it was installed under (nvm keeps
+            // one for each), else the one on PATH.
+            let beside = above.parent().map(|prefix| prefix.join("bin").join("npm"));
+            let npm = beside
+                .filter(|f| f.is_file())
+                .map(|f| f.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "npm".to_owned());
+            ("npm", argv(&[&npm, "install", "-g", &latest]))
+        };
+        return Some(How {
+            via,
+            command,
+            latest: Latest::Npm(package),
+        });
+    }
+    let (args, package) = own?;
+    if !text.contains("/versions/") || path_version(real).is_none() {
+        return None;
+    }
+    // Its updater is asked of the program as PATH finds it.
+    let mut command = vec![program.to_owned()];
+    command.extend(args.iter().map(|a| (*a).to_owned()));
+    Some(How {
+        via: "own",
+        command,
+        latest: Latest::Npm(package.to_owned()),
+    })
+}
+
+/// Whether `latest` is a later version than `current`: by their numbers;
+/// the same numbers, when only `current` is a pre-release.
+pub fn newer(latest: &str, current: &str) -> bool {
+    fn parts(v: &str) -> (Vec<u64>, bool) {
+        let v = v.trim().trim_start_matches('v');
+        let (numbers, pre) = match v.find(['-', '+']) {
+            Some(at) => (&v[..at], v[at..].starts_with('-')),
+            None => (v, false),
+        };
+        (
+            numbers.split('.').map(|n| n.parse().unwrap_or(0)).collect(),
+            pre,
+        )
+    }
+    let (a, a_pre) = parts(latest);
+    let (b, b_pre) = parts(current);
+    let n = a.len().max(b.len());
+    let at = |v: &[u64], i: usize| v.get(i).copied().unwrap_or(0);
+    for i in 0..n {
+        if at(&a, i) != at(&b, i) {
+            return at(&a, i) > at(&b, i);
+        }
+    }
+    b_pre && !a_pre
+}
+
+/// The npm registry: `PANSY_NPM_REGISTRY`, else npm's own.
+fn registry() -> String {
+    std::env::var("PANSY_NPM_REGISTRY")
+        .ok()
+        .filter(|r| !r.trim().is_empty())
+        .unwrap_or_else(|| "https://registry.npmjs.org".to_owned())
+        .trim_end_matches('/')
+        .to_owned()
+}
+
+/// The version that is out, as last asked: kept half an hour, a failure
+/// five minutes.
+pub fn latest(from: &Latest) -> Option<String> {
+    type Asked = HashMap<String, (Instant, Option<String>)>;
+    static ASKED: Mutex<Option<Asked>> = Mutex::new(None);
+    let key = match from {
+        Latest::Npm(package) => format!("npm:{}/{package}", registry()),
+        Latest::Mise(tool) => format!("mise:{tool}"),
+    };
+    if let Some((at, said)) = ASKED
+        .lock()
+        .ok()
+        .and_then(|m| m.as_ref()?.get(&key).cloned())
+        && at.elapsed() < Duration::from_secs(if said.is_some() { 1800 } else { 300 })
+    {
+        return said;
+    }
+    let said = match from {
+        Latest::Npm(package) => {
+            let url = format!("{}/{package}/latest", registry());
+            let proxy = pansy_core::config::load_settings()
+                .map(|s| s.proxy)
+                .unwrap_or_default();
+            pansy_plugins::block(async move {
+                let builder = reqwest::Client::builder()
+                    .user_agent(concat!("pansy/", env!("CARGO_PKG_VERSION")))
+                    .timeout(Duration::from_secs(8));
+                let client = pansy_core::settings::use_proxy(builder, &proxy)
+                    .ok()?
+                    .build()
+                    .ok()?;
+                let json: serde_json::Value = client
+                    .get(url)
+                    .send()
+                    .await
+                    .ok()?
+                    .error_for_status()
+                    .ok()?
+                    .json()
+                    .await
+                    .ok()?;
+                parse_version(json.get("version")?.as_str()?)
+            })
+        }
+        Latest::Mise(tool) => which("mise").and_then(|mise| {
+            let mut cmd = Command::new(mise);
+            cmd.args(["latest", tool]);
+            let (ok, out) = run(cmd, Duration::from_secs(20))?;
+            ok.then(|| parse_version(&out))?
+        }),
+    };
+    if let Ok(mut m) = ASKED.lock() {
+        m.get_or_insert_with(HashMap::new)
+            .insert(key, (Instant::now(), said.clone()));
+    }
+    said
+}
+
+/// The program of the first of `programs` on `PATH`, links and a version
+/// manager's shim followed.
+pub fn real_of(programs: &[&str]) -> Option<PathBuf> {
+    let (program, found) = programs.iter().find_map(|p| Some((*p, which(p)?)))?;
+    real_program(program, &found)
+}
+
+/// A program's version and how it is updated, the version that is out not
+/// asked yet.
+pub fn installed(programs: &[&str], own: Option<(&[&str], &str)>) -> (Cli, Option<How>) {
+    let found = programs.iter().find_map(|p| Some((*p, which(p)?)));
+    let Some((program, real)) = found.and_then(|(p, found)| Some((p, real_program(p, &found)?)))
+    else {
+        return (Cli::default(), None);
+    };
+    let how = how(&real, program, own);
+    let cli = Cli {
+        version: version(&real),
+        via: how.as_ref().map(|h| h.via),
+        command: how.as_ref().map(|h| h.command.join(" ")),
+        ..Cli::default()
+    };
+    (cli, how)
+}
+
+/// `cli` with the version that is out, asked now if it wasn't lately.
+pub fn with_latest(mut cli: Cli, how: &How) -> Cli {
+    cli.latest = latest(&how.latest);
+    cli.update = match (&cli.latest, &cli.version) {
+        (Some(latest), Some(version)) => newer(latest, version),
+        _ => false,
+    };
+    cli
+}
+
+/// Runs the command that updates the program: what it printed last, when
+/// it failed. It may take minutes (an npm install).
+pub fn update(how: &How) -> Result<(), String> {
+    let (program, args) = how.command.split_first().ok_or("no command")?;
+    let found = which(program).unwrap_or_else(|| PathBuf::from(program));
+    let mut cmd = Command::new(found);
+    cmd.args(args).env("NO_COLOR", "1");
+    let said = how.command.join(" ");
+    match run(cmd, Duration::from_secs(600)) {
+        None => Err(format!("{said} could not be run, or took over ten minutes")),
+        Some((true, _)) => Ok(()),
+        Some((false, out)) => {
+            let last: Vec<&str> = out
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .rev()
+                .take(3)
+                .collect();
+            let last: Vec<&str> = last.into_iter().rev().collect();
+            Err(format!("{said} failed: {}", last.join(" · ")))
+        }
+    }
+}
 
 /// The version of the first of `programs` on `PATH`: `None` when none is,
 /// it doesn't say, or it is a shim whose manager can't say what it runs.
@@ -115,10 +378,21 @@ fn real_program(program: &str, found: &Path) -> Option<PathBuf> {
     said
 }
 
+static KNOWN: Mutex<Option<Known>> = Mutex::new(None);
+
+/// Forgets the version kept for the program at `real`: an update may
+/// leave the file itself as it was.
+pub fn forget(real: &Path) {
+    if let Ok(mut m) = KNOWN.lock()
+        && let Some(known) = m.as_mut()
+    {
+        known.remove(real);
+    }
+}
+
 /// The version of the program at `real`, kept while the file stays the
 /// same: a run that failed isn't made again until it changes.
 pub fn version(real: &Path) -> Option<String> {
-    static KNOWN: Mutex<Option<Known>> = Mutex::new(None);
     let meta = fs::metadata(real).ok()?;
     let stamp = (meta.len(), meta.modified().ok());
     if let Some((was, v)) = KNOWN

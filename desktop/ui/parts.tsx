@@ -63,6 +63,22 @@ export function Icon(props: { name: IconName; color?: Color; hover?: Color; size
   );
 }
 
+/** How many of `n` bars an effort lights among its `levels`: none for the agent's own, all for the highest. */
+export function effortLit(levels: string[], level: string | null, n: number): number {
+  const at = level ? levels.indexOf(level) : -1;
+  return at < 0 ? 0 : Math.max(1, Math.round(((at + 1) / levels.length) * n));
+}
+
+/** An effort as magpie draws one: four bars, filled up to it. */
+export function EffortBars(props: { lit: number; color?: Color; size?: number }) {
+  const size = () => props.size ?? 14;
+  const svg = () =>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">${[4, 7, 10, 13]
+      .map((h, i) => `<rect x="${1.25 + i * 3.6}" y="${14.5 - h}" width="2.6" height="${h}" rx="1" fill="currentColor" opacity="${i < props.lit ? 1 : 0.28}"/>`)
+      .join("")}</svg>`;
+  return <Image src={svgSrc(svg(), token(props.color ?? "foreground"))} style={{ width: size(), height: size() }} />;
+}
+
 /** The logos that are pictures rather than SVG. */
 const PICTURES = { alma, "cc-switch": ccSwitch, crush, gpustack, "mlx-serve": mlxServe, zcode };
 
@@ -573,13 +589,16 @@ export function Input(props: {
 }
 
 /** A field that opens a pop-up: the model of an agent. */
-export function FieldButton(props: { icon?: JSX.Element; value: string; empty?: boolean; open?: boolean; width?: number; testID?: string }) {
+export function FieldButton(props: { icon?: JSX.Element; value: string; empty?: boolean; open?: boolean; width?: number; testID?: string; label?: string }) {
   return (
     <View
       testID={props.testID}
       class={`h-[25px] flex-row items-center gap-[5px] rounded-[6px] pl-[8px] pr-[5px] hover:bg-pill-hover ${props.open ? "bg-pill-hover" : "bg-pill"}`}
       style={{ width: props.width ?? 196, boxShadow: props.open ? `inset 0 0 0 1px ${token("primary")}` : undefined }}
     >
+      <If when={props.label}>
+        <Text class="mr-[1px] text-[11px] text-faint">{props.label ?? ""}</Text>
+      </If>
       {props.icon}
       <Text class={`flex-1 text-[12.5px] font-medium line-clamp-1 ${props.empty ? "text-muted-foreground" : "text-foreground"}`}>{props.value}</Text>
       <Icon name="chev-down" color="faint" size={11} />

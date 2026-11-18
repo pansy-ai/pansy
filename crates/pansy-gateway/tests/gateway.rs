@@ -578,6 +578,54 @@ async fn agents_reach_a_chat_vendor_through_the_gateway() {
     assert!(!serde_json::to_string(record).unwrap().contains(key));
     assert_eq!(record.back.values().sum::<usize>(), 1, "{record:#?}");
 
+    // An effort after a model's name (Claude Code's tiers: a/x:high) is the
+    // request's, passed through or translated; the model is asked by its name.
+    let saw = || serde_json::from_str::<Value>(&seen.lock().unwrap().last().cloned().unwrap());
+    let (status, text) = call(
+        &gateway,
+        "/v1/chat/completions",
+        "opencode/1.0",
+        json!({"model": "echo/echo:low", "messages": [{"role": "user", "content": "hi"}]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let sent = saw().unwrap();
+    assert_eq!(
+        (&sent["model"], &sent["reasoning_effort"]),
+        (&json!("echo"), &json!("low"))
+    );
+    let (status, text) = call(
+        &gateway,
+        "/v1/messages",
+        "claude-cli/2.1.326",
+        json!({"model": "echo/echo:high", "max_tokens": 100,
+               "thinking": {"type": "enabled", "budget_tokens": 2000},
+               "messages": [{"role": "user", "content": "hi"}]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    // (Translated to a vendor's chat API, an effort goes only to those
+    // that take one.)
+    assert_eq!(saw().unwrap()["model"], "echo");
+    assert_eq!(
+        pansy_core::usage::recent(1).pop().unwrap().requested,
+        "echo/echo"
+    );
+    // What ends a name that is no effort is the model's own name.
+    let (status, text) = call(
+        &gateway,
+        "/v1/chat/completions",
+        "opencode/1.0",
+        json!({"model": "echo/echo:free", "messages": [{"role": "user", "content": "hi"}]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let sent = saw().unwrap();
+    assert_eq!(
+        (&sent["model"], &sent["reasoning_effort"]),
+        (&json!("echo:free"), &Value::Null)
+    );
+
     // A vendor that refuses the key in both headers at once is asked again
     // with each alone, and the one it takes is kept for the next request.
     let picky_hits = Arc::new(AtomicUsize::new(0));

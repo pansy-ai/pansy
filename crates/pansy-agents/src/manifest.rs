@@ -46,6 +46,16 @@
 //! `http_headers`): the gateway puts a subagent's request on it whatever it
 //! asked for. `subagent_every = true` says so, for the window's words.
 //!
+//! A `[[field]]` is one more thing the user may set for the agent, by its
+//! `key` (`pansy claude-code opus <provider/model>`): a model of the
+//! gateway's (`kind = "model"`) or how hard a model thinks (`kind =
+//! "effort"`, one of its `levels`). A value names it as `{opus}`. With none
+//! given, a text that names it is left out as one naming `{subagent}` is;
+//! `follows = true` fills in the main model instead (Claude Code's tiers),
+//! and `joins = ":"` nothing at all, the value being written after what it
+//! goes with (`"{opus}{opus_effort}"` is `a/x:high`: the gateway reads the
+//! effort off the model's name).
+//!
 //! A file's format is its ending's: `.toml`, `.yaml`, `.env`, else JSON
 //! (with comments). A path's `~/` is the home directory, and
 //! `{env:NAME|else}` a variable's value or, without one, what follows the
@@ -57,7 +67,7 @@ use std::sync::LazyLock;
 use anyhow::{Context, Result, anyhow, bail};
 use pansy_core::paths::{self, user_home};
 use pansy_core::provider::Protocol;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::agent::Wiring;
@@ -163,6 +173,58 @@ pub struct RunSpec {
     pub json_arg: Vec<(&'static str, Value)>,
 }
 
+/// What a field holds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FieldKind {
+    /// One of the gateway's models.
+    Model,
+    /// How hard a model thinks: one of the field's levels.
+    Effort,
+}
+
+/// One more thing the user may set for the agent.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Field {
+    pub key: &'static str,
+    pub kind: FieldKind,
+    /// An effort's levels, the lowest first.
+    pub levels: Vec<&'static str>,
+    /// With none given, the main model's.
+    pub follows: bool,
+    /// What is written before its value, which goes after another's; with
+    /// none given, nothing is.
+    pub joins: &'static str,
+}
+
+impl Field {
+    /// What its name is filled in with: `None`, a text naming it is left out.
+    fn filled(&self, given: Option<&str>, model: &str) -> Option<String> {
+        match given {
+            Some(value) => Some(format!("{}{value}", self.joins)),
+            None if self.follows => Some(model.to_owned()),
+            None if !self.joins.is_empty() => Some(String::new()),
+            None => None,
+        }
+    }
+
+    /// Why `value` can't be given to it, if it can't.
+    pub fn refuses(&self, value: &str) -> Option<String> {
+        match self.kind {
+            FieldKind::Model => None,
+            FieldKind::Effort if self.levels.contains(&value) => None,
+            FieldKind::Effort => Some(format!(
+                "{} is one of {}, not {value}",
+                self.key,
+                self.levels.join(", ")
+            )),
+        }
+    }
+}
+
+/// The names a value's text may have in braces beside a field's.
+const VARS: [&str; 7] = ["base_url", "v1", "key", "model", "small", "subagent", "id"];
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Manifest {
     pub id: String,
@@ -178,6 +240,12 @@ pub struct Manifest {
     pub subagent_every: bool,
     pub note: Option<&'static str>,
     pub picks_in: Option<&'static str>,
+    /// Its npm package: where the version that is out is asked.
+    pub npm: Option<&'static str>,
+    /// The arguments of its own updater (`claude update`), for an install
+    /// its own installer made.
+    pub self_update: Vec<&'static str>,
+    pub fields: Vec<Field>,
     pub files: Vec<(String, FilePath)>,
     pub set: Vec<Set>,
     pub base_url: KeyAt,
@@ -210,6 +278,11 @@ struct Raw {
     subagent_every: bool,
     note: Option<String>,
     picks_in: Option<String>,
+    npm: Option<String>,
+    #[serde(default)]
+    self_update: Vec<String>,
+    #[serde(default)]
+    field: Vec<RawField>,
     files: Map<String, Value>,
     #[serde(default)]
     set: Vec<RawSet>,
@@ -218,6 +291,19 @@ struct Raw {
     #[serde(default)]
     install: Vec<RawInstall>,
     run: Option<RawRun>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawField {
+    key: String,
+    kind: String,
+    #[serde(default)]
+    levels: Vec<String>,
+    #[serde(default)]
+    follows: bool,
+    #[serde(default)]
+    joins: String,
 }
 
 #[derive(Deserialize)]
@@ -334,6 +420,43 @@ pub fn parse(text: &str) -> Result<Manifest> {
             prefix: leak(&raw.prefix),
         })
     };
+    let mut fields: Vec<Field> = Vec::new();
+    for f in &raw.field {
+        let key_ok = !f.key.is_empty()
+            && f.key
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+        if !key_ok {
+            bail!("a field's key is small letters, digits and underscores");
+        }
+        if VARS.contains(&f.key.as_str()) || fields.iter().any(|x| x.key == f.key) {
+            bail!("the field {} has a name already taken", f.key);
+        }
+        let kind = match f.kind.as_str() {
+            "model" => FieldKind::Model,
+            "effort" => FieldKind::Effort,
+            other => bail!("no kind of field {other}: model or effort"),
+        };
+        if (kind == FieldKind::Effort) == f.levels.is_empty() {
+            bail!(
+                "the field {}: an effort has levels, and only an effort",
+                f.key
+            );
+        }
+        if f.follows && (kind != FieldKind::Model || !f.joins.is_empty()) {
+            bail!(
+                "the field {}: follows = true is for a model, written by itself",
+                f.key
+            );
+        }
+        fields.push(Field {
+            key: leak(&f.key),
+            kind,
+            levels: leak_all(&f.levels),
+            follows: f.follows,
+            joins: leak(&f.joins),
+        });
+    }
     let mut set = Vec::new();
     for s in &raw.set {
         if s.key.is_empty() {
@@ -401,6 +524,9 @@ pub fn parse(text: &str) -> Result<Manifest> {
     {
         bail!("a run's arguments for the subagents' model go in subagent_args");
     }
+    if !raw.self_update.is_empty() && raw.npm.is_none() {
+        bail!("self_update is for an agent that names its npm package (npm = \"…\")");
+    }
     if raw.subagent_every && !raw.subagent_model {
         bail!(
             "subagent_every = true is for an agent with a model for subagents (subagent_model = true)"
@@ -419,6 +545,9 @@ pub fn parse(text: &str) -> Result<Manifest> {
         subagent_every: raw.subagent_every,
         note: raw.note.as_deref().map(leak),
         picks_in: raw.picks_in.as_deref().map(leak),
+        npm: raw.npm.as_deref().map(leak),
+        self_update: leak_all(&raw.self_update),
+        fields,
         files,
         set,
         install: raw
@@ -496,15 +625,34 @@ pub struct Vars<'a> {
     model: &'a str,
     small: &'a str,
     subagent: Option<&'a str>,
+    /// The manifest's fields, each with what its name is filled in with.
+    fields: Vec<(&'static str, Option<String>)>,
     /// Every model the gateway offers, then the agent's own.
     models: Vec<&'a str>,
 }
 
+/// The names in braces in `text` (`{model}`, `{model:q}`).
+fn named(text: &str) -> impl Iterator<Item = &str> {
+    text.split('{').skip(1).filter_map(|after| {
+        let inside = &after[..after.find('}')?];
+        Some(inside.strip_suffix(":q").unwrap_or(inside))
+    })
+}
+
 impl<'a> Vars<'a> {
-    pub fn of(w: &'a Wiring<'a>) -> Vars<'a> {
+    /// `w` for an agent with these fields.
+    pub fn of(w: &'a Wiring<'a>, fields: &[Field]) -> Vars<'a> {
         let small = w.small_model.unwrap_or(w.model);
         let mut models: Vec<&str> = Vec::new();
-        let own = [w.model, small].into_iter().chain(w.subagent_model);
+        let given = |f: &Field| w.fields.get(f.key).map(String::as_str);
+        let picked = fields
+            .iter()
+            .filter(|f| f.kind == FieldKind::Model)
+            .filter_map(given);
+        let own = [w.model, small]
+            .into_iter()
+            .chain(w.subagent_model)
+            .chain(picked);
         for id in w.choices.iter().map(String::as_str).chain(own) {
             if !models.contains(&id) {
                 models.push(id);
@@ -517,19 +665,29 @@ impl<'a> Vars<'a> {
             model: w.model,
             small,
             subagent: w.subagent_model,
+            fields: fields
+                .iter()
+                .map(|f| (f.key, f.filled(given(f), w.model)))
+                .collect(),
             models,
         }
     }
 
-    /// Whether `value` is a text left out: it names `{subagent}`, and the
-    /// user gave no model for subagents.
+    /// Whether `value` is a text left out: it names `{subagent}` or a
+    /// field, and the user gave none.
     pub fn leaves_out(&self, value: &Value) -> bool {
-        self.subagent.is_none() && value.as_str().is_some_and(subagent_in)
+        value.as_str().is_some_and(|t| self.leaves_out_text(t))
     }
 
     /// [`Vars::leaves_out`], of a text.
     pub fn leaves_out_text(&self, text: &str) -> bool {
-        self.subagent.is_none() && subagent_in(text)
+        named(text).any(|name| match name {
+            "subagent" => self.subagent.is_none(),
+            _ => self
+                .fields
+                .iter()
+                .any(|(key, filled)| *key == name && filled.is_none()),
+        })
     }
 
     /// Whether there is a model for subagents.
@@ -546,7 +704,12 @@ impl<'a> Vars<'a> {
             "small" => self.small,
             "subagent" => self.subagent?,
             "id" => id?,
-            _ => return None,
+            _ => self
+                .fields
+                .iter()
+                .find(|(key, _)| *key == name)?
+                .1
+                .as_deref()?,
         })
     }
 
@@ -678,6 +841,7 @@ mod tests {
             model: "a/x",
             small_model: Some("b/y"),
             subagent_model: None,
+            fields: crate::agent::no_fields(),
             choices,
         }
     }
@@ -689,7 +853,7 @@ mod tests {
             "list": ["{model}", "sub={subagent:q}"],
         });
         let mut w = wiring(&[]);
-        let vars = Vars::of(&w);
+        let vars = Vars::of(&w, &[]);
         assert_eq!(
             vars.fill(&value),
             json!({"env": {"MODEL": "a/x"}, "list": ["a/x"]})
@@ -697,7 +861,7 @@ mod tests {
         assert!(vars.leaves_out(&json!("{subagent}")));
         assert!(!vars.leaves_out(&json!("{model}")));
         w.subagent_model = Some("c/z");
-        let vars = Vars::of(&w);
+        let vars = Vars::of(&w, &[]);
         assert_eq!(
             vars.fill(&value),
             json!({"env": {"MODEL": "a/x", "SUB": "c/z"}, "list": ["a/x", "sub=\"c/z\""]})
@@ -709,7 +873,7 @@ mod tests {
     fn fills_text_and_spreads_the_models() {
         let choices = vec!["a/x".to_owned(), "c/z".to_owned()];
         let w = wiring(&choices);
-        let vars = Vars::of(&w);
+        let vars = Vars::of(&w, &[]);
         assert_eq!(
             vars.text("{v1} {model} {small}"),
             "http://127.0.0.1:7267/v1 a/x b/y"

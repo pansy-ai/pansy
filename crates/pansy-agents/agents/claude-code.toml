@@ -2,16 +2,75 @@
 # in, so one run is pointed elsewhere with `--settings`, which wins over both.
 # A subagent runs on the model its call names, then its definition's, then
 # CLAUDE_CODE_SUBAGENT_MODEL, then the session's.
+# /model switches between its tiers: each is a model of the gateway's, the
+# main one unless it is given its own. A tier's effort goes after its model's
+# name (a/x:high), where the gateway reads it; the session's own is
+# effortLevel.
 id = "claude-code"
 name = "Claude Code"
 protocol = "anthropic"
 programs = ["claude"]
 dirs = [".claude"]
+npm = "@anthropic-ai/claude-code"
+self_update = ["update"]
 small_model = true
 subagent_model = true
 
 [files]
 settings = "~/.claude/settings.json"
+
+[[field]]
+key = "effort"
+kind = "effort"
+levels = ["low", "medium", "high", "xhigh", "max"]
+
+[[field]]
+key = "opus"
+kind = "model"
+follows = true
+
+[[field]]
+key = "sonnet"
+kind = "model"
+follows = true
+
+[[field]]
+key = "fable"
+kind = "model"
+
+[[field]]
+key = "auto_mode"
+kind = "model"
+
+[[field]]
+key = "opus_effort"
+kind = "effort"
+levels = ["low", "medium", "high", "xhigh", "max"]
+joins = ":"
+
+[[field]]
+key = "sonnet_effort"
+kind = "effort"
+levels = ["low", "medium", "high", "xhigh", "max"]
+joins = ":"
+
+[[field]]
+key = "haiku_effort"
+kind = "effort"
+levels = ["low", "medium", "high", "xhigh", "max"]
+joins = ":"
+
+[[field]]
+key = "fable_effort"
+kind = "effort"
+levels = ["low", "medium", "high", "xhigh", "max"]
+joins = ":"
+
+[[field]]
+key = "subagent_effort"
+kind = "effort"
+levels = ["low", "medium", "high", "xhigh", "max"]
+joins = ":"
 
 [[set]]
 file = "settings"
@@ -31,27 +90,42 @@ value = "{model}"
 [[set]]
 file = "settings"
 key = ["env", "ANTHROPIC_DEFAULT_OPUS_MODEL"]
-value = "{model}"
+value = "{opus}{opus_effort}"
 
 [[set]]
 file = "settings"
 key = ["env", "ANTHROPIC_DEFAULT_SONNET_MODEL"]
-value = "{model}"
+value = "{sonnet}{sonnet_effort}"
 
 [[set]]
 file = "settings"
 key = ["env", "ANTHROPIC_DEFAULT_HAIKU_MODEL"]
-value = "{small}"
+value = "{small}{haiku_effort}"
+
+[[set]]
+file = "settings"
+key = ["env", "ANTHROPIC_DEFAULT_FABLE_MODEL"]
+value = "{fable}{fable_effort}"
 
 [[set]]
 file = "settings"
 key = ["env", "ANTHROPIC_SMALL_FAST_MODEL"]
-value = "{small}"
+value = "{small}{haiku_effort}"
 
 [[set]]
 file = "settings"
 key = ["env", "CLAUDE_CODE_SUBAGENT_MODEL"]
-value = "{subagent}"
+value = "{subagent}{subagent_effort}"
+
+[[set]]
+file = "settings"
+key = ["env", "CLAUDE_CODE_AUTO_MODE_MODEL"]
+value = "{auto_mode}"
+
+[[set]]
+file = "settings"
+key = ["effortLevel"]
+value = "{effort}"
 
 [base_url]
 file = "settings"
@@ -85,8 +159,10 @@ flag = "--settings"
 ANTHROPIC_BASE_URL = "{base_url}"
 ANTHROPIC_AUTH_TOKEN = "{key}"
 ANTHROPIC_MODEL = "{model}"
-ANTHROPIC_DEFAULT_OPUS_MODEL = "{model}"
-ANTHROPIC_DEFAULT_SONNET_MODEL = "{model}"
-ANTHROPIC_DEFAULT_HAIKU_MODEL = "{small}"
-ANTHROPIC_SMALL_FAST_MODEL = "{small}"
-CLAUDE_CODE_SUBAGENT_MODEL = "{subagent}"
+ANTHROPIC_DEFAULT_OPUS_MODEL = "{opus}{opus_effort}"
+ANTHROPIC_DEFAULT_SONNET_MODEL = "{sonnet}{sonnet_effort}"
+ANTHROPIC_DEFAULT_HAIKU_MODEL = "{small}{haiku_effort}"
+ANTHROPIC_DEFAULT_FABLE_MODEL = "{fable}{fable_effort}"
+ANTHROPIC_SMALL_FAST_MODEL = "{small}{haiku_effort}"
+CLAUDE_CODE_SUBAGENT_MODEL = "{subagent}{subagent_effort}"
+CLAUDE_CODE_AUTO_MODE_MODEL = "{auto_mode}"

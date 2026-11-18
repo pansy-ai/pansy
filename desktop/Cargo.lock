@@ -2810,6 +2810,7 @@ dependencies = [
  "dirs",
  "pansy-core",
  "pansy-plugins",
+ "reqwest",
  "rusqlite",
  "serde",
  "serde_json",

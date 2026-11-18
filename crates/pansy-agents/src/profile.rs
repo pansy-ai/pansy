@@ -19,6 +19,9 @@ pub struct Choice {
     pub small_model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent_model: Option<String>,
+    /// Its fields' values (a tier's model, an effort), by their keys.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub fields: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -63,6 +66,11 @@ fn current() -> BTreeMap<String, Choice> {
                     model: v.model.clone()?,
                     small_model: v.small_model.clone(),
                     subagent_model: v.subagent_model.clone(),
+                    fields: v
+                        .fields
+                        .iter()
+                        .filter_map(|f| Some((f.key.to_owned(), f.value.clone()?)))
+                        .collect(),
                 },
             ))
         })
@@ -119,6 +127,12 @@ pub fn apply(name: &str) -> Result<Vec<String>> {
             .and_then(|_| match &choice.subagent_model {
                 Some(subagent) => crate::set_subagent_model(id, Some(subagent)),
                 None => Ok(()),
+            })
+            .and_then(|_| {
+                choice
+                    .fields
+                    .iter()
+                    .try_for_each(|(key, value)| crate::set_field(id, key, Some(value)))
             });
         if let Err(e) = result {
             problems.push(format!("{id}: {e:#}"));

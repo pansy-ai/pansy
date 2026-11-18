@@ -7,6 +7,7 @@
 //! built in; the user's are the files in `agents/` of pansy's folder; an
 //! agent plugin (`magpie.agent`) adds the rest.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -16,7 +17,7 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::files::Format;
-use crate::manifest::{self, Manifest, Vars};
+use crate::manifest::{self, Field, Manifest, Vars};
 
 /// One key to set in an agent's config.
 #[derive(Debug, Clone, PartialEq)]
@@ -49,8 +50,17 @@ pub struct Wiring<'a> {
     /// The model its subagents start on, when they name none; `None`: the
     /// agent's own choice, its key left as the user has it.
     pub subagent_model: Option<&'a str>,
+    /// What the user gave the agent's fields (a tier's model, an effort), by
+    /// their keys; one not among them has none.
+    pub fields: &'a BTreeMap<String, String>,
     /// Every model the gateway offers, for agents that list them.
     pub choices: &'a [String],
+}
+
+/// No field given a value.
+pub fn no_fields() -> &'static BTreeMap<String, String> {
+    static NONE: BTreeMap<String, String> = BTreeMap::new();
+    &NONE
 }
 
 /// One way to install an agent, as its vendor gives it: `via` is what runs
@@ -341,6 +351,23 @@ impl Agent {
         }
     }
 
+    /// Its own updater's arguments and its npm package, for one that has
+    /// an updater of its own.
+    pub fn own_updater(&self) -> Option<(&'static [&'static str], &'static str)> {
+        match self.kind {
+            Kind::Listed(m) if !m.self_update.is_empty() => Some((&m.self_update, m.npm?)),
+            _ => None,
+        }
+    }
+
+    /// What the user may set for it beside its models: a manifest's fields.
+    pub fn fields(&self) -> &'static [Field] {
+        match self.kind {
+            Kind::Listed(m) => &m.fields,
+            Kind::Plugin(_) => &[],
+        }
+    }
+
     /// The keys that point the agent at the gateway, or why they can't be
     /// known: an agent a plugin adds asks its plugin's `connect`.
     pub fn edits_checked(&self, w: &Wiring) -> anyhow::Result<Vec<Edit>> {
@@ -448,7 +475,7 @@ impl Agent {
                 out
             }
             Kind::Listed(m) => {
-                let vars = Vars::of(w);
+                let vars = Vars::of(w, &m.fields);
                 m.set
                     .iter()
                     .filter(|s| !vars.leaves_out(&s.value))
@@ -467,13 +494,13 @@ impl Agent {
     }
 
     /// The keys [`Agent::edits`] leaves out with `w`: those for the
-    /// subagents' model, while the user gives none. One pansy set before
-    /// goes back to what it was.
+    /// subagents' model or a field, while the user gives none. One pansy
+    /// set before goes back to what it was.
     pub fn left_out(&self, w: &Wiring) -> Vec<Edit> {
         let Kind::Listed(m) = self.kind else {
             return Vec::new();
         };
-        let vars = Vars::of(w);
+        let vars = Vars::of(w, &m.fields);
         m.set
             .iter()
             .filter(|s| vars.leaves_out(&s.value))
@@ -508,7 +535,7 @@ impl Agent {
         if let Some(why) = run.unsupported {
             return Err(why.to_owned());
         }
-        let vars = Vars::of(w);
+        let vars = Vars::of(w, &m.fields);
         let mut env: Vec<(String, String)> = run
             .env
             .iter()

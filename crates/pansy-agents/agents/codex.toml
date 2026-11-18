@@ -16,6 +16,11 @@ subagent_every = true
 [files]
 config = "{env:CODEX_HOME|~/.codex}/config.toml"
 
+[[field]]
+key = "effort"
+kind = "effort"
+levels = ["low", "medium", "high", "xhigh"]
+
 [[set]]
 file = "config"
 key = ["model"]
@@ -50,6 +55,11 @@ value = "{key}"
 file = "config"
 key = ["model_providers", "pansy", "http_headers", "x-pansy-subagent-model"]
 value = "{subagent}"
+
+[[set]]
+file = "config"
+key = ["model_reasoning_effort"]
+value = "{effort}"
 
 [base_url]
 file = "config"

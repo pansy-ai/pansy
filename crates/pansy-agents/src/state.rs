@@ -55,6 +55,10 @@ pub struct AgentState {
     /// The model the agent's subagents start on, where it has a key for it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subagent_model: Option<String>,
+    /// What the user gave the agent's fields (a tier's model, an effort),
+    /// by their keys.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub fields: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub touched: Vec<Touched>,
     /// The files pansy changed, by path, while the agent is connected.
