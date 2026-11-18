@@ -711,6 +711,8 @@ export const tallies = signal<Tally[]>([]);
 export const hideAccounts = signal(false);
 /** Routing's context window folded to its head. */
 export const contextShut = signal(false);
+/** How it draws the window: the map of tiles, or magpie's grid of cells. */
+export const contextLook = signal<"map" | "grid">("map");
 export const maskDays = signal(7);
 /** The request the Masking page shows on its own, by its record's key. */
 export const maskOpen = signal<number | null>(null);

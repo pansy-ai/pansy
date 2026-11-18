@@ -1,7 +1,7 @@
 // Routing's context window, by its numbers: the map's tiles, the prompt as
 // counted, the session's headroom.
 import { expect, test } from "nsh/test";
-import { drawnOf, fmtK, headroom, seriesOf, squarify, tilesOf } from "./contextMap";
+import { cellsOf, drawnOf, fmtK, headroom, seriesOf, squarify, tilesOf } from "./contextMap";
 import type { Prompt, Route } from "./model";
 
 const prompt: Prompt = {
@@ -98,4 +98,17 @@ test("tells the headroom by how the session's prompts grew", () => {
   // Steps of 2000, 2500 and 1500: 2000 a request.
   expect(headroom(series, 184_000)).toBe(92);
   expect(headroom(series.slice(0, 1), 184_000)).toBeNull();
+});
+
+test("shares the grid's cells out by tokens, every part at least one", () => {
+  const cells = cellsOf(prompt, 200_000);
+  expect(cells.length).toBe(400);
+  const of = (k: string) => cells.filter((c) => c?.kind === k).length;
+  // 30K of 200K is 60 cells: system 12, tools 8, chat 39, and memory's 49 tokens one.
+  expect([of("system"), of("tools"), of("memory"), of("chat")]).toEqual([12, 8, 1, 39]);
+  expect(cells.filter((c) => c === null).length).toBe(340);
+  // Inside a part, the larger item first, each its share.
+  expect(cells.filter((c) => c?.it?.name === "Bash").length).toBe(5);
+  // No window known: the prompt fills the grid.
+  expect(cellsOf(prompt, 0).some((c) => c === null)).toBe(false);
 });

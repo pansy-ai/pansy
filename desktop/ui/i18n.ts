@@ -1169,6 +1169,8 @@ const ZH_HANS = {
   "Turn %s": "第 %s 轮",
   "%d earlier turns": "更早的 %d 轮",
   "%d more": "另外 %d 项",
+  "Context map": "上下文地图",
+  "Block grid": "方格",
   "read": "读取",
   "user": "用户",
   "project": "项目",
