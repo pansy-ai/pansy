@@ -3,6 +3,7 @@
 #
 #   bump.sh 0.2.0   a release of pansy: the version in nsh.json and both
 #                   workspaces, and the next build
+#   bump.sh 0.2.0-beta.1   the same, for those on the beta channel alone
 #   bump.sh         a release of the window alone: the next build
 #
 # The build grows with every release of either kind: pansy runs a package
@@ -13,8 +14,8 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 export PATH="$HOME/.cargo/bin:$PATH"
 
 version=${1:-}
-if [[ -n $version && ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "usage: bump.sh [MAJOR.MINOR.PATCH]" >&2
+if [[ -n $version && ! $version =~ ^[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
+  echo "usage: bump.sh [MAJOR.MINOR.PATCH[-beta.N]]" >&2
   exit 1
 fi
 # nsh.json and the manifests keep their layout: only these lines change

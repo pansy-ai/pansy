@@ -39,9 +39,9 @@ const zh = (navigator.language || "").toLowerCase().startsWith("zh");
 document.documentElement.lang = zh ? "zh-CN" : "en";
 const T = zh
   ? { title: "下载 Pansy", tagline: "所有智能体的模型，集中管理", download: "下载 %s 版", version: "版本 %s", loading: "正在读取最新版本…", failed: "读取最新版本失败，请稍后再试。", none: "还没有适用于你系统的版本，其他系统的在下面。",
-      how: { linux: "tar -xzf %s\n./%d/install.sh", macos: "tar -xzf %s\nxattr -dr com.apple.quarantine Pansy.app\nmv Pansy.app /Applications/", windows: "解压后运行 %d\\pansy.exe" } }
+      how: { linux: "tar -xzf %s\n./pansy/install.sh", macos: "tar -xzf %s\nxattr -dr com.apple.quarantine Pansy.app\nmv Pansy.app /Applications/", windows: "解压后运行 pansy\\pansy.exe" } }
   : { title: "Download Pansy", tagline: "Every agent's model, one place", download: "Download for %s", version: "Version %s", loading: "Looking for the latest version…", failed: "Couldn't read the latest version. Try again later.", none: "There is no build for your system yet; the others are below.",
-      how: { linux: "tar -xzf %s\n./%d/install.sh", macos: "tar -xzf %s\nxattr -dr com.apple.quarantine Pansy.app\nmv Pansy.app /Applications/", windows: "Unzip it and run %d\\pansy.exe" } };
+      how: { linux: "tar -xzf %s\n./pansy/install.sh", macos: "tar -xzf %s\nxattr -dr com.apple.quarantine Pansy.app\nmv Pansy.app /Applications/", windows: "Unzip it and run pansy\\pansy.exe" } };
 const OS = { linux: "Linux", macos: "macOS", windows: "Windows" };
 const ARCH = { x86_64: "x64", aarch64: "ARM64" };
 const $ = (id) => document.getElementById(id);
@@ -94,7 +94,7 @@ function label(key) {
     primary.textContent = T.download.replace("%s", label(key));
     primary.hidden = false;
     const how = $("how");
-    how.textContent = T.how[key.split("-")[0]].replace("%s", file).replace("%d", file.replace(/\.(tar\.gz|zip)$/, ""));
+    how.textContent = T.how[key.split("-")[0]].replace("%s", file);
     how.hidden = false;
   } else {
     $("status").textContent += ` · ${T.none}`;

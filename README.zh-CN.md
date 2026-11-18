@@ -15,7 +15,7 @@
 </div>
 
 pansy 是 [magpie](https://github.com/yetone/magpie) 的 Rust 重写版，桌面窗口基于
-[Native Shell](https://nsh.dev)（NSH）0.5.1 构建。就像标志的三片花瓣汇聚于一点，
+[Native Shell](https://nsh.dev)（NSH）0.6.0 构建。就像标志的三片花瓣汇聚于一点，
 你的智能体和供应商也汇聚在同一个网关。
 
 <picture>
@@ -103,7 +103,7 @@ export GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:7267 GEMINI_API_KEY=pansy
 # 核心、网关和无窗口的 pansy 命令
 cargo test --workspace && cargo build --release -p pansy-cli
 
-# 桌面应用（NSH 0.5.1）
+# 桌面应用（NSH 0.6.0）
 cd desktop
 nsh check && ./test.sh                     # 在临时 HOME 中运行 Rust 测试和无头 UI 测试
 cargo build -p pansy-desktop && nsh build App.tsx --out target/debug/nsh

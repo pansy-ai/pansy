@@ -12,6 +12,8 @@ v0.2.0/pansy-0.2.0-macos-aarch64.tar.gz
 v0.2.0/pansy-0.2.0-macos-x86_64.tar.gz
 v0.2.0/pansy-0.2.0-windows-x86_64.zip
 v0.2.0/dev.pansy.app-7.nshpkg         the window alone, build 7
+v0.2.0/notes.zh-Hans.md               what changed, in Chinese
+beta/latest.json, beta/…              the same feed, for those on beta
 index.html                            the download page
 ```
 
@@ -49,6 +51,29 @@ A package of the window runs on the Rust of the pansy that is installed, so:
 The build (`nsh.json` `"build"`) grows with every release of either kind:
 a pansy runs a package only when its build is newer than its own.
 
+## Beta
+
+Settings › About › Update channel is stable or beta. A pansy on beta asks
+`beta/latest.json` (`nsh.json`'s `updater.channels`) for a newer pansy; the
+name is all the window passes, the address is the package's. A version with
+a suffix, `0.3.0-beta.1` (`bump.sh 0.3.0-beta.1`, tag `pansy-v0.3.0-beta.1`),
+is written to the beta feed alone. Any other is written to both, unless
+beta is already ahead of it, so those on beta get `0.3.0` after its betas.
+Back on stable, a pansy keeps its beta until a stable version is newer.
+
+The window alone is released for the stable pansy only: NSH reads packages
+from the main feed, and a package is for one version.
+
+## When an update goes in
+
+| | When it is downloaded | When it goes in |
+| :-- | :-- | :-- |
+| The window alone | by the look that finds it | a click on Restart, or the next time pansy starts |
+| pansy itself | by the look that finds it | a click on Restart, or as pansy quits (NSH's `installOnQuit`) |
+| pansy itself, with Settings › About › Update when pansy quits off | on a click on Update | then, once the gateway's requests have finished |
+
+One left to the quit that never came (pansy was killed) is offered again.
+
 ## Releasing
 
 ```sh
@@ -59,8 +84,9 @@ git tag pansy-v0.2.0 && git push origin pansy-main pansy-v0.2.0
 ```
 
 What changed goes in `packaging/notes.md` before the tag (headings, bullets
-and lines; written anew for each release): it is the feed's `notes`, the
-window's What's new. `bump.sh` prints the tag. The tag starts `.github/workflows/release.yml`:
+and lines; written anew for each release), and in `notes.zh-Hans.md` beside
+it in Chinese: the feed's notes, which a pansy asks for in its window's
+language for What's new. `bump.sh` prints the tag. The tag starts `.github/workflows/release.yml`:
 `packaging/build.sh` on each system (for pansy itself), then
 `packaging/publish.sh`, which writes the feed with `nsh update-manifest`,
 signs it, and uploads the archives first and the feed last.
@@ -132,5 +158,5 @@ unpacked from `dist/` finds there what is published next the same way.
   download page says how to clear the quarantine;
   `PANSY_CODESIGN_IDENTITY` signs with a Developer ID), Windows is a folder
   with `pansy.exe`.
-- Channels (beta), staged rollouts and mirrors. What's new has the notes of
+- Staged rollouts and mirrors. What's new has the notes of
   one release, not of every release since the one installed.

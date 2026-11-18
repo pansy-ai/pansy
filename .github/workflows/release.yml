@@ -2,6 +2,7 @@
 # (docs/release.md). A tag says which kind:
 #
 #   pansy-v0.2.0        pansy itself: built on each system, then published
+#   pansy-v0.2.0-beta.1 the same, for those on the beta channel alone
 #   pansy-v0.2.0-ui.7   the window alone (build 7), for the 0.2.0 that is out
 #
 # Secrets (the `release` environment): PANSY_RELEASE_KEY and
@@ -21,7 +22,7 @@ permissions:
 concurrency: release
 
 env:
-  NSH_VERSION: v0.5.1
+  NSH_VERSION: v0.6.0
 
 jobs:
   plan:

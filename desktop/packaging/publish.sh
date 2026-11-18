@@ -7,10 +7,14 @@
 #                                    window, signed by the update key
 #   v<version>/pansy-<version>-<os>-<arch>.tar.gz|.zip   build.sh's archives
 #   v<version>/dev.pansy.app-<build>.nshpkg              the window alone
+#   v<version>/notes.<language>.md   what changed, in the window's other languages
+#   beta/latest.json, …              the same feed for those who chose beta
 #   index.html                       the download page (site/)
 #
 #   publish.sh       a release of pansy: ../dist's archives of nsh.json's
 #                    version, from build.sh on each system
+#                    A version with a suffix (0.2.0-beta.1) goes to the beta
+#                    feed alone, any other to both.
 #   publish.sh ui    a release of the window alone, for the pansy that is
 #                    out: nsh.json's version is that one's, its build newer.
 #                    Only the TSX may have changed: the package runs on that
@@ -24,7 +28,8 @@
 #   PANSY_RELEASE_BUCKET     the bucket (default pansy-releases)
 #   PANSY_RELEASE_NOTES      a text file with what changed, which the window
 #                            shows as What's new (default packaging/notes.md,
-#                            when there is one: headings, bullets, lines)
+#                            when there is one: headings, bullets, lines);
+#                            notes.zh-Hans.md beside it is the same in Chinese
 #   PANSY_PUBLISH_DRY=1      makes ../dist/release as the bucket would be,
 #                            and uploads nothing
 #   PANSY_PUBLISH_FORCE=1    a window-only release although Rust changed
@@ -58,35 +63,93 @@ mkdir -p "$out/v$version"
 scratch=$(mktemp -d)
 trap 'rm -rf -- "$scratch"' EXIT
 
-# what is out now; nothing before the first release
-live=$scratch/live.json
-curl -fsSL "$feed" -o "$live" 2> /dev/null || rm -f -- "$live"
-live_version=
-live_build=0
-if [[ -f $live ]]; then
-  live_version=$(field "$live" version)
-  live_build=$(field "$live" package.build)
-fi
-older() { python3 -c 'import sys
-n = lambda v: [int(x) for x in v.split("-")[0].split(".")]
-sys.exit(0 if n(sys.argv[1]) < n(sys.argv[2]) else 1)' "$1" "$2"; }
+# The feeds this release is written to: "" is the one everyone reads, beta
+# the one nsh.json's channel names. A version with a suffix (0.2.0-beta.1)
+# is for beta alone; any other goes to both, so those on beta get it too.
+beta_feed=$(field nsh.json updater.channels.beta)
+[[ -z $beta_feed || $beta_feed == "$base/beta/latest.json" ]] || fail "nsh.json's updater.channels.beta must be $base/beta/latest.json"
+case $kind-$version in
+  ui-*-*) fail "$version is a beta: the window alone is released for the pansy everyone has" ;;
+  ui-*) feeds=("") ;;
+  app-*-*)
+    [[ -n $beta_feed ]] || fail "$version is a beta, and nsh.json's updater has no beta channel"
+    feeds=(beta)
+    ;;
+  app-*)
+    feeds=("")
+    [[ -z $beta_feed ]] || feeds+=(beta)
+    ;;
+esac
 
-manifest=(--entry . --key "$keys/update.secret" --base-url "$base/v$version/" --out "$out")
+# what a feed has out now; nothing before its first release
+live() {
+  curl -fsSL "$base/${1:+$1/}latest.json" -o "$scratch/live.json" 2> /dev/null || rm -f -- "$scratch/live.json"
+  live_version=
+  live_build=0
+  if [[ -f $scratch/live.json ]]; then
+    live_version=$(field "$scratch/live.json" version)
+    live_build=$(field "$scratch/live.json" package.build)
+  fi
+}
+# semver's order: 0.2.0-beta.1 < 0.2.0-beta.2 < 0.2.0
+older() { python3 -c 'import sys
+def order(v):
+    core, _, pre = v.partition("-")
+    return [int(x) for x in core.split(".")], not pre, [(not x.isdigit(), int(x) if x.isdigit() else 0, x) for x in pre.split(".") if x]
+sys.exit(0 if order(sys.argv[1]) < order(sys.argv[2]) else 1)' "$1" "$2"; }
+
+# what changed: packaging/notes.md, and notes.<language>.md for each other
+# language of the window (notes.zh-Hans.md), which a pansy in it is shown
+manifest=(--entry . --key "$keys/update.secret" --base-url "$base/v$version/")
 notes=${PANSY_RELEASE_NOTES:-packaging/notes.md}
-[[ ! -s $notes ]] || manifest+=(--notes "$notes")
+if [[ -s $notes ]]; then
+  manifest+=(--notes "$notes")
+  shopt -s nullglob
+  for file in "${notes%.md}".*.md; do
+    tag=${file#"${notes%.md}".}
+    manifest+=(--notes "${tag%.md}=$file")
+  done
+  shopt -u nullglob
+fi
 uploads=()
+# a feed's own files, the manifest last: what it names is there. The notes
+# in other languages are written beside it and named beside the archives.
+feed_files() {
+  local dir=${1:+$1/} file object
+  [[ -f $out/${dir}latest.json.sig ]] || fail "the feed was not signed: nsh.json's updater needs publicKey (packaging/keys.sh)"
+  for file in "$out/$dir"notes.*.md; do
+    [[ -f $file ]] || continue
+    object=v$version/$(basename "$file")
+    mv -- "$file" "$out/$object"
+    [[ " ${uploads[*]} " == *" $object "* ]] || uploads+=("$object")
+  done
+  uploads+=("${dir}latest.json.sig" "${dir}latest.json")
+}
 
 if [[ $kind == app ]]; then
-  [[ -z $live_version ]] || older "$live_version" "$version" \
-    || fail "$live_version is out: a release needs a newer version than $version (packaging/bump.sh)"
   shopt -s nullglob
   archives=(../dist/pansy-"$version"-*.tar.gz ../dist/pansy-"$version"-*.zip)
   shopt -u nullglob
   ((${#archives[@]})) || fail "no archives of $version in ../dist (packaging/build.sh, on each system)"
   cp -- "${archives[@]}" "$out/v$version/"
-  nsh update-manifest "$out/v$version"/pansy-* "${manifest[@]}"
   for archive in "$out/v$version"/pansy-*; do uploads+=("v$version/$(basename "$archive")"); done
+  # the download page offers what everyone gets
+  if [[ ${feeds[0]} != beta ]]; then
+    cp packaging/site/index.html "$out/index.html"
+    uploads+=(index.html)
+  fi
+  for feed in "${feeds[@]}"; do
+    live "$feed"
+    if [[ -n $live_version ]] && ! older "$live_version" "$version"; then
+      # a beta ahead of this release stays what beta offers
+      [[ $feed == beta && ${feeds[0]} != beta ]] && continue
+      fail "$live_version is out${feed:+ on $feed}: a release needs a newer version than $version (packaging/bump.sh)"
+    fi
+    nsh update-manifest "$out/v$version"/pansy-* "${manifest[@]}" --out "$out/$feed"
+    feed_files "$feed"
+  done
 else
+  live ""
   [[ $live_version == "$version" ]] \
     || fail "the pansy that is out is ${live_version:-none}, nsh.json says $version: the window alone is released for the one that is out"
   ((build > ${live_build:-0})) || fail "build $build is not newer than the window's that is out ($live_build): packaging/bump.sh"
@@ -103,7 +166,7 @@ else
     echo "publish.sh: no tag $tag to compare with: not checked that Rust is as released" >&2
   fi
   # the archives that are out stay in the feed: fetched to be named again
-  python3 - "$live" "$base/v$version/" > "$scratch/archives" <<'PY'
+  python3 - "$scratch/live.json" "$base/v$version/" > "$scratch/archives" <<'PY'
 import json, sys
 from urllib.parse import urljoin
 for asset in json.load(open(sys.argv[1]))["platforms"].values():
@@ -129,12 +192,12 @@ PY
   shopt -s nullglob
   archives=("$scratch"/out/*)
   shopt -u nullglob
-  nsh update-manifest "${archives[@]}" --package "$package" "${manifest[@]}"
+  nsh update-manifest "${archives[@]}" --package "$package" "${manifest[@]}" --out "$out"
   uploads+=("v$version/$(basename "$package")")
+  cp packaging/site/index.html "$out/index.html"
+  uploads+=(index.html)
+  feed_files ""
 fi
-[[ -f $out/latest.json.sig ]] || fail "the feed was not signed: nsh.json's updater needs publicKey (packaging/keys.sh)"
-cp packaging/site/index.html "$out/index.html"
-uploads+=(index.html latest.json.sig latest.json)
 
 if [[ -n ${PANSY_PUBLISH_DRY:-} ]]; then
   echo "publish.sh: dry run; the bucket would get, from $out:"
@@ -145,6 +208,7 @@ for object in "${uploads[@]}"; do
   case $object in
     *.json) type=application/json cache="public, max-age=60" ;;
     *.sig) type=text/plain cache="public, max-age=60" ;;
+    *.md) type="text/markdown; charset=utf-8" cache="public, max-age=60" ;;
     *.html) type="text/html; charset=utf-8" cache="public, max-age=300" ;;
     *.zip) type=application/zip cache="public, max-age=31536000, immutable" ;;
     *.tar.gz) type=application/gzip cache="public, max-age=31536000, immutable" ;;

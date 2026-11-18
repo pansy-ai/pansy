@@ -6,6 +6,9 @@
   "rust": "native",
   "updater": {
     "url": "https://releases.pansy.dev/latest.json",
+    "channels": {
+      "beta": "https://releases.pansy.dev/beta/latest.json"
+    },
     "publicKey": "7lSNf3rGpgsfxCn7q4xAAB9XiKrVnsLMDoNW2E9a/Ng=",
     "packages": {
       "roots": [
