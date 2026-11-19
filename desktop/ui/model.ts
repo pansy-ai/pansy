@@ -49,6 +49,22 @@ export interface Allowance {
   readAt: string;
 }
 
+/** What is left on one API key, as its vendor's or its relay's balance query says (`Subscriptions.balances`). */
+export interface Balance {
+  provider: string;
+  account: string;
+  /** The provider's name. */
+  name: string;
+  /** The key's name, when the provider has several keys on. */
+  user?: string;
+  /** `$12.50`, `¥110.00 · $3.00`. */
+  amount?: string;
+  /** A relay key's own spending windows. */
+  windows?: AllowanceWindow[];
+  error?: string;
+  readAt: string;
+}
+
 /** Where a sign-in begun from the window stands (`Subscriptions.signIn`). */
 export interface SignInState {
   id: string;
@@ -843,6 +859,18 @@ export const allowances = signal<Allowance[] | null>(null);
 export async function loadAllowances(fresh = false) {
   try {
     allowances.set(JSON.parse(await Subscriptions.allowances(fresh)) as Allowance[]);
+  } catch (error) {
+    toast(reason(error), "error");
+  }
+}
+
+/** The API keys' balances, as last read; null before the first reading. */
+export const balances = signal<Balance[] | null>(null);
+
+/** Reads the keys' balances: kept a minute, or asked again (`fresh`). */
+export async function loadBalances(fresh = false) {
+  try {
+    balances.set(JSON.parse(await Subscriptions.balances(fresh)) as Balance[]);
   } catch (error) {
     toast(reason(error), "error");
   }

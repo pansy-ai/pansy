@@ -3,6 +3,7 @@
 //! to, routing groups, profiles, settings, the usage log and what masking
 //! kept from vendors, all kept as files under [`paths::home`].
 
+pub mod balance;
 pub mod config;
 pub mod fsutil;
 pub mod group;

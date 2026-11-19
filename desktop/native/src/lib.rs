@@ -605,6 +605,24 @@ impl Subscriptions {
         .map_err(|e| e.to_string())?
     }
 
+    /// What is left on each API key whose balance pansy can read, beside
+    /// the allowances: a vendor's own query, or a relay's it finds; read
+    /// within the last minute or asked again (`fresh`): `[{provider,
+    /// account, name, user, amount, windows, error, readAt}]` (JSON).
+    pub async fn balances(fresh: bool) -> Result<String, String> {
+        blocking(move || {
+            let runtime = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| e.to_string())?;
+            Ok(to_json(
+                &runtime.block_on(pansy_core::balance::balances(fresh)),
+            ))
+        })
+        .await
+        .map_err(|e| e.to_string())?
+    }
+
     /// Signs out an account signed in from pansy: its tokens are deleted.
     pub async fn sign_out(kind: String, account: String) -> Result<(), String> {
         off(move || subscription::sign_out(kind_of(&kind)?, &account)).await
