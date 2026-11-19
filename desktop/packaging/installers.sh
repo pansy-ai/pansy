@@ -99,12 +99,13 @@ case $os in
     [[ -n $iscc ]] || fail "Inno Setup 6 is not installed (winget install JRSoftware.InnoSetup, or PANSY_ISCC)"
     # Windows' version numbers are four numbers: the version's own, and the build
     numbers=${version%%-*}.$build
-    # ISCC's switches start with /, which Git Bash would take for paths
+    # ISCC's switches start with /, which Git Bash would take for paths; the
+    # paths are whole, since ISCC reads others from the script's directory
     MSYS2_ARG_CONV_EXCL='*' "$iscc" /Q \
       "/DVersion=$version" "/DNumbers=$numbers" \
-      "/DSource=$(cygpath -w "$staged")" \
-      "/DOutput=$(cygpath -w "$(cd ../dist && pwd)")" "/DOutputName=$name-setup" \
-      "$(cygpath -w packaging/pansy.iss)"
+      "/DSource=$(cygpath -aw "$staged")" \
+      "/DOutput=$(cygpath -aw ../dist)" "/DOutputName=$name-setup" \
+      "$(cygpath -aw packaging/pansy.iss)"
     made+=("../dist/$name-setup.exe")
     ;;
 
