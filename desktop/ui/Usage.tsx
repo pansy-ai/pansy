@@ -4,9 +4,9 @@
 // latest requests. Counted on this computer; prompts and replies are never
 // kept. With a subscription signed in to, its accounts' allowances first.
 import { effect, signal, Text, View } from "nsh";
-import { AllowanceList } from "./Allowances";
+import { AllowanceList, BalanceList } from "./Allowances";
 import { locale, tr, trn } from "./i18n";
-import { agents, allowances, compact, loadAllowances, loadUsage, providers, usage, usageDays, type Totals } from "./model";
+import { agents, allowances, balances, compact, loadAllowances, loadBalances, loadUsage, providers, usage, usageDays, type Totals } from "./model";
 import { agentLogo, Badge, Icon, IconButton, List, Logo, Mono, Page, providerLogo, Row, RowHead, Segs, type LogoName } from "./parts";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -143,10 +143,12 @@ function Requests() {
 
 export function UsagePage() {
   const subscribed = () => providers().some((p) => p.subscription);
-  // Read when the page first shows with a subscription; kept a minute.
+  // Read when the page first shows (the allowances with a subscription); kept a minute.
   effect(() => {
     if (subscribed() && allowances() === null) void loadAllowances();
   });
+  if (balances() === null) void loadBalances();
+  const balanced = () => (balances()?.length ?? 0) > 0;
   const total = () => usage()?.total;
   const hit = () => {
     const t = total();
@@ -175,12 +177,22 @@ export function UsagePage() {
         <IconButton icon="sync" label={tr("Refresh")} onPress={loadUsage} />
         <Text class="text-[12px] text-muted-foreground">{trn(total()?.requests ?? 0, "%d call", "%d calls", total()?.requests ?? 0)}</Text>
       </View>
-      <If when={subscribed()}>
-        <RowHead label={tr("Allowances")} note={tr("what each subscription account has used, as its vendor says")}>
-          <IconButton icon="sync" label={tr("Read again")} testID="allowances-refresh" onPress={() => void loadAllowances(true)} />
+      <If when={subscribed() || balanced()}>
+        <RowHead label={tr("Allowances")} note={balanced() ? tr("what each subscription account has used and each key has left, as its vendor says") : tr("what each subscription account has used, as its vendor says")}>
+          <IconButton
+            icon="sync"
+            label={tr("Read again")}
+            testID="allowances-refresh"
+            onPress={() => Promise.all([subscribed() ? loadAllowances(true) : null, loadBalances(true)])}
+          />
         </RowHead>
-        <If when={allowances()} else={<Text class="px-1 text-[12px] text-muted-foreground">{tr("Reading the allowances…")}</Text>}>
-          <AllowanceList />
+        <If when={subscribed()}>
+          <If when={allowances()} else={<Text class="px-1 text-[12px] text-muted-foreground">{tr("Reading the allowances…")}</Text>}>
+            <AllowanceList />
+          </If>
+        </If>
+        <If when={balanced()}>
+          <BalanceList />
         </If>
       </If>
       <If

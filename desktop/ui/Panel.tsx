@@ -4,13 +4,13 @@
 // away. Its head has Update once a newer pansy is out, and the window's
 // tools (look again, the main window, Settings). Its tabs: Agents, a quiet
 // line each, the model each starts on in words at the right, a line opened
-// in place to connect its agent and pick its models; Usage, a period's
+// in place to connect its agent and pick its models; Allowances, with a
+// subscription signed in or a key whose balance pansy reads, each account's
+// rings and the keys' balances (ui/Allowances.tsx); Usage, a period's
 // totals, its days and its providers; Routing, today's count, a small
 // stage of who asked lately and where it went, and the latest requests,
 // where each went and how fast it wrote. Its foot has the profiles (on
-// Agents), what just happened, and Quit. magpie's Allowances tab shows
-// subscriptions' and keys' allowances, which pansy doesn't read yet: as
-// magpie's with none, it has no tab.
+// Agents), what just happened, and Quit.
 import { colorScheme, computed, createAnimatedValue, createMotion, effect, reduceMotion, Scroll, signal, Text, token, View, type JSX } from "nsh";
 import { Menu, MenuItem, Popover } from "nsh/base";
 import { Application, Window } from "nsh/desktop";
@@ -29,11 +29,13 @@ import {
   isBusy,
   loadAgents,
   loadAllowances,
+  loadBalances,
   loadPage,
   loadProfiles,
   loadRouting,
   loadTrace,
   loadUsageToday,
+  balances,
   profiles,
   providers,
   reason,
@@ -52,7 +54,7 @@ import {
 } from "./model";
 import { ChoiceLogo, ModelPicker } from "./Picker";
 import { ProfilesBar } from "./ProfilesBar";
-import { AllowanceList } from "./Allowances";
+import { allowancesShown, PanelAllowances } from "./Allowances";
 import { adding } from "./Providers";
 import { agentName, cancelled, clock, dur, failed, hueOf, providerName, short, speedOf, who } from "./routeStory";
 import { spin, wayOf, Wires, type Wire } from "./Routing";
@@ -66,7 +68,7 @@ const WIDTH = 440;
 const LEAST = 220;
 const MOST = 560;
 
-type Tab = "agents" | "usage" | "allowances" | "routing";
+type Tab = "agents" | "allowances" | "usage" | "routing";
 /** The tab shown, the one last picked. */
 const tab = signal<Tab>("agents");
 /** The agent whose line is opened, and the picker open in it. */
@@ -89,12 +91,17 @@ async function loadSpent() {
   }
 }
 
+/** Reads the subscriptions' allowances (with one signed in) and the keys' balances: kept a minute, or asked again (`fresh`). */
+function readAllowances(fresh = false): Promise<unknown> {
+  return Promise.all([providers().some((p) => p.subscription) ? loadAllowances(fresh) : null, loadBalances(fresh)]);
+}
+
 /** Shows tab `t`, read again. */
 function show(t: Tab) {
   tab.set(t);
   profilesOpen.set(false);
   if (t === "usage") void loadSpent();
-  if (t === "allowances") void loadAllowances();
+  if (t === "allowances") void readAllowances();
   if (t === "routing") {
     loadTrace();
     void loadUsageToday();
@@ -104,7 +111,7 @@ function show(t: Tab) {
 /** The head's refresh: what the tab shown draws, read again. */
 function refresh(): Promise<unknown> {
   if (tab() === "usage") return loadSpent();
-  if (tab() === "allowances") return loadAllowances(true);
+  if (tab() === "allowances") return readAllowances(true);
   if (tab() === "routing") return Promise.all([loadRouting(), loadUsageToday()]);
   return loadPage("agents");
 }
@@ -144,6 +151,8 @@ export async function togglePanel() {
     });
     void loadAgents();
     void loadProfiles();
+    // whether there is an Allowances tab: the keys' balances, read as it opens
+    if (tab() !== "allowances") void readAllowances();
     show(tab());
     void Place.outsideClick(TITLE).then(
       (outside) => outside && panel.close(),
@@ -201,14 +210,18 @@ function Head() {
   );
 }
 
-/** The tabs under the head, the one shown on a raised card: Agents (with how many), Usage, Allowances (with a subscription), Routing. */
+/** The tabs under the head, the one shown on a raised card, as magpie's: Agents (with how many), Allowances (with a subscription or a balance), Usage, Routing. */
 function Tabs() {
   const tabs = (): { id: Tab; label: string; count: string }[] => [
     { id: "agents", label: tr("Agents"), count: here().length ? String(here().length) : "" },
+    ...(allowancesShown() ? [{ id: "allowances" as Tab, label: tr("Allowances"), count: "" }] : []),
     { id: "usage", label: tr("Usage"), count: "" },
-    ...(providers().some((p) => p.subscription) ? [{ id: "allowances" as Tab, label: tr("Allowances"), count: "" }] : []),
     { id: "routing", label: tr("Routing"), count: "" },
   ];
+  // the tab gone once read (its last balance with it): Agents in its place
+  effect(() => {
+    if (tab() === "allowances" && balances() !== null && !allowancesShown()) tab.set("agents");
+  });
   return (
     <View class="mx-3 mb-2 flex-row gap-[2px]">
       <Each of={tabs()} key={(t) => t.id}>
@@ -936,7 +949,7 @@ function QuickPanel(props: { room: number }) {
             <UsageTab />
           </If>
           <If when={tab() === "allowances"}>
-            <AllowanceList compact />
+            <PanelAllowances edge={edge()} />
           </If>
           <If when={tab() === "routing"}>
             <RoutingTab />
