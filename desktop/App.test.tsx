@@ -493,24 +493,24 @@ test("masks a key in Try it, and opens the Masking page", async () => {
   expect(app.texts().join(" ")).not.toContain("Q2xhdWRlIGNvZGUg");
 });
 
-test("brings a provider over from magpie, and offers it no more", async () => {
+test("brings a provider over from CC Switch, and offers it no more", async () => {
   const app = await launch();
   await app.waitFor("id:page-agents");
   await app.press("id:nav-providers");
   await app.waitFor("id:import-found-review");
   await app.press("id:import-found-review");
   await app.waitFor("id:import-modal");
-  await app.waitFor("id:import-magpie-magpie-relay");
-  expect(app.texts()).toContain("Magpie Relay");
-  expect(app.texts()).toContain("relay.example.com · sk-m••••6789 · 1 model");
+  await app.waitFor("id:import-cc-switch-claude/a");
+  expect(app.texts()).toContain("Switch Relay");
+  expect(app.texts()).toContain("relay.example.com · sk-s••••6789 · 1 model");
   await app.waitFor("id:import-go");
   await app.press("id:import-go");
-  await app.waitFor("id:provider-magpie-relay");
+  await app.waitFor("id:provider-switch-relay");
   await app.waitFor("id:import-found-review", { state: "gone" });
   // the import again says it is here
   await app.press("id:provider-add");
   await app.press("id:add-import");
-  await app.waitFor("id:import-magpie-magpie-relay");
+  await app.waitFor("id:import-cc-switch-claude/a");
   await app.waitFor("text:Already added");
 });
 

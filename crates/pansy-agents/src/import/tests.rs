@@ -30,18 +30,9 @@ fn reads_every_app_and_imports_the_picks() {
     let (home, _lock) = scratch();
     let h = home.path();
 
+    // magpie's providers are there, and not offered for now
     fs::create_dir_all(h.join(".config/magpie")).unwrap();
-    fs::write(
-        h.join(".config/magpie/providers.json"),
-        r#"{"providers": [
-          {"id": "nofx", "name": "nofx-claude", "key": "sk-nofx-1", "keyName": "main", "anthropic": "https://api.nofx.one",
-           "keys": [{"name": "spare", "key": "sk-nofx-2", "off": true}], "models": ["claude-x"], "headers": {"X-Team": "a"}},
-          {"id": "deepseek", "name": "DeepSeek", "preset": "deepseek", "key": "sk-ds", "chat": "https://api.deepseek.com/v1", "anthropic": "https://api.deepseek.com/anthropic"},
-          {"id": "vx", "name": "Vertex", "preset": "google-vertex"},
-          {"id": "gone", "name": "Gone", "hidden": true}
-        ]}"#,
-    )
-    .unwrap();
+    fs::write(h.join(".config/magpie/providers.json"), MAGPIE).unwrap();
 
     fs::create_dir_all(h.join(".cc-switch")).unwrap();
     let db = Connection::open(h.join(".cc-switch/cc-switch.db")).unwrap();
@@ -71,54 +62,21 @@ fn reads_every_app_and_imports_the_picks() {
     )
     .unwrap();
 
-    // One here already: DeepSeek with magpie's key.
+    // One here already: DeepSeek.
     pansy_core::manage::add_preset("deepseek", Some("sk-ds"), "", Default::default()).unwrap();
 
     let all = sources(true);
     assert_eq!(
         all.iter().map(|s| s.id).collect::<Vec<_>>(),
-        [
-            "magpie",
-            "cc-switch",
-            "alma",
-            "claude-code",
-            "codex",
-            "opencode"
-        ]
+        ["cc-switch", "claude-code", "codex", "opencode"]
     );
-    assert!(!all.iter().find(|s| s.id == "alma").unwrap().found);
-
-    let nofx = item(&all, "magpie", "nofx");
-    let p = nofx.provider.as_ref().unwrap();
-    assert_eq!(
-        (p.id.as_str(), p.name.as_str(), nofx.status),
-        ("nofx", "nofx-claude", Status::New)
-    );
-    assert_eq!(p.accounts.len(), 2);
-    assert_eq!(
-        (p.accounts[0].label.as_str(), p.accounts[1].enabled),
-        ("main", false)
-    );
-    assert_eq!(p.headers.get("X-Team").map(String::as_str), Some("a"));
-    assert_eq!(p.manual_models, ["claude-x"]);
-    let ds = item(&all, "magpie", "deepseek");
-    assert_eq!(
-        (ds.status, ds.existing.as_str()),
-        (Status::Same, "DeepSeek")
-    );
-    assert_eq!(
-        ds.provider.as_ref().unwrap().preset.as_deref(),
-        Some("deepseek")
-    );
-    assert!(!item(&all, "magpie", "vx").skip.is_empty());
-    assert!(all[0].items.iter().all(|it| it.reference != "gone"));
 
     // The relay set up for Claude Code and for Codex is one provider.
     let relay = item(&all, "cc-switch", "claude/a");
     let p = relay.provider.as_ref().unwrap();
     assert_eq!(relay.from, "Claude Code, Codex");
     assert_eq!(p.protocols(), [Protocol::Anthropic, Protocol::Responses]);
-    assert!(all[1].items.iter().all(|it| it.reference != "codex/b"));
+    assert!(all[0].items.iter().all(|it| it.reference != "codex/b"));
     assert_eq!(item(&all, "cc-switch", "claude/c").skip, readers_sign_in());
     assert_eq!(
         item(&all, "cc-switch", "claude/d").skip,
@@ -144,20 +102,18 @@ fn reads_every_app_and_imports_the_picks() {
 
     // OpenCode's DeepSeek key is another key of the DeepSeek here.
     let oc = item(&all, "opencode", "deepseek");
-    assert_eq!((oc.status, oc.key_of.as_str()), (Status::New, "deepseek"));
+    assert_eq!((oc.status, oc.key_of.as_str()), (Status::Taken, "deepseek"));
     assert!(picked(oc));
     assert!(!item(&all, "opencode", "github-copilot").skip.is_empty());
     assert_eq!(item(&all, "opencode", "nowhere").skip, "it has no base URL");
 
-    // Found unasked: magpie's, CC Switch's and Codex's, not OpenCode's.
+    // Found unasked: CC Switch's and Codex's, not OpenCode's.
     let found = found().unwrap();
-    assert_eq!(found.len(), 5, "{found:?}");
+    assert_eq!(found.len(), 4, "{found:?}");
     ignore(&[found[0]["fingerprint"].as_str().unwrap().to_owned()]).unwrap();
-    assert_eq!(super::found().unwrap().len(), 4);
+    assert_eq!(super::found().unwrap().len(), 3);
 
     let added = import(&[
-        pick("magpie", "nofx", Mode::Add),
-        pick("magpie", "deepseek", Mode::Add),
         pick("cc-switch", "claude/a", Mode::Add),
         pick("cc-switch", "claude/e", Mode::Add),
         pick("cc-switch", "claude/f", Mode::Add),
@@ -166,22 +122,16 @@ fn reads_every_app_and_imports_the_picks() {
     .unwrap();
     assert_eq!(
         added.names,
-        [
-            "nofx-claude",
-            "Relay",
-            "NVIDIA #1",
-            "NVIDIA #2",
-            "DeepSeek (DeepSeek)"
-        ]
+        ["Relay", "NVIDIA #1", "NVIDIA #2", "DeepSeek (DeepSeek)"]
     );
     let ps = pansy_core::config::load_providers().unwrap();
     assert_eq!(
         ps.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
-        ["deepseek", "nofx", "relay", "nvidia-1"]
+        ["deepseek", "relay", "nvidia-1"]
     );
-    assert_eq!(added.ids, ["nofx", "relay", "nvidia-1"]);
+    assert_eq!(added.ids, ["relay", "nvidia-1"]);
     // the two NVIDIA entries, a key each, are one provider with both keys
-    let nim = &ps[3];
+    let nim = &ps[2];
     assert_eq!(
         nim.accounts
             .iter()
@@ -193,7 +143,7 @@ fn reads_every_app_and_imports_the_picks() {
 
     // Read again, they are all here.
     let all = sources(true);
-    assert_eq!(item(&all, "magpie", "nofx").status, Status::Same);
+    assert_eq!(item(&all, "cc-switch", "claude/a").status, Status::Same);
     assert_eq!(item(&all, "opencode", "deepseek").status, Status::Same);
     // the apps' files are as they were
     assert!(
@@ -201,6 +151,44 @@ fn reads_every_app_and_imports_the_picks() {
             .unwrap()
             .contains("sk-mine")
     );
+}
+
+const MAGPIE: &str = r#"{"providers": [
+  {"id": "nofx", "name": "nofx-claude", "key": "sk-nofx-1", "keyName": "main", "anthropic": "https://api.nofx.one",
+   "keys": [{"name": "spare", "key": "sk-nofx-2", "off": true}], "models": ["claude-x"], "headers": {"X-Team": "a"}},
+  {"id": "deepseek", "name": "DeepSeek", "preset": "deepseek", "key": "sk-ds", "chat": "https://api.deepseek.com/v1", "anthropic": "https://api.deepseek.com/anthropic"},
+  {"id": "vx", "name": "Vertex", "preset": "google-vertex"},
+  {"id": "gone", "name": "Gone", "hidden": true}
+]}"#;
+
+/// magpie's reader, kept while its providers are not offered.
+#[test]
+fn reads_magpies_providers() {
+    let (home, _lock) = scratch();
+    let path = home.path().join("providers.json");
+    fs::write(&path, MAGPIE).unwrap();
+    let items = readers::read_magpie(&path, pansy_core::settings::DEFAULT_PORT).unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|it| it.reference.as_str())
+            .collect::<Vec<_>>(),
+        ["nofx", "deepseek", "vx"]
+    );
+    let p = items[0].provider.as_ref().unwrap();
+    assert_eq!((p.id.as_str(), p.name.as_str()), ("nofx", "nofx-claude"));
+    assert_eq!(p.accounts.len(), 2);
+    assert_eq!(
+        (p.accounts[0].label.as_str(), p.accounts[1].enabled),
+        ("main", false)
+    );
+    assert_eq!(p.headers.get("X-Team").map(String::as_str), Some("a"));
+    assert_eq!(p.manual_models, ["claude-x"]);
+    assert_eq!(
+        items[1].provider.as_ref().unwrap().preset.as_deref(),
+        Some("deepseek")
+    );
+    assert!(!items[2].skip.is_empty());
 }
 
 fn readers_sign_in() -> &'static str {

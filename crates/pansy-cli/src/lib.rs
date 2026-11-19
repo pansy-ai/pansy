@@ -111,8 +111,8 @@ Providers
   provider models <id> [--refresh]    a provider's models, fetched again with --refresh
   provider model add|remove <id> <model>
 
-Import (the providers magpie, CC Switch, Alma, Claude Code, Codex and OpenCode have set
-up, read only)
+Import (the providers CC Switch, Claude Code, Codex and OpenCode have set up, read
+only)
   import                              what each app has, and whether pansy has it
   import <app> [ref…] [as=add|key|replace]
                                       bring an app's providers over (without refs, the ones

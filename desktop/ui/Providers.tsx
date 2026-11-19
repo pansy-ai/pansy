@@ -1318,7 +1318,7 @@ function Editor(props: { provider: Provider }) {
 }
 
 /** The logo of an app pansy imports from. */
-const APP_LOGOS: Record<string, string> = { "claude-code": "claudecode-color", codex: "codex-color", opencode: "opencode", magpie: "magpie", "cc-switch": "cc-switch", alma: "alma" };
+const APP_LOGOS: Record<string, string> = { "claude-code": "claudecode-color", codex: "codex-color", opencode: "opencode", "cc-switch": "cc-switch" };
 
 /** How one entry of the import comes in, as the user picked. */
 type ImportPick = { on: boolean; mode: "add" | "replace" | "key"; name: string };

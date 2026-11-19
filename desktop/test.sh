@@ -56,9 +56,9 @@ printf '{"type":"text","text":"Add a health check"}\n' > "$oc/part/msg_1/prt_1.j
 printf '{"id":"msg_2","role":"assistant","modelID":"gpt-5.1","tokens":{"input":900,"output":80,"reasoning":0,"cache":{"read":0,"write":0}},"time":{"created":1794297602000,"completed":1794297660000}}\n' > "$oc/message/$oc_id/msg_2.json"
 printf '{"type":"text","text":"Added GET /health."}\n' > "$oc/part/msg_2/prt_2.json"
 find "$oc" -type f -exec touch -t 202611100801 {} +
-# magpie's providers, which the Providers page offers to bring over
-mkdir -p "$scratch/home/.config/magpie"
-printf '{"providers":[{"id":"magpie-relay","name":"Magpie Relay","key":"sk-magpie-test-0123456789","chat":"https://relay.example.com/v1","models":["relay-1"]}]}\n' > "$scratch/home/.config/magpie/providers.json"
+# CC Switch's providers, which the Providers page offers to bring over
+mkdir -p "$scratch/home/.cc-switch"
+printf '{"claude":{"providers":{"a":{"name":"Switch Relay","settingsConfig":{"env":{"ANTHROPIC_BASE_URL":"https://relay.example.com","ANTHROPIC_AUTH_TOKEN":"sk-switch-test-0123456789","ANTHROPIC_MODEL":"relay-1"}}}}}}\n' > "$scratch/home/.cc-switch/config.json"
 env PATH="$scratch/bin:$PATH" HOME="$scratch/home" PANSY_HOME="$scratch/home/.config/pansy" \
   XDG_CONFIG_HOME="$scratch/home/.config" XDG_DATA_HOME="$scratch/home/.local/share" \
   XDG_STATE_HOME="$scratch/home/.local/state" XDG_CACHE_HOME="$scratch/home/.cache" \

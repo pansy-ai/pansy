@@ -7,7 +7,6 @@ import { colorScheme, Image, Scroll, signal, Text, token, View, type JSX, type T
 import { Button as BaseButton, Checkbox, Input as BaseInput, Menu, MenuItem, Switch as BaseSwitch, Toggle, ToggleGroup, Tooltip } from "nsh/base";
 import { tr } from "./i18n";
 import { ICONS } from "./icons";
-import alma from "./logos/alma.png";
 import atomcode from "./logos/atomcode.png";
 import ccSwitch from "./logos/cc-switch.png";
 import crush from "./logos/crush.png";
@@ -83,7 +82,7 @@ export function EffortBars(props: { lit: number; color?: Color; size?: number })
 }
 
 /** The logos that are pictures rather than SVG. */
-const PICTURES = { alma, atomcode, "cc-switch": ccSwitch, crush, gpustack, "mlx-serve": mlxServe, mothx, snow, zcode };
+const PICTURES = { atomcode, "cc-switch": ccSwitch, crush, gpustack, "mlx-serve": mlxServe, mothx, snow, zcode };
 
 export type LogoName = keyof typeof LOGOS | keyof typeof PICTURES | "generic";
 

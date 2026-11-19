@@ -1,6 +1,5 @@
 //! Providers another app has set up, offered to bring over as magpie offers
-//! them: magpie's own, CC Switch's, Alma's, Claude Code's and Codex's
-//! settings, and OpenCode's sign-ins. Each app is only read. Every entry is
+//! them: CC Switch's, Claude Code's and Codex's settings, and OpenCode's sign-ins. Each app is only read. Every entry is
 //! made into the provider pansy would add and matched against the providers
 //! here: new, already here, or at an id in use (or at an address one has,
 //! to join it as one more key). Nothing is added until the user picks, and

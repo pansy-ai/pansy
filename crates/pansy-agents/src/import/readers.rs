@@ -28,24 +28,10 @@ pub(super) struct Reader {
 
 pub(super) const READERS: &[Reader] = &[
     Reader {
-        id: "magpie",
-        name: "magpie",
-        path: magpie_path,
-        read: read_magpie,
-        asked: false,
-    },
-    Reader {
         id: "cc-switch",
         name: "CC Switch",
         path: cc_switch_path,
         read: read_cc_switch,
-        asked: false,
-    },
-    Reader {
-        id: "alma",
-        name: "Alma",
-        path: alma_path,
-        read: read_alma,
         asked: false,
     },
     Reader {
@@ -117,28 +103,20 @@ fn open_read_only(path: &Path) -> Result<Connection> {
     Ok(db)
 }
 
-/// The system's folder for apps' settings, under `HOME` as tests set it.
-fn config_dir() -> PathBuf {
-    if cfg!(target_os = "macos") {
-        return user_home().join("Library/Application Support");
-    }
-    if cfg!(windows) {
-        return dirs::config_dir().unwrap_or_else(|| user_home().join("AppData/Roaming"));
-    }
-    std::env::var_os("XDG_CONFIG_HOME")
-        .filter(|x| !x.is_empty())
-        .map_or_else(|| user_home().join(".config"), PathBuf::from)
-}
-
 // ---- magpie ----------------------------------------------------------------
 
+// Not offered for now: no entry in `READERS`. The reader is kept, and tested
+// on its own, for the day it is offered again.
+
+#[allow(dead_code)]
 fn magpie_path() -> PathBuf {
     pansy_plugins::import::magpie_dir().join("providers.json")
 }
 
 /// magpie's own providers, by the ids agents know them by: a key and the
 /// others it switches to, endpoints, models, headers and proxy.
-fn read_magpie(path: &Path, port: u16) -> Result<Vec<Item>> {
+#[allow(dead_code)]
+pub(super) fn read_magpie(path: &Path, port: u16) -> Result<Vec<Item>> {
     let file: Value =
         serde_json::from_str(&std::fs::read_to_string(path)?).context("magpie's providers.json")?;
     let mut out = Vec::new();
@@ -488,91 +466,6 @@ fn toml_value(text: &str) -> Value {
         .map_or(Value::Null, |d| item(d.as_item()))
 }
 
-// ---- Alma ------------------------------------------------------------------
-
-fn alma_path() -> PathBuf {
-    config_dir().join("alma").join("chat_threads.db")
-}
-
-/// Alma's built-in provider types by the preset they are.
-fn alma_preset(kind: &str) -> Option<&'static presets::Preset> {
-    let id = match kind {
-        "openai" | "anthropic" | "google" | "deepseek" | "openrouter" | "moonshot" | "xai"
-        | "mistral" | "groq" | "aihubmix" | "together" | "fireworks" | "siliconflow" | "ollama"
-        | "lmstudio" | "opencode-go" => kind,
-        _ => return None,
-    };
-    presets::find(id)
-}
-
-/// Alma's types that are an app's own sign-in, not a key.
-const ALMA_SIGN_INS: &[&str] = &[
-    "acp",
-    "copilot",
-    "claude-subscription",
-    "codex-subscription",
-    "gemini-cli",
-    "antigravity",
-    "cursor",
-];
-
-fn read_alma(path: &Path, port: u16) -> Result<Vec<Item>> {
-    let db = open_read_only(path)?;
-    let mut q = db
-        .prepare("SELECT id, name, type, COALESCE(api_key,''), COALESCE(models,''), COALESCE(base_url,''), enabled, COALESCE(api_format,''), COALESCE(is_response_api,0), COALESCE(custom_headers,'') FROM providers ORDER BY created_at")
-        .map_err(|e| anyhow!("Alma's database: {e}"))?;
-    let rows = q.query_map([], |r| {
-        Ok((
-            r.get::<_, String>(0)?,
-            r.get::<_, String>(1)?,
-            r.get::<_, String>(2)?,
-            r.get::<_, String>(3)?,
-            r.get::<_, String>(4)?,
-            r.get::<_, String>(5)?,
-            r.get::<_, bool>(6)?,
-            r.get::<_, String>(7)?,
-            r.get::<_, bool>(8)?,
-            r.get::<_, String>(9)?,
-        ))
-    })?;
-    let mut out = Vec::new();
-    for (id, name, kind, key, models, base, enabled, format, responses, custom) in rows.flatten() {
-        let models = strings(serde_json::from_str::<Value>(&models).ok().as_ref());
-        let mut eps = Eps::default();
-        if ALMA_SIGN_INS.contains(&kind.as_str()) {
-            out.push(skipped(
-                &id,
-                "",
-                &name,
-                "it is a sign-in, not a key; add the subscription in pansy",
-            ));
-            continue;
-        }
-        match alma_preset(&kind) {
-            _ if kind == "azure" && base.is_empty() => {
-                out.push(skipped(&id, "", &name, "it has no Azure OpenAI endpoint"));
-                continue;
-            }
-            // an Azure resource's endpoint is made its v1 API by `imported`
-            _ if kind == "azure" => eps.chat = base,
-            Some(p) if base.is_empty() => eps = Eps::of(p),
-            _ if format == "anthropic" || kind == "anthropic" => eps.anthropic = base,
-            _ if format == "gemini" || kind == "google" => eps.gemini = base,
-            _ if responses || format == "openai-responses" => eps.responses = base,
-            _ => eps.chat = base,
-        }
-        let mut it = entry(&id, "", &name, &key, eps, models, port);
-        if let Some(p) = it.provider.as_mut() {
-            p.headers = headers(serde_json::from_str::<Value>(&custom).ok().as_ref());
-            if !enabled {
-                it.off = "switched off in Alma".to_owned();
-            }
-        }
-        out.push(it);
-    }
-    Ok(out)
-}
-
 // ---- Claude Code and Codex ---------------------------------------------------
 
 fn claude_path() -> PathBuf {
@@ -653,12 +546,7 @@ fn read_codex(path: &Path, port: u16) -> Result<Vec<Item>> {
         match id.as_str() {
             "pansy" => continue,
             "magpie" => {
-                out.push(skipped(
-                    id,
-                    "config.toml",
-                    &name,
-                    "it points at magpie; bring magpie's providers over from its tab",
-                ));
+                out.push(skipped(id, "config.toml", &name, "it points at magpie"));
                 continue;
             }
             _ => {}
