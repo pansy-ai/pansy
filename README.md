@@ -14,10 +14,11 @@ and when a key runs out of quota, the next one quietly takes over.
 
 </div>
 
-pansy is a rewrite of [magpie](https://github.com/yetone/magpie) in Rust, with
-its desktop window built on [Native Shell](https://nsh.dev) (NSH) 0.6.0. As the
-three petals of its logo meet at one point, your agents and your providers meet
-in one gateway.
+pansy is a local gateway and a desktop app for Linux, macOS and Windows,
+written in Rust, its window built on [Native Shell](https://nsh.dev) (NSH). As
+the three petals of its logo meet at one point, your agents and your providers
+meet in one gateway. Everything runs on your computer: your keys, prompts and
+replies go only to the providers you chose.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/agents-dark.png">
@@ -27,7 +28,8 @@ in one gateway.
 ## What it does
 
 - **Any model, any agent.** Pick a model for Claude Code, Codex, Gemini CLI,
-  OpenCode, Qwen Code or Crush from one list. pansy edits the one setting that
+  OpenCode, Qwen Code, Crush or any of some fifty agents from one list. pansy
+  edits the one setting that
   matters in the agent's own config; comments, order and formatting stay as
   they were, and *Disconnect* puts back exactly what pansy changed.
 - **One gateway, four protocols.** `127.0.0.1:7267` speaks Anthropic Messages,
@@ -80,14 +82,36 @@ in one gateway.
 - **Agents as files.** An agent is a TOML manifest
   ([docs/agents.md](docs/agents.md)); one of your own in
   `~/.config/pansy/agents/` needs no new pansy.
-- **60 presets, as magpie lists them.** Anthropic, OpenAI, Gemini, DeepSeek,
+- **Brought over from what you have.** The providers CC Switch, Claude Code,
+  Codex and OpenCode already hold are offered on the Providers page, read
+  only, their keys masked; a `pansy://import?…` link, a pasted curl command
+  or a vendor's environment lines fill a provider in.
+- **60 presets.** Anthropic, OpenAI, Gemini, DeepSeek,
   xAI, Kimi and Kimi Code, Zhipu GLM, Z.ai, MiniMax, StepFun, Xiaomi MiMo,
   LongCat, Baidu Qianfan, Tencent Cloud, Huawei Cloud, Volcengine Ark, Qwen and
   Alibaba's Token Plans, Mistral, Groq, Amazon Bedrock, Azure OpenAI, Ollama
   Cloud, Nous Portal, OpenRouter, Vercel AI Gateway, OpenCode Go and Zen, Kilo,
   SiliconFlow, NVIDIA NIM, ModelScope, AiHubMix, Ollama, LM Studio, oMLX,
-  GPUStack… each with magpie's logo, its coding plans or regions picked in its
+  GPUStack… each with its logo, its coding plans or regions picked in its
   editor, and any OpenAI-, Anthropic- or Gemini-compatible URL.
+
+## Install
+
+Download pansy for your system from
+[releases.pansyai.dev](https://releases.pansyai.dev/index.html):
+
+```sh
+# Linux
+tar -xzf pansy-<version>-linux-x86_64.tar.gz && ./pansy/install.sh
+
+# macOS (the app is not notarized yet, so clear the quarantine)
+tar -xzf pansy-<version>-macos-aarch64.tar.gz
+xattr -dr com.apple.quarantine Pansy.app && mv Pansy.app /Applications/
+
+# Windows: unzip it and run pansy\pansy.exe
+```
+
+pansy then updates itself: Settings › About has the channel and What's new.
 
 ## Quick start
 
@@ -153,25 +177,22 @@ updates, go to Cloudflare R2, where pansy looks for them
 | `crates/pansy-mask` | Masking: the rules that find secrets and personal data, placeholders, and putting the values back in streamed answers |
 | `crates/pansy-gateway` | The gateway: the four protocols read into one shape and written back out (`ir.rs`, `proto/`), routing and failover (`route.rs`), what the Routing page plays (`trace.rs`), the HTTP side (`server.rs`) |
 | `crates/pansy-agents` | The agents: finding them and their versions, editing their JSON/JSONC, TOML, `.env` and YAML configs in place, what was changed, profiles, their sessions (`sessions/`) |
-| `crates/pansy-plugins` | magpie's community plugins on Bun: installing them, the hosts they run in, sign-ins, middleware, agent plugins ([docs/plugins.md](docs/plugins.md)) |
+| `crates/pansy-plugins` | Community plugins on Bun (OpenCode auth plugins, pi packages, middleware, agent plugins): installing them, the hosts they run in, sign-ins, middleware, agent plugins ([docs/plugins.md](docs/plugins.md)) |
 | `crates/pansy-cli` | The `pansy` command |
 | `desktop/` | The NSH app: `App.tsx` and `ui/` (TSX), `native/` (`pansy/native`, the Rust the TSX calls), `runner/` (the program) |
 | `assets/brand` | The pansy logo: the app icon (SVG, PNG, ICO) and the one-color glyph |
 
-## How far the rewrite has come
+## What is not here yet
 
-This first pass ports magpie's core, its rule-based masking and the ChatGPT,
-Copilot and Gemini Code Assist subscriptions, and magpie's community plugins
-(OpenCode auth plugins, pi packages, middleware, agents; see
-[docs/plugins.md](docs/plugins.md)). Still to come: Claude's,
-Antigravity's and Grok's subscriptions and the allowances, masking with a local model, quotas and costs, intent routing and
-the `smart`/`pace` modes, the library (instructions, MCP servers, skills),
-search and image tools, sync, remote pansy and LAN gateway keys per client,
-the TUI, and the 34 of magpie's agents that are set through their apps,
-databases or key stores rather than a config file. See
-[docs/parity.md](docs/parity.md).
+Claude's, Antigravity's and Grok's subscriptions, masking with a local
+model, costs, routing by intent and by what an allowance has left, a library
+of instructions, MCP servers and skills, search and image tools, backup and
+sync, a remote pansy and a LAN key for each client, a TUI, and the agents
+that are set through their own apps, databases or key stores rather than a
+config file. [docs/parity.md](docs/parity.md) has the whole list.
 
 ## License
 
-[MIT](LICENSE). pansy is a rewrite of magpie by yetone; see
-[NOTICE.md](NOTICE.md).
+[MIT](LICENSE). pansy began as a Rust rewrite of
+[magpie](https://github.com/yetone/magpie) by yetone; see
+[NOTICE.md](NOTICE.md) for it and the other work pansy builds on.

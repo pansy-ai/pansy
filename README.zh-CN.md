@@ -14,9 +14,9 @@
 
 </div>
 
-pansy 是 [magpie](https://github.com/yetone/magpie) 的 Rust 重写版，桌面窗口基于
-[Native Shell](https://nsh.dev)（NSH）0.6.0 构建。就像标志的三片花瓣汇聚于一点，
-你的智能体和供应商也汇聚在同一个网关。
+pansy 是一个本地网关和桌面应用，支持 Linux、macOS 和 Windows，用 Rust 编写，窗口基于
+[Native Shell](https://nsh.dev)（NSH）构建。就像标志的三片花瓣汇聚于一点，
+你的智能体和供应商也汇聚在同一个网关。一切都在你的电脑上运行：Key、提示词和回复只发给你选择的供应商。
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/agents-dark.png">
@@ -26,13 +26,14 @@ pansy 是 [magpie](https://github.com/yetone/magpie) 的 Rust 重写版，桌面
 ## 功能
 
 - **任意智能体，任意模型。** 在一个列表里为 Claude Code、Codex、Gemini CLI、OpenCode、
-  Qwen Code、Crush 选择模型。pansy 只修改智能体自身配置里关键的那几项，注释、顺序和格式保持原样；
+  Qwen Code、Crush 等五十多个智能体选择模型。pansy 只修改智能体自身配置里关键的那几项，注释、顺序和格式保持原样；
   「断开」会精确还原 pansy 改过的内容。
 - **一个网关，四种协议。** `127.0.0.1:7267` 同时支持 Anthropic Messages、OpenAI Chat Completions、
   OpenAI Responses 和 Gemini，并在它们之间互相转换（流式、工具调用、推理内容以及 Codex 的自由格式工具）。
   智能体与供应商使用同一协议时，请求原样透传。
 - **Key 自动切换。** 一个供应商可以配置多个 Key，按顺序使用。被限流、额度用尽或被拒绝的 Key
-  会暂停一段时间，由下一个 Key 接替，智能体看不到错误。
+  会暂停一段时间，由下一个 Key 接替，智能体看不到错误。限流只让这个 Key 在触发它的模型上暂停，
+  不影响它的其他模型；被某个模型拒绝的请求会交给路由组里的下一个模型；连接中断时先重试一次。
 - **订阅。** ChatGPT 套餐（按 Codex 的方式使用）、GitHub Copilot 和 Gemini Code Assist（按 Gemini CLI
   的方式使用）供所有智能体使用：pansy 在 Codex、Copilot 编辑器插件和 Gemini CLI 保存登录的位置直接读取
   已有的登录，也能自己登录更多账号（在浏览器中或用验证码）。每个订阅是一个供应商（`codex/…`、
@@ -58,11 +59,30 @@ pansy 是 [magpie](https://github.com/yetone/magpie) 的 Rust 重写版，桌面
   自己的规则写在 `quirks.toml`）。
 - **智能体是文件。** 一个智能体就是一份 TOML 清单（[docs/agents.md](docs/agents.md)）；
   放进 `~/.config/pansy/agents/` 的清单不需要新版 pansy。
-- **60 个预设，与 magpie 一致。** Anthropic、OpenAI、Gemini、DeepSeek、xAI、Kimi 与 Kimi Code、智谱 GLM、
+- **从已有的配置导入。** CC Switch、Claude Code、Codex 和 OpenCode 里已有的供应商会出现在供应商页，
+  只读取、不改动，Key 以掩码显示；`pansy://import?…` 链接、粘贴的 curl 命令或厂商的环境变量也能填好一个供应商。
+- **60 个预设。** Anthropic、OpenAI、Gemini、DeepSeek、xAI、Kimi 与 Kimi Code、智谱 GLM、
   Z.ai、MiniMax、阶跃星辰、小米 MiMo、LongCat、百度千帆、腾讯云、华为云、火山方舟、千问与阿里云的 Token Plan、
   Mistral、Groq、Amazon Bedrock、Azure OpenAI、Ollama Cloud、Nous Portal、OpenRouter、Vercel AI Gateway、
   OpenCode Go 与 Zen、Kilo、硅基流动、NVIDIA NIM、魔搭、AiHubMix、Ollama、LM Studio、oMLX、GPUStack……
-  每个都用 magpie 的 logo，编码套餐或区域在编辑器里选择；以及任意兼容 OpenAI、Anthropic、Gemini 的地址。
+  每个都带自己的 logo，编码套餐或区域在编辑器里选择；以及任意兼容 OpenAI、Anthropic、Gemini 的地址。
+
+## 安装
+
+从 [releases.pansyai.dev](https://releases.pansyai.dev/index.html) 下载适合你系统的版本：
+
+```sh
+# Linux
+tar -xzf pansy-<版本>-linux-x86_64.tar.gz && ./pansy/install.sh
+
+# macOS（应用尚未公证，需要清除隔离标记）
+tar -xzf pansy-<版本>-macos-aarch64.tar.gz
+xattr -dr com.apple.quarantine Pansy.app && mv Pansy.app /Applications/
+
+# Windows：解压后运行 pansy\pansy.exe
+```
+
+之后 pansy 会自行更新：设置 › 关于里有更新渠道和更新内容。
 
 ## 快速开始
 
@@ -122,18 +142,18 @@ pansy 从那里检查更新（[docs/release.md](docs/release.md)）。
 | `crates/pansy-mask` | 脱敏：找出密钥和个人信息的规则、占位符，以及在流式回复中还原原值 |
 | `crates/pansy-gateway` | 网关：四种协议读入统一结构再写出（`ir.rs`、`proto/`），路由与故障切换（`route.rs`），路由页播放的内容（`trace.rs`），HTTP 服务（`server.rs`） |
 | `crates/pansy-agents` | 智能体：发现及其版本、原地编辑 JSON/JSONC、TOML、`.env`、YAML 配置、改动了什么、方案、会话（`sessions/`） |
-| `crates/pansy-plugins` | 在 Bun 上运行 magpie 的社区插件：安装、运行它们的宿主进程、登录、中间件、智能体插件（[docs/plugins.md](docs/plugins.md)） |
+| `crates/pansy-plugins` | 在 Bun 上运行的社区插件（OpenCode 登录插件、pi 包、中间件、智能体插件）：安装、运行它们的宿主进程、登录、中间件、智能体插件（[docs/plugins.md](docs/plugins.md)） |
 | `crates/pansy-cli` | `pansy` 命令 |
 | `desktop/` | NSH 应用：`App.tsx` 与 `ui/`（TSX），`native/`（`pansy/native`，TSX 调用的 Rust），`runner/`（可执行程序） |
 | `assets/brand` | pansy 的标志：应用图标（SVG、PNG、ICO）和单色图形 |
 
-## 重写进度
+## 还没有的功能
 
-第一阶段移植了 magpie 的核心功能、基于规则的脱敏、ChatGPT、Copilot 和 Gemini Code Assist 订阅，以及 magpie 的社区插件（OpenCode 登录插件、pi 包、
-中间件、智能体，见 [docs/plugins.md](docs/plugins.md)）。后续计划：Claude、Antigravity 和 Grok 的订阅以及额度、用本地模型脱敏、额度与费用、意图路由和 `smart`/`pace` 模式、资料库（指令、MCP 服务器、技能）、搜索与图像工具、
-同步、远程 pansy 与按客户端区分的局域网 Key、TUI，以及 magpie 支持的其余 80 多个智能体。
-详见 [docs/parity.md](docs/parity.md)。
+Claude、Antigravity 和 Grok 的订阅，用本地模型脱敏，费用，按意图和按剩余额度路由，资料库（指令、MCP 服务器、技能），
+搜索与图像工具，备份与同步，远程 pansy 与按客户端区分的局域网 Key，TUI，以及那些通过自己的应用、数据库或系统密钥库
+（而不是配置文件）来设置的智能体。完整列表见 [docs/parity.md](docs/parity.md)。
 
 ## 许可
 
-[MIT](LICENSE)。pansy 由 yetone 的 magpie 重写而来，见 [NOTICE.md](NOTICE.md)。
+[MIT](LICENSE)。pansy 最初是 yetone 的 [magpie](https://github.com/yetone/magpie) 的 Rust 重写版；
+它和 pansy 用到的其他作品见 [NOTICE.md](NOTICE.md)。
