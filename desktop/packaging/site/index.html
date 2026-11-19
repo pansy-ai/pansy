@@ -1,7 +1,8 @@
 <!doctype html>
 <!-- pansy's download page, beside the release feed (publish.sh): it reads
-     latest.json and offers the archive for the visitor's system, with the
-     others below. -->
+     latest.json for the archives and downloads.json for the installers, and
+     offers the installer for the visitor's system (its archive where there
+     is none), with every other file below. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -39,11 +40,19 @@ const zh = (navigator.language || "").toLowerCase().startsWith("zh");
 document.documentElement.lang = zh ? "zh-CN" : "en";
 const T = zh
   ? { title: "下载 Pansy", tagline: "所有智能体的模型，集中管理", download: "下载 %s 版", version: "版本 %s", loading: "正在读取最新版本…", failed: "读取最新版本失败，请稍后再试。", none: "还没有适用于你系统的版本，其他系统的在下面。",
-      how: { linux: "tar -xzf %s\n./pansy/install.sh", macos: "tar -xzf %s\nxattr -dr com.apple.quarantine Pansy.app\nmv Pansy.app /Applications/", windows: "解压后运行 pansy\\pansy.exe" } }
+      how: { linux: "tar -xzf %s\n./pansy/install.sh", macos: "tar -xzf %s\nxattr -dr com.apple.quarantine Pansy.app\nmv Pansy.app /Applications/", windows: "解压后运行 pansy\\pansy.exe",
+        dmg: "打开 %s，把 Pansy 拖进“应用程序”。\n它没有经过公证，第一次打开前在终端运行：\nxattr -dr com.apple.quarantine /Applications/Pansy.app",
+        exe: "运行 %s：只为当前用户安装，不需要管理员权限。\n如果 SmartScreen 提示未知发布者：更多信息 › 仍要运行。",
+        deb: "sudo apt install ./%s", AppImage: "chmod +x %s\n./%s" } }
   : { title: "Download Pansy", tagline: "Every agent's model, one place", download: "Download for %s", version: "Version %s", loading: "Looking for the latest version…", failed: "Couldn't read the latest version. Try again later.", none: "There is no build for your system yet; the others are below.",
-      how: { linux: "tar -xzf %s\n./pansy/install.sh", macos: "tar -xzf %s\nxattr -dr com.apple.quarantine Pansy.app\nmv Pansy.app /Applications/", windows: "Unzip it and run pansy\\pansy.exe" } };
+      how: { linux: "tar -xzf %s\n./pansy/install.sh", macos: "tar -xzf %s\nxattr -dr com.apple.quarantine Pansy.app\nmv Pansy.app /Applications/", windows: "Unzip it and run pansy\\pansy.exe",
+        dmg: "Open %s and drag Pansy to Applications.\nIt is not notarized: before you first open it, in Terminal\nxattr -dr com.apple.quarantine /Applications/Pansy.app",
+        exe: "Run %s: it installs for you alone, with no administrator.\nIf SmartScreen warns of an unknown publisher: More info › Run anyway.",
+        deb: "sudo apt install ./%s", AppImage: "chmod +x %s\n./%s" } };
 const OS = { linux: "Linux", macos: "macOS", windows: "Windows" };
 const ARCH = { x86_64: "x64", aarch64: "ARM64" };
+// the installer offered first on each system
+const PREFERRED = { macos: "dmg", windows: "exe", linux: "AppImage" };
 const $ = (id) => document.getElementById(id);
 document.title = T.title;
 $("tagline").textContent = T.tagline;
@@ -71,6 +80,20 @@ function label(key) {
   return `${OS[os] || os} ${ARCH[arch] || arch}`;
 }
 
+/** The file's kind as `how` names it: an installer's, or the archive's system. */
+function kind(file) {
+  return file.kind || file.system.split("-")[0];
+}
+
+/** A file's name, and its extension, as the list shows it. */
+function name(file) {
+  return file.url.split("/").pop();
+}
+function extension(file) {
+  const base = name(file);
+  return base.endsWith(".tar.gz") ? ".tar.gz" : base.slice(base.lastIndexOf("."));
+}
+
 (async () => {
   let feed;
   try {
@@ -81,36 +104,52 @@ function label(key) {
     $("status").textContent = T.failed;
     return;
   }
+  // the installers of the same version, when it has them
+  let installers = [];
+  try {
+    const response = await fetch("downloads.json", { cache: "no-cache" });
+    const downloads = response.ok ? await response.json() : {};
+    if (downloads.version === feed.version) installers = downloads.installers || [];
+  } catch {}
   const here = await system();
-  const assets = Object.entries(feed.platforms || {}).filter(([, asset]) => asset.sha256);
+  const archives = Object.entries(feed.platforms || {})
+    .filter(([, asset]) => asset.sha256)
+    .map(([system, asset]) => ({ system, url: asset.url, size: asset.size }));
+  // each system's installers, then its archive
+  const systems = [...new Set([...archives, ...installers].map((file) => file.system))];
+  const files = systems.flatMap((system) => [
+    ...installers.filter((file) => file.system === system),
+    ...archives.filter((file) => file.system === system),
+  ]);
   // the same system on the other arch, when this one has no build
-  const mine = assets.find(([key]) => key === here) || (here && assets.find(([key]) => key.split("-")[0] === here.split("-")[0]));
+  const os = here && here.split("-")[0];
+  const mine = systems.find((system) => system === here) || systems.find((system) => system.split("-")[0] === os);
   $("status").textContent = T.version.replace("%s", feed.version);
   if (mine) {
-    const [key, asset] = mine;
-    const file = asset.url.split("/").pop();
+    const ours = files.filter((file) => file.system === mine);
+    const file = ours.find((file) => file.kind === PREFERRED[os]) || ours.find((file) => !file.kind) || ours[0];
     const primary = $("primary");
-    primary.href = asset.url;
-    primary.textContent = T.download.replace("%s", label(key));
+    primary.href = file.url;
+    primary.textContent = T.download.replace("%s", label(mine));
     primary.hidden = false;
     const how = $("how");
-    how.textContent = T.how[key.split("-")[0]].replace("%s", file);
+    how.textContent = T.how[kind(file)].replaceAll("%s", name(file));
     how.hidden = false;
   } else {
     $("status").textContent += ` · ${T.none}`;
   }
   const all = $("all");
-  for (const [key, asset] of assets) {
+  for (const file of files) {
     const item = document.createElement("li");
     const link = document.createElement("a");
-    link.href = asset.url;
-    link.textContent = label(key);
+    link.href = file.url;
+    link.textContent = `${label(file.system)} · ${extension(file)}`;
     const bytes = document.createElement("span");
-    bytes.textContent = size(asset.size);
+    bytes.textContent = size(file.size);
     item.append(link, bytes);
     all.append(item);
   }
-  all.hidden = assets.length === 0;
+  all.hidden = files.length === 0;
 })();
 </script>
 </body>

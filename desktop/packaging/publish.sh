@@ -6,13 +6,18 @@
 #                                    system and the newest build of its
 #                                    window, signed by the update key
 #   v<version>/pansy-<version>-<os>-<arch>.tar.gz|.zip   build.sh's archives
+#   v<version>/pansy-<version>-<os>-<arch>.dmg|-setup.exe|.deb|.AppImage
+#                                    installers.sh's installers, which the
+#                                    feed does not name
 #   v<version>/dev.pansy.app-<build>.nshpkg              the window alone
 #   v<version>/notes.<language>.md   what changed, in the window's other languages
 #   beta/latest.json, …              the same feed for those who chose beta
-#   index.html                       the download page (site/)
+#   index.html, downloads.json       the download page (site/) and the
+#                                    installers it offers
 #
 #   publish.sh       a release of pansy: ../dist's archives of nsh.json's
-#                    version, from build.sh on each system
+#                    version, from build.sh on each system, and the
+#                    installers there are (installers.sh)
 #                    A version with a suffix (0.2.0-beta.1) goes to the beta
 #                    feed alone, any other to both.
 #   publish.sh ui    a release of the window alone, for the pansy that is
@@ -131,12 +136,32 @@ if [[ $kind == app ]]; then
   archives=(../dist/pansy-"$version"-*.tar.gz ../dist/pansy-"$version"-*.zip)
   shopt -u nullglob
   ((${#archives[@]})) || fail "no archives of $version in ../dist (packaging/build.sh, on each system)"
-  cp -- "${archives[@]}" "$out/v$version/"
-  for archive in "$out/v$version"/pansy-*; do uploads+=("v$version/$(basename "$archive")"); done
-  # the download page offers what everyone gets
+  # installers.sh's, for a first install: beside the archives, not in the feed
+  shopt -s nullglob
+  installers=(../dist/pansy-"$version"-*.dmg ../dist/pansy-"$version"-*-setup.exe
+    ../dist/pansy-"$version"-*.deb ../dist/pansy-"$version"-*.AppImage)
+  shopt -u nullglob
+  cp -- "${archives[@]}" "${installers[@]}" "$out/v$version/"
+  for file in "${archives[@]}" "${installers[@]}"; do uploads+=("v$version/$(basename "$file")"); done
+  shipped=()
+  for archive in "${archives[@]}"; do shipped+=("$out/v$version/$(basename "$archive")"); done
+  # the download page offers what everyone gets: the installers it reads
+  # from downloads.json, the archives from the feed
   if [[ ${feeds[0]} != beta ]]; then
     cp packaging/site/index.html "$out/index.html"
-    uploads+=(index.html)
+    python3 - "$version" "$base/v$version/" "${installers[@]}" > "$out/downloads.json" <<'PY'
+import hashlib, json, os, re, sys
+version, base, files = sys.argv[1], sys.argv[2], sys.argv[3:]
+installers = []
+for path in files:
+    name = os.path.basename(path)
+    system, kind = re.fullmatch(rf"pansy-{re.escape(version)}-(\w+-\w+?)(?:-setup)?\.(dmg|exe|deb|AppImage)", name).groups()
+    with open(path, "rb") as f:
+        sha = hashlib.file_digest(f, "sha256").hexdigest()
+    installers.append({"system": system, "kind": kind, "url": base + name, "size": os.path.getsize(path), "sha256": sha})
+json.dump({"version": version, "installers": installers}, sys.stdout, indent=2)
+PY
+    uploads+=(downloads.json index.html)
   fi
   for feed in "${feeds[@]}"; do
     live "$feed"
@@ -145,7 +170,7 @@ if [[ $kind == app ]]; then
       [[ $feed == beta && ${feeds[0]} != beta ]] && continue
       fail "$live_version is out${feed:+ on $feed}: a release needs a newer version than $version (packaging/bump.sh)"
     fi
-    nsh update-manifest "$out/v$version"/pansy-* "${manifest[@]}" --out "$out/$feed"
+    nsh update-manifest "${shipped[@]}" "${manifest[@]}" --out "$out/$feed"
     feed_files "$feed"
   done
 else
@@ -212,6 +237,9 @@ for object in "${uploads[@]}"; do
     *.html) type="text/html; charset=utf-8" cache="public, max-age=300" ;;
     *.zip) type=application/zip cache="public, max-age=31536000, immutable" ;;
     *.tar.gz) type=application/gzip cache="public, max-age=31536000, immutable" ;;
+    *.dmg) type=application/x-apple-diskimage cache="public, max-age=31536000, immutable" ;;
+    *.exe) type=application/vnd.microsoft.portable-executable cache="public, max-age=31536000, immutable" ;;
+    *.deb) type=application/vnd.debian.binary-package cache="public, max-age=31536000, immutable" ;;
     *) type=application/octet-stream cache="public, max-age=31536000, immutable" ;;
   esac
   "${wrangler[@]}" r2 object put "$bucket/$object" --file "$out/$object" --remote \

@@ -1,8 +1,10 @@
 # Releases pansy to the Cloudflare R2 bucket its window updates from
 # (docs/release.md). A tag says which kind:
 #
-#   pansy-v0.2.0        pansy itself: built on each system, then published
-#   pansy-v0.2.0-beta.1 the same, for those on the beta channel alone
+#   pansy-v0.2.0        pansy itself: built on each system, its archives and
+#                       installers published, then a GitHub release of them
+#   pansy-v0.2.0-beta.1 the same, for those on the beta channel alone (and a
+#                       GitHub pre-release)
 #   pansy-v0.2.0-ui.7   the window alone (build 7), for the 0.2.0 that is out
 #
 # Secrets (the `release` environment): PANSY_RELEASE_KEY and
@@ -68,7 +70,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev clang libclang-dev
+          sudo apt-get install -y libgtk-4-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev clang libclang-dev dpkg-dev
       - name: NSH
         if: runner.os != 'Windows'
         run: |
@@ -81,7 +83,16 @@ jobs:
           $env:NSH_INSTALL_DIR = Join-Path $env:USERPROFILE '.nsh'
           irm https://nsh.dev/install.ps1 | iex
           Join-Path $env:NSH_INSTALL_DIR 'bin' >> $env:GITHUB_PATH
+      - name: Inno Setup
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
       - run: desktop/packaging/build.sh
+      # the .dmg, the setup .exe, the .deb and the AppImage, from what build.sh staged
+      - run: desktop/packaging/installers.sh
       - uses: actions/upload-artifact@v4
         with:
           name: pansy-${{ matrix.system }}
@@ -137,4 +148,42 @@ jobs:
             desktop/packaging/publish.sh ui
           else
             desktop/packaging/publish.sh
+          fi
+
+  # the same files as a GitHub release of the tag, once they are in the bucket
+  github:
+    needs: [plan, publish]
+    if: needs.plan.outputs.kind == 'app'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: pansy-*
+          merge-multiple: true
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version=$(jq -r .version desktop/nsh.json)
+          (cd dist && sha256sum pansy-* > SHA256SUMS)
+          # the notes in English, then in Chinese
+          notes=$RUNNER_TEMP/notes.md
+          : > "$notes"
+          for file in desktop/packaging/notes.md desktop/packaging/notes.zh-Hans.md; do
+            [[ -s $file ]] || continue
+            [[ -s $notes ]] && printf '\n---\n\n' >> "$notes"
+            cat -- "$file" >> "$notes"
+          done
+          flags=(--title "Pansy $version" --notes-file "$notes")
+          [[ $version == *-* ]] && flags+=(--prerelease)
+          # a run again replaces the files of the release it made
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --verify-tag "${flags[@]}"
           fi

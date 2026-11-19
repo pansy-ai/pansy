@@ -98,18 +98,17 @@ replies go only to the providers you chose.
 ## Install
 
 Download pansy for your system from
-[releases.pansyai.dev](https://releases.pansyai.dev/index.html):
+[releases.pansyai.dev](https://releases.pansyai.dev/index.html) or the
+[GitHub releases](https://github.com/pansy-ai/pansy/releases):
 
-```sh
-# Linux
-tar -xzf pansy-<version>-linux-x86_64.tar.gz && ./pansy/install.sh
-
-# macOS (the app is not notarized yet, so clear the quarantine)
-tar -xzf pansy-<version>-macos-aarch64.tar.gz
-xattr -dr com.apple.quarantine Pansy.app && mv Pansy.app /Applications/
-
-# Windows: unzip it and run pansy\pansy.exe
-```
+- **macOS**: `pansy-<version>-macos-aarch64.dmg` (`x86_64` for Intel); drag
+  Pansy to Applications. It is not notarized yet, so clear the quarantine
+  first: `xattr -dr com.apple.quarantine /Applications/Pansy.app`.
+- **Windows**: `pansy-<version>-windows-x86_64-setup.exe`, which installs
+  for you alone, with no administrator, and can put `pansy` on PATH.
+- **Linux**: `sudo apt install ./pansy-<version>-linux-x86_64.deb`, or the
+  `.AppImage` (`chmod +x` and run it), or the archive:
+  `tar -xzf pansy-<version>-linux-x86_64.tar.gz && ./pansy/install.sh`.
 
 pansy then updates itself: Settings › About has the channel and What's new.
 
@@ -163,10 +162,12 @@ nsh check && ./test.sh                     # Rust and headless UI tests in a scr
 cargo build -p pansy-desktop && nsh build App.tsx --out target/debug/nsh
 ./target/debug/pansy                       # the window, with the gateway beside it
 packaging/build.sh                         # dist/pansy-<version>-<os>-<arch>.tar.gz (.zip on Windows)
+packaging/installers.sh                    # and its installers: .dmg, -setup.exe, .deb and .AppImage
 ```
 
-A release is a tag: the archives of every system, and the window's own
-updates, go to Cloudflare R2, where pansy looks for them
+A release is a tag: the archives and installers of every system, and the
+window's own updates, go to Cloudflare R2, where pansy looks for them, and
+the installers to the tag's GitHub release too
 ([docs/release.md](docs/release.md)).
 
 ## Layout

@@ -11,11 +11,34 @@ v0.2.0/pansy-0.2.0-linux-aarch64.tar.gz
 v0.2.0/pansy-0.2.0-macos-aarch64.tar.gz
 v0.2.0/pansy-0.2.0-macos-x86_64.tar.gz
 v0.2.0/pansy-0.2.0-windows-x86_64.zip
+v0.2.0/pansy-0.2.0-macos-aarch64.dmg  the installers, which the feed does
+v0.2.0/pansy-0.2.0-windows-x86_64-setup.exe     not name: for a first
+v0.2.0/pansy-0.2.0-linux-x86_64.deb             install
+v0.2.0/pansy-0.2.0-linux-x86_64.AppImage
 v0.2.0/dev.pansy.app-7.nshpkg         the window alone, build 7
 v0.2.0/notes.zh-Hans.md               what changed, in Chinese
 beta/latest.json, beta/…              the same feed, for those on beta
-index.html                            the download page
+index.html, downloads.json            the download page, and the installers it offers
 ```
+
+## Installers
+
+The updater replaces what an archive holds; a first install is easier from
+an installer, which `packaging/installers.sh` makes on each system from what
+`build.sh` staged:
+
+| System | Installer | Where it puts pansy | Updates |
+| :-- | :-- | :-- | :-- |
+| macOS | `.dmg`: Pansy.app and a link to Applications | where it is dragged | the updater, as from the archive |
+| Windows | `-setup.exe` (Inno Setup, `packaging/pansy.iss`): a Start menu entry, `pansy` on PATH (a choice), an uninstaller | `%LOCALAPPDATA%\Programs\Pansy`, for this user, no administrator | the updater: it swaps every entry of that directory, so the uninstaller is beside it (`Pansy Uninstall`), not in it |
+| Linux | `.deb`: `/opt/pansy`, `/usr/bin/pansy`, the desktop entry | the system's | a newer `.deb`: the window cannot write there and sends its user to the download page |
+| Linux | `.AppImage`: one file, run as it is | wherever it is | a newer AppImage, the same way (an AppImage is read only) |
+
+The `.deb` and the AppImage take GTK 4 from the system, as the
+archive does. The AppImage is made with appimagetool 1.9.1, which
+`installers.sh` downloads once and checks against its hash. A Windows
+installer needs Inno Setup 6 (`winget install JRSoftware.InnoSetup`); the
+workflow installs it where the runner has none.
 
 ## Two kinds of release
 
@@ -87,14 +110,18 @@ What changed goes in `packaging/notes.md` before the tag (headings, bullets
 and lines; written anew for each release), and in `notes.zh-Hans.md` beside
 it in Chinese: the feed's notes, which a pansy asks for in its window's
 language for What's new. `bump.sh` prints the tag. The tag starts `.github/workflows/release.yml`:
-`packaging/build.sh` on each system (for pansy itself), then
-`packaging/publish.sh`, which writes the feed with `nsh update-manifest`,
-signs it, and uploads the archives first and the feed last.
+`packaging/build.sh` and `packaging/installers.sh` on each system (for pansy
+itself), then `packaging/publish.sh`, which writes the feed with `nsh
+update-manifest`, signs it, and uploads the archives and installers first
+and the feed last. Once that is done, the same files, a `SHA256SUMS` and the
+notes (English, then Chinese) become the tag's GitHub release, a
+pre-release for a beta. The window alone has no GitHub release.
 
 By hand, with the archives of every system gathered in `dist/`:
 
 ```sh
 packaging/build.sh                            # on each system
+packaging/installers.sh                       # and its installers, if they are to go too
 PANSY_PUBLISH_DRY=1 packaging/publish.sh      # dist/release, as the bucket would be
 packaging/publish.sh                          # or `publish.sh ui`
 ```
@@ -153,10 +180,12 @@ unpacked from `dist/` finds there what is published next the same way.
 
 ## What is not done
 
-- The archives are not installers: Linux has `install.sh`, macOS's
-  `Pansy.app` is signed ad hoc and not notarized (Gatekeeper asks; the
-  download page says how to clear the quarantine;
-  `PANSY_CODESIGN_IDENTITY` signs with a Developer ID), Windows is a folder
-  with `pansy.exe`.
+- Signing for the installers: macOS's `Pansy.app` and `.dmg` are signed
+  ad hoc and not notarized (Gatekeeper asks; the download page says how to
+  clear the quarantine; `PANSY_CODESIGN_IDENTITY` signs both with a
+  Developer ID), and the Windows installer and `pansy.exe` are not signed
+  (SmartScreen warns of an unknown publisher).
+- The AppImage bundles no GTK, and pansy's own desktop entry (NSH writes
+  one for `pansy://` links) points into the AppImage's mount while it runs.
 - Staged rollouts and mirrors. What's new has the notes of
   one release, not of every release since the one installed.
