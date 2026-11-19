@@ -37,7 +37,10 @@ in one gateway.
   through untouched.
 - **Keys that fail over.** A provider can hold several keys, tried in order. A
   key that is rate-limited, out of quota or refused rests for a while and the
-  next one answers, before the agent sees an error.
+  next one answers, before the agent sees an error. A limit rests the key for
+  the model that hit it, not for its others; a request one model turns away
+  goes on to the next model of its group; a connection that broke is asked
+  once more first.
 - **Subscriptions.** A ChatGPT plan, as Codex uses it, GitHub Copilot's and
   Gemini Code Assist's, as Gemini CLI uses it, serve every agent: pansy reads
   the sign-in Codex, Copilot's editors and Gemini CLI already have, where they

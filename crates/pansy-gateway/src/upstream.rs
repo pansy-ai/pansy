@@ -215,10 +215,31 @@ pub fn hide_key(text: &str, attempt: &Attempt) -> String {
 /// What the gateway does after a failed answer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
-    /// Try the next attempt; the key rests this long first.
-    Next(Option<Duration>),
-    /// The request itself is at fault: the client hears it now.
-    Stop,
+    /// Try the next attempt; the key rests first, as far as `Rest` says.
+    Next(Rest),
+    /// The model turned the request itself away, as its other keys would:
+    /// the next model is tried, and the client hears this if none answers.
+    Refused,
+}
+
+/// How far a key rests after a failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rest {
+    /// Not at all.
+    No,
+    /// For the model asked: the key's other models are asked as before.
+    Model(Duration),
+    /// For every model: the key itself was refused, or is out of credit.
+    Key(Duration),
+}
+
+impl Rest {
+    pub fn secs(self) -> u64 {
+        match self {
+            Rest::No => 0,
+            Rest::Model(rest) | Rest::Key(rest) => rest.as_secs(),
+        }
+    }
 }
 
 /// What an upstream's error answer means.
@@ -242,20 +263,22 @@ pub fn verdict(
     .iter()
     .any(|w| text.contains(w));
     match status {
-        429 => Verdict::Next(Some(retry_after.unwrap_or(if quota {
+        // A limit is a model's as often as a key's (a relay's channel, a
+        // plan's window for each model), and its words don't say which.
+        429 => Verdict::Next(Rest::Model(retry_after.unwrap_or(if quota {
             Duration::from_secs(3600)
         } else {
             cooldown
         }))),
-        401 | 403 => Verdict::Next(Some(Duration::from_secs(600))),
-        402 => Verdict::Next(Some(Duration::from_secs(3600))),
+        401 | 403 => Verdict::Next(Rest::Key(Duration::from_secs(600))),
+        402 => Verdict::Next(Rest::Key(Duration::from_secs(3600))),
         // The model is not this provider's, or not by this name.
-        404 => Verdict::Next(None),
+        404 => Verdict::Next(Rest::No),
         408 | 409 | 425 | 500..=599 => {
-            Verdict::Next(Some(retry_after.unwrap_or(Duration::from_secs(15))))
+            Verdict::Next(Rest::Model(retry_after.unwrap_or(Duration::from_secs(15))))
         }
-        400 if quota => Verdict::Next(Some(Duration::from_secs(3600))),
-        _ => Verdict::Stop,
+        400 if quota => Verdict::Next(Rest::Key(Duration::from_secs(3600))),
+        _ => Verdict::Refused,
     }
 }
 
@@ -424,23 +447,59 @@ mod tests {
         assert_eq!(retry_in(r#"{"error":{"message":"slow down"}}"#), None);
         assert_eq!(
             verdict(429, codex, retry_in(codex), Duration::from_secs(60)),
-            Verdict::Next(Some(Duration::from_secs(7200)))
+            Verdict::Next(Rest::Model(Duration::from_secs(7200)))
         );
     }
 
     #[test]
     fn judges_failures() {
         let cool = Duration::from_secs(60);
-        assert_eq!(verdict(429, "", None, cool), Verdict::Next(Some(cool)));
-        assert_eq!(verdict(400, "context too long", None, cool), Verdict::Stop);
+        // A limit and a server's error rest the key for the model asked.
         assert_eq!(
-            verdict(400, "Insufficient Balance", None, cool),
-            Verdict::Next(Some(Duration::from_secs(3600)))
+            verdict(429, "", None, cool),
+            Verdict::Next(Rest::Model(cool))
+        );
+        assert_eq!(
+            verdict(429, "insufficient_quota", None, cool),
+            Verdict::Next(Rest::Model(Duration::from_secs(3600)))
         );
         assert_eq!(
             verdict(503, "", Some(Duration::from_secs(3)), cool),
-            Verdict::Next(Some(Duration::from_secs(3)))
+            Verdict::Next(Rest::Model(Duration::from_secs(3)))
         );
+        // A key refused or out of credit rests for every model.
+        assert_eq!(
+            verdict(401, "bad key", None, cool),
+            Verdict::Next(Rest::Key(Duration::from_secs(600)))
+        );
+        assert_eq!(
+            verdict(400, "Insufficient Balance", None, cool),
+            Verdict::Next(Rest::Key(Duration::from_secs(3600)))
+        );
+        assert_eq!(
+            verdict(404, "no such model", None, cool),
+            Verdict::Next(Rest::No)
+        );
+        // The request turned away: another model may take it.
+        for (status, body) in [
+            (400, "context too long"),
+            (
+                400,
+                "Inappropriate input/output rejected for security reasons",
+            ),
+            (
+                400,
+                "request requires unsupported input or output modalities",
+            ),
+            (413, ""),
+            (422, "extra_forbidden"),
+        ] {
+            assert_eq!(
+                verdict(status, body, None, cool),
+                Verdict::Refused,
+                "{status} {body}"
+            );
+        }
         assert_eq!(
             error_message(r#"{"error":{"message":"bad key"}}"#),
             "bad key"

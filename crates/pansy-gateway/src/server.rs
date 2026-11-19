@@ -29,10 +29,13 @@ use crate::proto::{self, Quirks};
 use crate::route::{self, Attempt, Health, NoRoute};
 use crate::sse;
 use crate::trace::{Trace, Tracing};
-use crate::upstream::{self, Clients, Verdict};
+use crate::upstream::{self, Clients, Rest, Verdict};
 
 /// The most a request body may be: long conversations carry images.
 const BODY_LIMIT: usize = 128 * 1024 * 1024;
+
+/// The pause before a broken connection is asked once more.
+const ASK_AGAIN_AFTER: Duration = Duration::from_millis(250);
 
 #[derive(Default)]
 pub struct Gateway {
@@ -813,7 +816,15 @@ impl Gateway {
         let mut last = (502u16, String::from("no provider answered"));
         let mut tried: Vec<usage::Tried> = Vec::new();
         let mut asked = false;
+        // The first model that turned the request itself away: its place in
+        // `tried`, and what it said, which the client hears if none answers.
+        let mut refused: Option<(usize, &Attempt, u16, String)> = None;
+        let mut refusing: Vec<(&str, &str)> = Vec::new();
         for (n, attempt) in attempts.iter().enumerate() {
+            // A model that turned the request away would on its other keys.
+            if refusing.contains(&(attempt.provider.as_str(), attempt.model.as_str())) {
+                continue;
+            }
             trace.asking(n);
             // A middleware may pass the account over for this request: the
             // next is asked, and this one isn't rested.
@@ -909,18 +920,37 @@ impl Gateway {
                     continue;
                 }
             };
-            let send = exchange(
-                &http,
-                attempt,
-                &headers,
-                passthrough,
-                stream || gather,
-                serde_json::to_vec(&upstream_body).unwrap_or_default(),
-            );
+            let sent_body = serde_json::to_vec(&upstream_body).unwrap_or_default();
+            let ask = |body: Vec<u8>| {
+                exchange(
+                    &http,
+                    attempt,
+                    &headers,
+                    passthrough,
+                    stream || gather,
+                    body,
+                )
+            };
+            let send = async {
+                match ask(sent_body.clone()).await {
+                    // A connection that broke off or wasn't made is the
+                    // line's slip more often than the vendor's failure: it
+                    // is asked once more before its key rests and the
+                    // request goes on to another.
+                    Err(Unsent::Send(e)) if e.is_request() && !e.is_timeout() => {
+                        tracing::info!(provider = %attempt.provider, "the connection broke, asking once more: {}", upstream::hide_key(&e.to_string(), attempt));
+                        trace.again();
+                        tokio::time::sleep(ASK_AGAIN_AFTER).await;
+                        ask(sent_body).await
+                    }
+                    other => other,
+                }
+            };
             let key = attempt.key_id();
             let response = match tokio::time::timeout(first_byte, send).await {
                 Err(_) => {
-                    self.health.rest(&key, Duration::from_secs(15));
+                    self.health
+                        .rest_model(&key, &attempt.model, Duration::from_secs(15));
                     last = (504, format!("{} did not answer in time", attempt.provider));
                     trace.failed(504, &last.1, 15);
                     tried.push(tried_of(attempt, 504));
@@ -973,17 +1003,27 @@ impl Gateway {
                 tracing::info!(%agent, provider = %attempt.provider, status, "upstream refused: {message}");
                 match upstream::verdict(status, &text, retry, cooldown) {
                     Verdict::Next(rest) => {
-                        if let Some(rest) = rest {
-                            self.health.rest(&key, rest);
+                        match rest {
+                            Rest::No => {}
+                            Rest::Model(rest) => self.health.rest_model(&key, &attempt.model, rest),
+                            Rest::Key(rest) => self.health.rest(&key, rest),
                         }
-                        trace.failed(status, &message, rest.map_or(0, |r| r.as_secs()));
+                        trace.failed(status, &message, rest.secs());
                         tried.push(tried_of(attempt, status));
                         last = (status, message);
                         continue;
                     }
-                    Verdict::Stop => {
-                        meta.record(status, &message);
-                        return error(client, status, &message);
+                    // Nobody rests: the key and the model answer the next
+                    // request as they did before this one.
+                    Verdict::Refused => {
+                        trace.failed(status, &message, 0);
+                        refusing.push((attempt.provider.as_str(), attempt.model.as_str()));
+                        if refused.is_none() {
+                            refused = Some((tried.len(), attempt, status, message.clone()));
+                        }
+                        tried.push(tried_of(attempt, status));
+                        last = (status, message);
+                        continue;
                     }
                 }
             }
@@ -1004,7 +1044,7 @@ impl Gateway {
             };
             match answered {
                 Ok(response) => {
-                    self.health.healthy(&key);
+                    self.health.healthy(&key, &attempt.model);
                     self.health
                         .count(&format!("{}/{}", attempt.provider, attempt.model));
                     // The answer has the request now, to its end.
@@ -1013,7 +1053,7 @@ impl Gateway {
                 }
                 Err((status, message)) => {
                     tracing::info!(provider = %attempt.provider, "answer failed before it began: {message}");
-                    self.health.rest(&key, cooldown);
+                    self.health.rest_model(&key, &attempt.model, cooldown);
                     last = (
                         status,
                         upstream::hide_key(&format!("{}: {message}", attempt.provider), attempt),
@@ -1022,6 +1062,22 @@ impl Gateway {
                     tried.push(tried_of(attempt, status));
                 }
             }
+        }
+        // A request turned away is at fault unless another model took it:
+        // the client hears the first that said so, not a later one's failure
+        // it would ask again after, and the record is that model's.
+        if let Some((at, attempt, status, message)) = refused {
+            tried.remove(at);
+            let failovers = tried.len() as u32;
+            let mut meta = Meta::new(
+                started, &agent, &requested, client, attempt, stream, failovers,
+            );
+            meta.project = project;
+            meta.subagent = subagent;
+            meta.tried = tried;
+            meta.tracing = Some(trace);
+            meta.record(status, &message);
+            return error(client, status, &message);
         }
         if let Some(attempt) = attempts.last() {
             let failovers = attempts.len().saturating_sub(1) as u32;

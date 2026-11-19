@@ -264,11 +264,11 @@ pub async fn orders(
         let seats: Vec<middleware::Seat> = members
             .iter()
             .map(|m| {
-                let provider = m.split('/').next().unwrap_or_default();
+                let (provider, model) = m.split_once('/').unwrap_or((m, ""));
                 let resting = config.provider(provider).is_some_and(|p| {
                     !p.accounts.is_empty()
                         && p.enabled_accounts()
-                            .all(|a| health.resting(&format!("{provider}:{}", a.id)))
+                            .all(|a| health.resting(&format!("{provider}:{}", a.id), model))
                 });
                 middleware::Seat {
                     key: m.clone(),

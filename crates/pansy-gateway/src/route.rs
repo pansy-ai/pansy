@@ -57,39 +57,65 @@ impl Attempt {
 /// failure, and where rotating groups are.
 #[derive(Debug, Default)]
 pub struct Health {
+    /// Keys resting for every model, by key id.
     rests: Mutex<HashMap<String, Instant>>,
+    /// Keys resting for one model, by key id and model.
+    model_rests: Mutex<HashMap<(String, String), Instant>>,
     turns: Mutex<HashMap<String, usize>>,
     used: Mutex<HashMap<String, u64>>,
 }
 
 impl Health {
-    /// Rests a key: it is tried after the others until `rest` has passed.
+    /// Rests a key: it is tried after the others until `rest` has passed,
+    /// whichever model is asked.
     pub fn rest(&self, key_id: &str, rest: Duration) {
         let until = Instant::now() + rest;
         self.rests.lock().unwrap().insert(key_id.to_owned(), until);
     }
 
-    /// A key answered: it rests no more.
-    pub fn healthy(&self, key_id: &str) {
-        self.rests.lock().unwrap().remove(key_id);
-    }
-
-    pub fn resting(&self, key_id: &str) -> bool {
-        self.rest_left(key_id) > 0
-    }
-
-    /// The seconds `key_id` has left to rest, rounded up; 0 when it is ready.
-    pub fn rest_left(&self, key_id: &str) -> u64 {
-        let now = Instant::now();
-        self.rests
+    /// Rests a key for `model` alone: what failed was the model's (its
+    /// limit, its server), and the key's other models are asked as before.
+    pub fn rest_model(&self, key_id: &str, model: &str, rest: Duration) {
+        let until = Instant::now() + rest;
+        self.model_rests
             .lock()
             .unwrap()
-            .get(key_id)
-            .filter(|until| **until > now)
-            .map_or(0, |until| (*until - now).as_millis().div_ceil(1000) as u64)
+            .insert((key_id.to_owned(), model.to_owned()), until);
     }
 
-    /// Keys resting now, with the seconds left.
+    /// A key answered for `model`: it rests no more for it.
+    pub fn healthy(&self, key_id: &str, model: &str) {
+        self.rests.lock().unwrap().remove(key_id);
+        self.model_rests
+            .lock()
+            .unwrap()
+            .remove(&(key_id.to_owned(), model.to_owned()));
+    }
+
+    pub fn resting(&self, key_id: &str, model: &str) -> bool {
+        self.rest_left(key_id, model) > 0
+    }
+
+    /// The seconds `key_id` has left to rest before `model` is asked of it,
+    /// rounded up; 0 when it is ready.
+    pub fn rest_left(&self, key_id: &str, model: &str) -> u64 {
+        let now = Instant::now();
+        let key = self.rests.lock().unwrap().get(key_id).copied();
+        let for_model = self
+            .model_rests
+            .lock()
+            .unwrap()
+            .get(&(key_id.to_owned(), model.to_owned()))
+            .copied();
+        key.into_iter()
+            .chain(for_model)
+            .filter(|until| *until > now)
+            .max()
+            .map_or(0, |until| (until - now).as_millis().div_ceil(1000) as u64)
+    }
+
+    /// Keys resting now, with the seconds left: `provider:key`, and
+    /// `provider:key · model` for one resting for that model alone.
     pub fn resting_keys(&self) -> Vec<(String, u64)> {
         let now = Instant::now();
         let mut out: Vec<(String, u64)> = self
@@ -100,6 +126,14 @@ impl Health {
             .filter(|(_, until)| **until > now)
             .map(|(k, until)| (k.clone(), (*until - now).as_secs()))
             .collect();
+        out.extend(
+            self.model_rests
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|(_, until)| **until > now)
+                .map(|((k, model), until)| (format!("{k} · {model}"), (*until - now).as_secs())),
+        );
         out.sort();
         out
     }
@@ -427,7 +461,7 @@ pub fn plan_with(
                 attempt.proxy = account.proxy.clone();
             }
             attempt.account = Some(account.clone());
-            if health.resting(&attempt.key_id()) {
+            if health.resting(&attempt.key_id(), &attempt.model) {
                 resting.push(attempt);
             } else {
                 fresh.push(attempt);
@@ -490,6 +524,53 @@ mod tests {
         // DeepSeek answers Anthropic itself: the request passes through.
         assert_eq!(plan[0].endpoint.protocol, Protocol::Anthropic);
         assert_eq!(plan[0].model, "deepseek-chat");
+    }
+
+    #[test]
+    fn a_key_rests_for_the_model_that_failed() {
+        let config = config();
+        let health = Health::default();
+        health.rest_model("deepseek:k1", "deepseek-chat", Duration::from_secs(60));
+        let keys = |model: &str| -> Vec<String> {
+            plan(&config, model, Protocol::Anthropic, &health)
+                .unwrap()
+                .iter()
+                .map(Attempt::key_id)
+                .collect()
+        };
+        assert_eq!(
+            keys("deepseek/deepseek-chat"),
+            ["deepseek:k2", "deepseek:k1"]
+        );
+        // Its other model is asked of it first, as before.
+        assert_eq!(
+            keys("deepseek/deepseek-reasoner"),
+            ["deepseek:k1", "deepseek:k2"]
+        );
+        assert_eq!(health.rest_left("deepseek:k1", "deepseek-reasoner"), 0);
+        assert_eq!(
+            health
+                .resting_keys()
+                .iter()
+                .map(|(k, _)| k.as_str())
+                .collect::<Vec<_>>(),
+            ["deepseek:k1 · deepseek-chat"]
+        );
+        // An answer for a model ends its rest, and no other model's.
+        health.rest_model("deepseek:k1", "deepseek-reasoner", Duration::from_secs(60));
+        health.healthy("deepseek:k1", "deepseek-chat");
+        assert_eq!(
+            keys("deepseek/deepseek-chat"),
+            ["deepseek:k1", "deepseek:k2"]
+        );
+        assert_eq!(
+            keys("deepseek/deepseek-reasoner"),
+            ["deepseek:k2", "deepseek:k1"]
+        );
+        // A key refused rests whichever model is asked.
+        health.rest("deepseek:k2", Duration::from_secs(60));
+        assert!(health.resting("deepseek:k2", "deepseek-chat"));
+        assert!(health.resting("deepseek:k2", "deepseek-reasoner"));
     }
 
     #[test]

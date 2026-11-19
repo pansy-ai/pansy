@@ -943,6 +943,7 @@ const ZH_HANS = {
   // Routing
   " %s got one clean reply and never saw the %d that failed first.": " %s 只收到一次正常回复，看不到之前失败的 %d 次。",
   " It rests %s.": " 它休息 %s。",
+  " Its connection broke the first time, so it was asked once more.": " 第一次连接中断，所以又问了一次。",
   " · %s · %d key on": " · %s · 启用 %d 个 Key",
   " · %s · %d keys on": " · %s · 启用 %d 个 Key",
   " · %s · no key needed": " · %s · 无需 Key",
@@ -964,6 +965,7 @@ const ZH_HANS = {
   "%s (%s)": "%s（%s）",
   "%s answered %s — an error another account wouldn't fix, so %s gets it.": "%s 返回 %s，换账号也无法解决，%s 收到此错误。",
   "%s answered %s, and nobody is left to try, so %s gets the error.": "%s 返回 %s，且无其他可试，%s 收到此错误。",
+  "%s answered %s, and nobody is left to try, so %s gets what %s answered first: the request itself was turned away.": "%s 返回 %s，且无其他可试，%s 收到的是 %s 最先返回的错误：被拒绝的是请求本身。",
   "%s answered %s; the request goes on to %s before any of the reply reaches %s.": "%s 返回 %s；请求转给 %s，回复还没有到达 %s。",
   "%s answered in %s%s.": "%s 用 %s 完成回答%s。",
   "%s asked for %s": "%s 请求 %s",

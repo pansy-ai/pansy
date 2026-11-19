@@ -114,6 +114,9 @@ pub struct Try {
     pub us: u64,
     /// Seconds it rests after failing.
     pub rest: u64,
+    /// Its connection broke the first time, and it was asked once more.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub again: bool,
 }
 
 /// The requests the gateway routed lately, newest last.
@@ -188,7 +191,7 @@ impl Tracing {
                 provider: a.provider.clone(),
                 account: a.account.as_ref().map(|a| a.display()).unwrap_or_default(),
                 model: a.model.clone(),
-                resting: health.rest_left(&a.key_id()),
+                resting: health.rest_left(&a.key_id(), &a.model),
                 used: health.used(&format!("{}/{}", a.provider, a.model)),
                 spare: n >= tries,
                 window: crate::prompt::window(config, &a.provider, &a.model),
@@ -238,6 +241,15 @@ impl Tracing {
                 at_us: at,
                 ..Try::default()
             })
+        });
+    }
+
+    /// The account asked last is asked once more: its connection broke.
+    pub fn again(&self) {
+        self.trace.update(self.id, |r| {
+            if let Some(t) = r.tries.last_mut() {
+                t.again = true;
+            }
         });
     }
 

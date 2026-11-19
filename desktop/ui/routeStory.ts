@@ -223,9 +223,14 @@ export function storyOf(r: Route): Step[] {
       steps.push({ kind: "bad", text: tr("%s canceled the request while %s was being asked: nobody failed, so nobody rests and nobody else is asked.", agent, whoModel(s)) });
     } else if (t.status >= 400) {
       const why = [String(t.status), short(t.error, s.provider)].filter(Boolean).join(" · ");
-      const rest = t.rest ? tr(" It rests %s.", secs(t.rest)) : "";
+      const rest = again(t) + (t.rest ? tr(" It rests %s.", secs(t.rest)) : "");
+      // A model that turned the request itself away is what the agent hears
+      // when no model after it answered: the first that did, not the last.
+      const heard = last && r.done && (t.status !== r.status || t.error !== r.error) ? r.tries.find((x) => x.status === r.status && x.error === r.error) : undefined;
       if (next) {
         steps.push({ kind: "bad", text: tr("%s answered %s; the request goes on to %s before any of the reply reaches %s.", whoModel(s), why, who(r.lineup[next.slot]!), agent) + rest });
+      } else if (heard) {
+        steps.push({ kind: "bad", text: tr("%s answered %s, and nobody is left to try, so %s gets what %s answered first: the request itself was turned away.", whoModel(s), why, agent, whoModel(r.lineup[heard.slot]!)) + rest });
       } else if (last && r.lineup.some((x, at) => at > t.slot && !x.spare && !tryOf(r, at))) {
         steps.push({ kind: "bad", text: tr("%s answered %s — an error another account wouldn't fix, so %s gets it.", whoModel(s), why, agent) + rest });
       } else {
@@ -238,11 +243,14 @@ export function storyOf(r: Route): Step[] {
     } else {
       const fails = r.tries.length - 1;
       const answered = tr("%s answered in %s%s.", whoModel(s), dur(r.us), answerFacts(r));
-      steps.push({ kind: "ok", text: fails ? answered + tr(" %s got one clean reply and never saw the %d that failed first.", agent, fails) : answered });
+      steps.push({ kind: "ok", text: (fails ? answered + tr(" %s got one clean reply and never saw the %d that failed first.", agent, fails) : answered) + again(t) });
     }
   });
   return steps;
 }
+
+/** What a try asked twice adds to its line. */
+const again = (t: RouteTry) => (t.again ? tr(" Its connection broke the first time, so it was asked once more.") : "");
 
 /** Why the first in line was first. */
 function whyOf(r: Route): string {

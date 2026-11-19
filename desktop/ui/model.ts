@@ -584,6 +584,8 @@ export interface RouteTry {
   us: number;
   /** Seconds it rests after failing. */
   rest: number;
+  /** Its connection broke the first time, and it was asked once more. */
+  again?: boolean;
 }
 
 /** One request as the Routing page plays it (`pansy_gateway::trace::Route`). */
