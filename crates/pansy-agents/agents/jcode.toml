@@ -1,0 +1,65 @@
+# jcode, as magpie's jcode.go wires it: a named profile, [providers.pansy]
+# (jcode's chat completions client), and [provider] naming the profile and
+# the model jcode starts on. requires_api_key: jcode takes a gateway on
+# loopback as needing no key, and then sends none. It reads its settings at
+# start-up.
+id = "jcode"
+name = "jcode"
+protocol = "chat"
+programs = ["jcode"]
+dirs = [".jcode"]
+picks_in = "/model"
+
+[files]
+config = "{env:JCODE_HOME|~/.jcode}/config.toml"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy", "type"]
+value = "openai-compatible"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy", "base_url"]
+value = "{v1}"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy", "api_key"]
+value = "{key}"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy", "requires_api_key"]
+value = true
+
+[[set]]
+file = "config"
+key = ["providers", "pansy", "default_model"]
+value = "{model}"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy", "models"]
+value = [{ "$each_model" = { id = "{id}", context_window = 128000, input = ["text"] } }]
+
+[[set]]
+file = "config"
+key = ["provider", "default_provider"]
+value = "pansy"
+
+[[set]]
+file = "config"
+key = ["provider", "default_model"]
+value = "{model}"
+
+[base_url]
+file = "config"
+key = ["providers", "pansy", "base_url"]
+
+[model]
+file = "config"
+key = ["provider", "default_model"]
+
+[run]
+unsupported = "jcode reads its providers from config.toml alone; connect it instead (pansy jcode <model>)."

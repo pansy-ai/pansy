@@ -1,0 +1,32 @@
+# Pencil (pen.dev), as magpie's pencil.go: a provider of Pi's format in
+# ~/.pencil/models.json, every model on openai-completions at the gateway's
+# /v1. The model is picked in Pencil's agent composer, not in a file, so
+# connecting puts pansy's models in that picker and writes no model. Each model carries the fields Pencil
+# writes for one, with Pi's defaults (a 128K window, 16384 out) and no cost.
+# Pencil reads the file at start-up: restart it to see the models.
+id = "pencil"
+name = "Pencil"
+protocol = "chat"
+dirs = [".pencil"]
+note = "Pencil reads its custom models at start-up; restart Pencil to see pansy's models in its model picker, and pick one there."
+
+[files]
+models = "~/.pencil/models.json"
+
+[[set]]
+file = "models"
+key = ["providers", "pansy"]
+
+[set.value]
+name = "Pansy"
+baseUrl = "{v1}"
+api = "openai-completions"
+apiKey = "{key}"
+models = [{ "$each_model" = { id = "{id}", name = "{name}", reasoning = false, input = ["text"], contextWindow = 128000, maxTokens = 16384, cost = { input = 0, output = 0, cacheRead = 0, cacheWrite = 0 }, compat = {} } }]
+
+[base_url]
+file = "models"
+key = ["providers", "pansy", "baseUrl"]
+
+[run]
+unsupported = "Pencil reads its providers from ~/.pencil/models.json alone and its model is picked in its window; connect it instead (pansy pencil <model>)."

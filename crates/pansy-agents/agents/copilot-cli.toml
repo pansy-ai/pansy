@@ -1,0 +1,55 @@
+# Copilot CLI. Follows magpie's agents.go (copilot), copilot_byok.go and
+# cliupdate.go: pansy as one of its own providers in providers.json (BYOK,
+# no GitHub sign-in needed), beside the user's, and the model in
+# settings.json as pansy/<id>.
+id = "copilot-cli"
+name = "Copilot CLI"
+protocol = "chat"
+programs = ["copilot"]
+npm = "@github/copilot"
+
+[files]
+settings = "{env:COPILOT_HOME|~/.copilot}/settings.json"
+providers = "{env:COPILOT_HOME|~/.copilot}/providers.json"
+
+[[field]]
+key = "effort"
+kind = "effort"
+levels = ["low", "medium", "high", "xhigh"]
+
+[[set]]
+file = "providers"
+key = ["providers", "[name=pansy]"]
+value = { name = "pansy", type = "openai", baseUrl = "{v1}", apiKey = "{key}" }
+
+[[set]]
+file = "providers"
+key = ["models", "[id={id}]"]
+each_model = true
+value = { id = "{id}", provider = "pansy", name = "{name}" }
+
+[[set]]
+file = "settings"
+key = ["model"]
+value = "pansy/{model}"
+
+[[set]]
+file = "settings"
+key = ["effortLevel"]
+value = "{effort}"
+
+[base_url]
+file = "providers"
+key = ["providers", "[name=pansy]", "baseUrl"]
+
+[model]
+file = "settings"
+key = ["model"]
+prefix = "pansy/"
+
+[[install]]
+via = "npm"
+command = "npm install -g @github/copilot"
+
+[run]
+unsupported = "Copilot CLI reads its providers from providers.json alone; connect it instead (pansy copilot-cli <model>)."

@@ -1,0 +1,81 @@
+# Snow CLI, as magpie's snow.go points it: a profile of pansy's own,
+# profiles/pansy.json, on Chat Completions at the gateway's /v1, and
+# active-profile.json naming it. Snow copies the active profile over
+# config.json at every start, so config.json is left to it.
+# The limits are the ones magpie tells Snow of a model it doesn't know.
+id = "snow"
+name = "Snow CLI"
+protocol = "chat"
+programs = ["snow"]
+dirs = [".snow"]
+npm = "snow-ai"
+small_model = true
+
+[files]
+profile = "{env:SNOW_CONFIG_DIR|~/.snow}/profiles/pansy.json"
+active = "{env:SNOW_CONFIG_DIR|~/.snow}/active-profile.json"
+
+[[set]]
+file = "profile"
+key = ["snowcfg", "baseUrl"]
+value = "{v1}"
+
+[[set]]
+file = "profile"
+key = ["snowcfg", "baseUrlMode"]
+value = "base"
+
+[[set]]
+file = "profile"
+key = ["snowcfg", "apiKey"]
+value = "{key}"
+
+[[set]]
+file = "profile"
+key = ["snowcfg", "requestMethod"]
+value = "chat"
+
+[[set]]
+file = "profile"
+key = ["snowcfg", "advancedModel"]
+value = "{model}"
+
+[[set]]
+file = "profile"
+key = ["snowcfg", "basicModel"]
+value = "{small}"
+
+[[set]]
+file = "profile"
+key = ["snowcfg", "maxContextTokens"]
+value = 200000
+
+[[set]]
+file = "profile"
+key = ["snowcfg", "maxTokens"]
+value = 64000
+
+[[set]]
+file = "profile"
+key = ["snowcfg", "supportsVision"]
+value = false
+
+[[set]]
+file = "active"
+key = ["activeProfile"]
+value = "pansy"
+
+[base_url]
+file = "profile"
+key = ["snowcfg", "baseUrl"]
+
+[model]
+file = "profile"
+key = ["snowcfg", "advancedModel"]
+
+[[install]]
+via = "npm"
+command = "npm install -g --allow-scripts=snow-ai snow-ai"
+
+[run]
+unsupported = "Snow CLI reads its profile files alone; connect it instead (pansy snow <model>)."

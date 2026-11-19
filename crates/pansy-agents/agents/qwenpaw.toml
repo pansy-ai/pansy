@@ -1,0 +1,100 @@
+# QwenPaw (agentscope-ai/QwenPaw), as magpie's qwenpaw.go points its default
+# agent: a custom provider's file in its secret folder, OpenAI Chat at the
+# gateway, a model of extra_models for each of pansy's; the agent's
+# active_model names the provider and the model. QwenPaw reads its providers
+# at its start, and encrypts the key written here in plain text then.
+id = "qwenpaw"
+name = "QwenPaw"
+protocol = "chat"
+programs = ["qwenpaw"]
+dirs = [".qwenpaw"]
+
+[files]
+agent = "{env:QWENPAW_WORKING_DIR|~/.qwenpaw}/workspaces/default/agent.json"
+provider = "{env:QWENPAW_SECRET_DIR|~/.qwenpaw.secret}/providers/custom/pansy.json"
+
+[[set]]
+file = "provider"
+key = ["id"]
+value = "pansy"
+
+[[set]]
+file = "provider"
+key = ["name"]
+value = "Pansy"
+
+[[set]]
+file = "provider"
+key = ["base_url"]
+value = "{v1}"
+
+[[set]]
+file = "provider"
+key = ["api_key"]
+value = "{key}"
+
+[[set]]
+file = "provider"
+key = ["chat_model"]
+value = "OpenAIChatModel"
+
+[[set]]
+file = "provider"
+key = ["is_custom"]
+value = true
+
+[[set]]
+file = "provider"
+key = ["extra_models"]
+value = [{ "$each_model" = { id = "{id}", name = "{name}", source = "user", supports_tool_calling = true } }]
+
+[[set]]
+file = "provider"
+key = ["enabled"]
+value = true
+
+[[set]]
+file = "provider"
+key = ["support_model_discovery"]
+value = false
+
+[[set]]
+file = "provider"
+key = ["support_connection_check"]
+value = false
+
+[[set]]
+file = "provider"
+key = ["models"]
+value = []
+
+[[set]]
+file = "provider"
+key = ["generate_kwargs"]
+value = {}
+
+[[set]]
+file = "provider"
+key = ["custom_headers"]
+value = {}
+
+[[set]]
+file = "provider"
+key = ["snapshot_schema_version"]
+value = 2
+
+[[set]]
+file = "agent"
+key = ["active_model"]
+value = { provider_id = "pansy", model = "{model}" }
+
+[base_url]
+file = "provider"
+key = ["base_url"]
+
+[model]
+file = "agent"
+key = ["active_model", "model"]
+
+[run]
+unsupported = "QwenPaw reads its providers from its files alone; connect it instead (pansy qwenpaw <model>)."

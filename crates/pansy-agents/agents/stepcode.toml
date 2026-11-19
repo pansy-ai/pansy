@@ -1,0 +1,51 @@
+# StepCode, as magpie's stepcode.go wires it: defaultProvider and
+# defaultModel in config.toml, and one provider in models.json in Pi's
+# format (piModelJSON in agents.go).
+id = "stepcode"
+name = "StepCode"
+protocol = "chat"
+programs = ["step"]
+dirs = [".stepcode"]
+
+[files]
+config = "~/.stepcode/config.toml"
+models = "~/.stepcode/models.json"
+
+[[set]]
+file = "models"
+key = ["providers", "pansy"]
+
+[set.value]
+name = "pansy"
+baseUrl = "{v1}"
+api = "openai-completions"
+apiKey = "{key}"
+models = [{ "$each_model" = { id = "{id}", name = "{name}", reasoning = false } }]
+
+[[set]]
+file = "config"
+key = ["defaultProvider"]
+value = "pansy"
+
+[[set]]
+file = "config"
+key = ["defaultModel"]
+value = "{model}"
+
+# A list of enabled models that is there takes the model too.
+[[set]]
+file = "config"
+key = ["enabledModels", "[=pansy/{model}]"]
+value = "pansy/{model}"
+if_there = true
+
+[base_url]
+file = "models"
+key = ["providers", "pansy", "baseUrl"]
+
+[model]
+file = "config"
+key = ["defaultModel"]
+
+[run]
+unsupported = "pansy knows no way to point one run of StepCode elsewhere by its arguments or environment; connect it instead (pansy stepcode <model>)."

@@ -662,6 +662,10 @@ fn wires_and_unwires_an_agent_a_plugin_adds() {
 fn the_built_in_agents_set_what_their_manifests_always_did() {
     let (home, _lock) = scratch();
     let choices = vec!["a/x".to_owned(), "c/z".to_owned()];
+    let names: BTreeMap<String, String> = [("a/x", "A · X"), ("c/z", "Z")]
+        .into_iter()
+        .map(|(id, name)| (id.to_owned(), name.to_owned()))
+        .collect();
     let mut out = String::new();
     for agent in AGENTS.iter() {
         for small in [None, Some("b/y")] {
@@ -673,6 +677,7 @@ fn the_built_in_agents_set_what_their_manifests_always_did() {
                 subagent_model: None,
                 fields: agent::no_fields(),
                 choices: &choices,
+                names: &names,
             };
             out.push_str(&format!("{} {:?}\n", agent.id, agent.edits(&w)));
         }
@@ -796,6 +801,7 @@ DEMO_BASE = "{v1}"
             subagent_model: None,
             fields: agent::no_fields(),
             choices: &[],
+            names: agent::no_fields(),
         })
         .unwrap();
     assert_eq!(run.args, ["--model", "a/x"]);
@@ -1091,4 +1097,233 @@ fn a_manifests_fields_are_checked() {
         said("key = \"e\"\nkind = \"effort\"\nlevels = [\"a\"]\nfollows = true")
             .contains("for a model")
     );
+    // A size, a share and a switch: what each takes, kept as its digits.
+    let m = with("key = \"at\"\nkind = \"tokens\"\nmin = 1000\nmax = 2000000").unwrap();
+    assert_eq!(m.fields[0].accept("272k").as_deref(), Ok("272000"));
+    assert_eq!(m.fields[0].accept(" 1.5M ").as_deref(), Ok("1500000"));
+    assert_eq!(m.fields[0].accept("128,000").as_deref(), Ok("128000"));
+    assert!(m.fields[0].accept("1.5").is_err() && m.fields[0].accept("3m").is_err());
+    assert!(said("key = \"p\"\nkind = \"percent\"\nmin = 1").contains("for tokens"));
+    assert!(said("key = \"s\"\nkind = \"switch\"\njoins = \":\"").contains("joins is for"));
+    let when =
+        format!("{good}\n[[set]]\nfile = \"c\"\nkey = [\"k\"]\nvalue = true\nwhen = \"s\"\n");
+    assert!(format!("{:#}", manifest::parse(&when).unwrap_err()).contains("names no field"));
+}
+
+#[test]
+fn an_agents_own_settings_are_keys_set_and_put_back() {
+    let (home, _lock) = scratch();
+    let codex = home.path().join(".codex/config.toml");
+    fs::create_dir_all(codex.parent().unwrap()).unwrap();
+    // The user's own background compaction, as a switch alone.
+    let mine = "approval_policy = \"never\"\n\n[features]\nasync_compaction = false\n";
+    fs::write(&codex, mine).unwrap();
+    let claude = home.path().join(".claude/settings.json");
+    connect("codex", "deepseek/deepseek-chat").unwrap();
+    connect("claude-code", "deepseek/deepseek-chat").unwrap();
+    let toml =
+        || -> toml_edit::DocumentMut { fs::read_to_string(&codex).unwrap().parse().unwrap() };
+
+    // A size is a number of tokens, written as a number; a share is a percent.
+    let error = set_field("codex", "compact_at", Some("lots")).unwrap_err();
+    assert!(error.to_string().contains("tokens like 272k"), "{error}");
+    let error = set_field("codex", "compact_at", Some("900")).unwrap_err();
+    assert!(
+        error.to_string().contains("10000 tokens or more"),
+        "{error}"
+    );
+    let error = set_field("codex", "background_compaction_at", Some("140")).unwrap_err();
+    assert!(error.to_string().contains("1 to 100"), "{error}");
+    let error = set_field("codex", "background_compaction", Some("maybe")).unwrap_err();
+    assert!(error.to_string().contains("on or off"), "{error}");
+    set_field("codex", "compact_at", Some("200k")).unwrap();
+    set_field("codex", "context_window", Some("1m")).unwrap();
+    set_field("codex", "subagent_effort", Some("low")).unwrap();
+    assert_eq!(
+        toml()["model_auto_compact_token_limit"].as_integer(),
+        Some(200_000)
+    );
+    assert_eq!(toml()["model_context_window"].as_integer(), Some(1_000_000));
+    assert_eq!(
+        toml()["agents"]["default_subagent_reasoning_effort"].as_str(),
+        Some("low")
+    );
+
+    // The share alone sets nothing: the switch turns the table on, with it.
+    set_field("codex", "background_compaction_at", Some("70%")).unwrap();
+    assert_eq!(
+        toml()["features"]["async_compaction"].as_bool(),
+        Some(false)
+    );
+    set_field("codex", "background_compaction", Some("on")).unwrap();
+    let table = toml()["features"]["async_compaction"].clone();
+    assert_eq!(table["enabled"].as_bool(), Some(true));
+    assert_eq!(
+        table["model_async_compact_threshold_percent"].as_integer(),
+        Some(70)
+    );
+    set_field("codex", "background_compaction_at", None).unwrap();
+    let table = toml()["features"]["async_compaction"].clone();
+    assert_eq!(table["enabled"].as_bool(), Some(true));
+    assert!(table.get("model_async_compact_threshold_percent").is_none());
+    let v = view(agent::find("codex").unwrap(), &State::load().unwrap());
+    let field = |key: &str| v.fields.iter().find(|f| f.key == key).unwrap();
+    assert_eq!(field("compact_at").value.as_deref(), Some("200000"));
+    assert_eq!(field("compact_at").min, Some(10_000));
+    assert_eq!(field("background_compaction").value.as_deref(), Some("on"));
+
+    // Off again: the user's own switch is back.
+    set_field("codex", "background_compaction", None).unwrap();
+    assert_eq!(
+        toml()["features"]["async_compaction"].as_bool(),
+        Some(false)
+    );
+
+    // The user's own table, written in one line and changed by them since
+    // pansy wrote the file: put back key by key, a table again.
+    let one_line =
+        "async_compaction = { enabled = false, model_async_compact_threshold_percent = 50 }";
+    let theirs = fs::read_to_string(&codex)
+        .unwrap()
+        .replace("async_compaction = false", one_line);
+    fs::write(&codex, theirs).unwrap();
+    set_field("codex", "background_compaction", Some("on")).unwrap();
+    assert_eq!(
+        toml()["features"]["async_compaction"]["enabled"].as_bool(),
+        Some(true)
+    );
+    set_field("codex", "background_compaction", None).unwrap();
+    let table = toml()["features"]["async_compaction"].clone();
+    assert_eq!(table["enabled"].as_bool(), Some(false));
+    assert_eq!(
+        table["model_async_compact_threshold_percent"].as_integer(),
+        Some(50)
+    );
+    let theirs = fs::read_to_string(&codex)
+        .unwrap()
+        .replace(one_line, "async_compaction = false");
+    fs::write(&codex, theirs).unwrap();
+
+    // Claude Code's is a variable of its settings, as text.
+    let error = set_field("claude-code", "compact_at", Some("50k")).unwrap_err();
+    assert!(
+        error.to_string().contains("100000 tokens or more"),
+        "{error}"
+    );
+    set_field("claude-code", "compact_at", Some("272k")).unwrap();
+    let json = jsonedit::to_value(&fs::read_to_string(&claude).unwrap()).unwrap();
+    assert_eq!(json["env"]["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], "272000");
+    set_field("claude-code", "compact_at", None).unwrap();
+    let json = jsonedit::to_value(&fs::read_to_string(&claude).unwrap()).unwrap();
+    assert_eq!(json["env"]["CLAUDE_CODE_AUTO_COMPACT_WINDOW"], Value::Null);
+
+    disconnect("codex").unwrap();
+    disconnect("claude-code").unwrap();
+    assert_eq!(fs::read_to_string(&codex).unwrap(), mine);
+    assert!(!claude.exists());
+}
+
+#[test]
+fn an_agent_lists_the_models_picked_for_it_by_the_names_asked() {
+    use pansy_core::manage;
+    use pansy_core::settings::AgentModels;
+    let (home, _lock) = scratch();
+    let acme = manage::add_custom(
+        "Acme",
+        Protocol::Chat,
+        "https://acme.example/v1",
+        None,
+        &["large".to_owned(), "small".to_owned(), "old".to_owned()],
+    )
+    .unwrap();
+    let id = |model: &str| format!("{acme}/{model}");
+    let config = home.path().join(".config/opencode/opencode.json");
+    let listed = || -> Vec<(String, String)> {
+        let json: Value = serde_json::from_str(&fs::read_to_string(&config).unwrap()).unwrap();
+        json["provider"]["pansy"]["models"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(id, m)| (id.clone(), m["name"].as_str().unwrap().to_owned()))
+            .collect()
+    };
+    let ids = || -> Vec<String> { listed().into_iter().map(|(id, _)| id).collect() };
+
+    // Every model, each after its provider's name.
+    connect("opencode", &id("large")).unwrap();
+    assert_eq!(ids(), [id("large"), id("small"), id("old")]);
+    assert_eq!(listed()[0].1, "Acme · large");
+    let v = view(agent::find("opencode").unwrap(), &State::load().unwrap());
+    assert!(v.lists_models);
+    assert!(!view(agent::find("codex").unwrap(), &State::load().unwrap()).lists_models);
+
+    // One taken out is gone from the file at once; the one it is on stays.
+    let hidden = AgentModels {
+        hidden: vec![id("old"), id("large")],
+        ..AgentModels::default()
+    };
+    set_listed("opencode", hidden).unwrap();
+    assert_eq!(ids(), [id("small"), id("large")]);
+    // Only the picked ones: a model that comes later stays off.
+    let only = AgentModels {
+        only_picked: true,
+        picked: vec![id("small")],
+        ..AgentModels::default()
+    };
+    set_listed("opencode", only).unwrap();
+    manage::add_model(&acme, "new").unwrap();
+    connect("opencode", &id("small")).unwrap();
+    assert_eq!(ids(), [id("small")]);
+    // Another agent lists them all still.
+    assert_eq!(offered("crush").0.len(), 4);
+    let error = set_listed("codex", AgentModels::default()).unwrap_err();
+    assert!(error.to_string().contains("lists no models"), "{error}");
+
+    // By its own name alone, for this agent or for every one.
+    set_names("opencode", Some(false)).unwrap();
+    assert_eq!(listed()[0].1, "small");
+    assert_eq!(offered("crush").1[&id("small")], "Acme · small");
+    set_names("opencode", None).unwrap();
+    assert_eq!(listed()[0].1, "Acme · small");
+    pansy_core::config::update_settings(|s| {
+        s.set("providerInNames", "off").map_err(|e| anyhow!(e))
+    })
+    .unwrap();
+    reconnect_all().unwrap();
+    assert_eq!(listed()[0].1, "small");
+
+    // Every model again; disconnected, the file pansy made is gone.
+    set_listed("opencode", AgentModels::default()).unwrap();
+    assert_eq!(ids().len(), 4);
+    disconnect("opencode").unwrap();
+    assert!(!config.exists());
+}
+
+#[test]
+fn says_an_agent_is_signed_in_by_the_key_alone() {
+    let (home, _lock) = scratch();
+    let claude = agent::find("claude-code").unwrap();
+    let state = State::default();
+    assert!(!view(claude, &state).signed_in);
+    let file = home.path().join(".claude/.credentials.json");
+    fs::create_dir_all(file.parent().unwrap()).unwrap();
+    fs::write(&file, "{\"mcpOAuth\": {}}").unwrap();
+    assert!(!view(claude, &state).signed_in);
+    fs::write(
+        &file,
+        "{\"claudeAiOauth\": {\"accessToken\": \"sk-ant-oat01-secret\"}}",
+    )
+    .unwrap();
+    assert!(view(claude, &state).signed_in);
+    // Nothing of it reaches what the window is handed.
+    let said = serde_json::to_string(&view(claude, &state)).unwrap();
+    assert!(!said.contains("secret"), "{said}");
+    // Connected, it is on pansy; reading sign-ins off, it isn't looked for.
+    connect("claude-code", "deepseek/deepseek-chat").unwrap();
+    assert!(!view(claude, &State::load().unwrap()).signed_in);
+    disconnect("claude-code").unwrap();
+    pansy_core::config::update_settings(|s| s.set("agentSignIns", "off").map_err(|e| anyhow!(e)))
+        .unwrap();
+    assert!(!view(claude, &State::load().unwrap()).signed_in);
+    assert!(!view(agent::find("opencode").unwrap(), &state).signed_in);
 }

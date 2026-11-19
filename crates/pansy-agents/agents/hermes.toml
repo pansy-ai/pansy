@@ -1,0 +1,57 @@
+# Hermes Agent (Nous Research), as magpie's hermes.go: pansy is an entry
+# under providers in config.yaml, spoken to as chat completions;
+# model.provider names it and model.default is the model. The header names
+# Hermes to the gateway, as only a recent Hermes sends its own.
+# magpie also lists its models in the entry (models, a YAML list, which a
+# manifest can't write), so Hermes's own picker does not offer pansy's.
+# agent.reasoning_effort is what Hermes's /reasoning saves.
+id = "hermes"
+name = "Hermes Agent"
+protocol = "chat"
+programs = ["hermes"]
+dirs = [".hermes"]
+
+[files]
+config = "{env:HERMES_HOME|~/.hermes}/config.yaml"
+
+[[field]]
+key = "effort"
+kind = "effort"
+levels = ["none", "minimal", "low", "medium", "high", "xhigh"]
+
+[[set]]
+file = "config"
+key = ["providers", "pansy"]
+
+[set.value]
+name = "pansy"
+base_url = "{v1}"
+api_key = "{key}"
+api_mode = "chat_completions"
+extra_headers = { User-Agent = "hermes-agent" }
+
+[[set]]
+file = "config"
+key = ["model", "provider"]
+value = "pansy"
+
+[[set]]
+file = "config"
+key = ["model", "default"]
+value = "{model}"
+
+[[set]]
+file = "config"
+key = ["agent", "reasoning_effort"]
+value = "{effort}"
+
+[base_url]
+file = "config"
+key = ["providers", "pansy", "base_url"]
+
+[model]
+file = "config"
+key = ["model", "default"]
+
+[run]
+unsupported = "Hermes reads its providers from config.yaml alone; connect it instead (pansy hermes <model>)."

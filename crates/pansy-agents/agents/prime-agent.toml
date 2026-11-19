@@ -1,0 +1,52 @@
+# Prime Agent, which keeps Pi's settings.json and models.json in a folder
+# of its own. Follows magpie's primeagent.go and agents.go (piLikeKeyed,
+# magpieProviderJSONAt "pi"): pansy as a provider in models.json, the model
+# a session starts on in settings.json.
+id = "prime-agent"
+name = "Prime Agent"
+protocol = "chat"
+programs = ["prime-agent"]
+dirs = [".prime/agent"]
+
+[files]
+settings = "{env:PRIME_AGENT_CODING_AGENT_DIR|~/.prime/agent}/settings.json"
+models = "{env:PRIME_AGENT_CODING_AGENT_DIR|~/.prime/agent}/models.json"
+
+[[set]]
+file = "models"
+key = ["providers", "pansy"]
+
+[set.value]
+name = "Pansy"
+baseUrl = "{v1}"
+api = "openai-completions"
+apiKey = "{key}"
+compat = { sendSessionAffinityHeaders = true }
+models = [{ "$each_model" = { id = "{id}", name = "{name}" } }]
+
+[[set]]
+file = "settings"
+key = ["defaultProvider"]
+value = "pansy"
+
+[[set]]
+file = "settings"
+key = ["defaultModel"]
+value = "{model}"
+
+[[set]]
+file = "settings"
+key = ["enabledModels", "[=pansy/{model}]"]
+value = "pansy/{model}"
+if_there = true
+
+[base_url]
+file = "models"
+key = ["providers", "pansy", "baseUrl"]
+
+[model]
+file = "settings"
+key = ["defaultModel"]
+
+[run]
+unsupported = "Prime Agent reads its providers from models.json alone; connect it instead (pansy prime-agent <model>)."

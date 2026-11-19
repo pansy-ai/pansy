@@ -1,0 +1,38 @@
+# Muse Code, Meta's muse CLI, as magpie's muse.go points it: its requests go
+# to endpoint_transport's base_url on the Responses API, with auth "none" so
+# its Meta sign-in's token is not sent. It refuses a settings.json without
+# schema_version 1.
+id = "muse"
+name = "Muse Code"
+protocol = "responses"
+programs = ["muse"]
+dirs = [".config/muse"]
+
+[files]
+settings = "{env:XDG_CONFIG_HOME|~/.config}/muse/settings.json"
+
+[[set]]
+file = "settings"
+key = ["schema_version"]
+value = 1
+
+[[set]]
+file = "settings"
+key = ["endpoint_transport"]
+value = { base_url = "{v1}", auth = "none" }
+
+[[set]]
+file = "settings"
+key = ["model"]
+value = "{model}"
+
+[base_url]
+file = "settings"
+key = ["endpoint_transport", "base_url"]
+
+[model]
+file = "settings"
+key = ["model"]
+
+[run]
+unsupported = "pansy knows no way to point one run of Muse Code elsewhere; connect it instead (pansy muse <model>)."

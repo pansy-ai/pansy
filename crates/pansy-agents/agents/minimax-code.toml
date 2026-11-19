@@ -1,0 +1,55 @@
+# MiniMax Code (the mcode CLI), as magpie's minimax.go wires it: an entry of
+# custom_provider, the gateway spoken to as Anthropic messages, with its
+# models, and defaultModel, "custom_provider:<key>/<model>" split at the
+# first slash. A variant is the last model's, so it is taken out. A model is
+# keyed by its id as it is, slash and all: a SubAgent's model allows one
+# slash in the whole, so it can't be one of these. MiniMax Code reads its
+# settings at start-up.
+id = "minimax-code"
+name = "MiniMax Code"
+protocol = "anthropic"
+programs = ["mcode"]
+dirs = [".minimax"]
+picks_in = "/model"
+
+[files]
+config = "{env:MINIMAX_DATA_DIR|~/.minimax}/config.yaml"
+
+[[set]]
+file = "config"
+key = ["custom_provider", "pansy"]
+
+[set.value]
+name = "pansy"
+kind = "custom"
+enabled = true
+api = "anthropic-messages"
+options = { apiKey = "{key}", baseURL = "{base_url}", authMode = "api-key", headers = { User-Agent = "minimax-code" } }
+
+[[set]]
+file = "config"
+key = ["custom_provider", "pansy", "models", "{id}"]
+each_model = true
+value = { name = "{name}", reasoning = false }
+
+[[set]]
+file = "config"
+key = ["defaultModel"]
+value = "custom_provider:pansy/{model}"
+
+[[set]]
+file = "config"
+key = ["defaultModelVariant"]
+remove = true
+
+[base_url]
+file = "config"
+key = ["custom_provider", "pansy", "options", "baseURL"]
+
+[model]
+file = "config"
+key = ["defaultModel"]
+prefix = "custom_provider:pansy/"
+
+[run]
+unsupported = "MiniMax Code reads its providers from config.yaml alone; connect it instead (pansy minimax-code <model>)."

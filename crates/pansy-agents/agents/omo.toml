@@ -1,0 +1,57 @@
+# OmO, a fork of Pi in an agent folder of its own. Follows magpie's omo.go,
+# agents.go (piLikeKeyed, magpieProviderJSONAt "pi") and cliupdate.go: pansy
+# as a provider in models.json, the model a session starts on in settings.json.
+id = "omo"
+name = "OmO"
+protocol = "chat"
+programs = ["omo"]
+dirs = [".omo/agent"]
+npm = "omo-ai"
+self_update = ["update"]
+
+[files]
+settings = "{env:OMO_CODING_AGENT_DIR|~/.omo/agent}/settings.json"
+models = "{env:OMO_CODING_AGENT_DIR|~/.omo/agent}/models.json"
+
+[[set]]
+file = "models"
+key = ["providers", "pansy"]
+
+[set.value]
+name = "Pansy"
+baseUrl = "{v1}"
+api = "openai-completions"
+apiKey = "{key}"
+compat = { sendSessionAffinityHeaders = true }
+models = [{ "$each_model" = { id = "{id}", name = "{name}" } }]
+
+[[set]]
+file = "settings"
+key = ["defaultProvider"]
+value = "pansy"
+
+[[set]]
+file = "settings"
+key = ["defaultModel"]
+value = "{model}"
+
+[[set]]
+file = "settings"
+key = ["enabledModels", "[=pansy/{model}]"]
+value = "pansy/{model}"
+if_there = true
+
+[base_url]
+file = "models"
+key = ["providers", "pansy", "baseUrl"]
+
+[model]
+file = "settings"
+key = ["defaultModel"]
+
+[[install]]
+via = "npm"
+command = "npm install -g --allow-scripts=omo-ai omo-ai"
+
+[run]
+unsupported = "OmO reads its providers from models.json alone; connect it instead (pansy omo <model>)."

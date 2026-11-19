@@ -1,0 +1,35 @@
+# Tuanjie Cowork, as magpie's tuanjiecowork.go: its Custom Models are in
+# ~/.codely/settings.json, a provider in customModelProviders and a model in
+# customModels, both with the id pansy: the gateway's /v1 on chat
+# completions. Which model a chat is on is Cowork's own pick in its model
+# menu: pick "<model> (Pansy)" there once, and a model changed here later is
+# the one that pick sends.
+id = "tuanjie-cowork"
+name = "Tuanjie Cowork"
+protocol = "chat"
+dirs = [".codely"]
+note = "Pick pansy's model in Tuanjie Cowork's model menu; if it isn't there yet, restart Tuanjie Cowork."
+
+[files]
+settings = "~/.codely/settings.json"
+
+[[set]]
+file = "settings"
+key = ["customModelProviders", "[id=pansy]"]
+value = { id = "pansy", name = "Pansy", baseUrl = "{v1}", apiKey = "{key}", authType = "openai" }
+
+[[set]]
+file = "settings"
+key = ["customModels", "[id=pansy]"]
+value = { id = "pansy", providerId = "pansy", model = "{model}", displayName = "{model}", roles = ["model"], wireApi = "chat", supportsMultimodal = false }
+
+[base_url]
+file = "settings"
+key = ["customModelProviders", "[id=pansy]", "baseUrl"]
+
+[model]
+file = "settings"
+key = ["customModels", "[id=pansy]", "model"]
+
+[run]
+unsupported = "Tuanjie Cowork reads its Custom Models from ~/.codely/settings.json alone; connect it instead (pansy tuanjie-cowork <model>)."

@@ -1,0 +1,56 @@
+# DevEco Code, Huawei's fork of OpenCode in a folder of its own. Follows
+# magpie's agents.go (deveco, openCodeLike, magpieProviderJSONAt "opencode")
+# and cliupdate.go.
+id = "deveco"
+name = "DevEco Code"
+protocol = "chat"
+programs = ["deveco"]
+dirs = [".config/deveco"]
+small_model = true
+npm = "@deveco/deveco-code"
+self_update = ["upgrade"]
+
+[files]
+# deveco.jsonc when there is one, else deveco.json.
+config = [
+  "{env:XDG_CONFIG_HOME|~/.config}/deveco/deveco.jsonc",
+  "{env:XDG_CONFIG_HOME|~/.config}/deveco/deveco.json",
+]
+
+[[set]]
+file = "config"
+key = ["provider", "pansy"]
+
+[set.value]
+npm = "@ai-sdk/openai-compatible"
+name = "Pansy"
+options = { baseURL = "{v1}", apiKey = "{key}" }
+models = { "$each_model" = { name = "{name}" } }
+
+[[set]]
+file = "config"
+key = ["model"]
+value = "pansy/{model}"
+
+[[set]]
+file = "config"
+key = ["small_model"]
+value = "pansy/{small}"
+
+[base_url]
+file = "config"
+key = ["provider", "pansy", "options", "baseURL"]
+
+[model]
+file = "config"
+key = ["model"]
+prefix = "pansy/"
+
+# Its npm package has no Linux binary.
+[[install]]
+via = "npm"
+command = "npm install -g --allow-scripts=@deveco/deveco-code @deveco/deveco-code"
+os = ["macos", "windows"]
+
+[run]
+unsupported = "DevEco Code is pointed at pansy by its config file; connect it instead (pansy deveco <model>)."

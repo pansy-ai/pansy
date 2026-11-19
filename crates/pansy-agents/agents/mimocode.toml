@@ -1,0 +1,47 @@
+# MiMo Code, a fork of OpenCode in a folder of its own. Follows magpie's
+# agents.go (mimocode, openCodeLike, magpieProviderJSONAt "opencode").
+id = "mimocode"
+name = "MiMo Code"
+protocol = "chat"
+programs = ["mimo"]
+dirs = [".config/mimocode"]
+small_model = true
+
+[files]
+# mimocode.jsonc when there is one, else mimocode.json.
+config = [
+  "{env:XDG_CONFIG_HOME|~/.config}/mimocode/mimocode.jsonc",
+  "{env:XDG_CONFIG_HOME|~/.config}/mimocode/mimocode.json",
+]
+
+[[set]]
+file = "config"
+key = ["provider", "pansy"]
+
+[set.value]
+npm = "@ai-sdk/openai-compatible"
+name = "Pansy"
+options = { baseURL = "{v1}", apiKey = "{key}" }
+models = { "$each_model" = { name = "{name}" } }
+
+[[set]]
+file = "config"
+key = ["model"]
+value = "pansy/{model}"
+
+[[set]]
+file = "config"
+key = ["small_model"]
+value = "pansy/{small}"
+
+[base_url]
+file = "config"
+key = ["provider", "pansy", "options", "baseURL"]
+
+[model]
+file = "config"
+key = ["model"]
+prefix = "pansy/"
+
+[run]
+unsupported = "MiMo Code is pointed at pansy by its config file; connect it instead (pansy mimocode <model>)."

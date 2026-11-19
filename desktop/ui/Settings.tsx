@@ -480,6 +480,15 @@ const SETTINGS: Setting[] = [
     control: () => <OnOff testID="setting-bare" on={!!s()?.bareModelIds} onChange={(on) => void setSetting("bareModelIds", on)} />,
   },
   {
+    id: "names",
+    tab: "network",
+    section: () => tr("Gateway"),
+    title: () => tr("Provider in model names"),
+    description: () =>
+      tr("A model is listed with its provider's name before its own, as “DeepSeek · DeepSeek V3”, in the gateway's model list and the lists pansy writes into agents' files; off, as “DeepSeek V3”. An agent that lists pansy's models has its own way on the Agents page"),
+    control: () => <OnOff testID="setting-names" on={s()?.providerInNames !== false} onChange={(on) => void setSetting("providerInNames", on)} />,
+  },
+  {
     id: "lan",
     tab: "network",
     section: () => tr("Local network"),

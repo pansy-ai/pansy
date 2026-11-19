@@ -150,6 +150,12 @@ test("waits on the Routing page for a request, with the group's accounts below",
 test("shows what connecting an agent would write, and writes nothing by looking", async () => {
   const app = await launch();
   await app.waitFor("id:agent-claude-code");
+  // not connected, its row opens all the same: what it will have, out of reach
+  await app.press("id:details-claude-code");
+  await app.waitFor("id:not-connected-claude-code");
+  await app.waitFor("id:settings-claude-code");
+  expect(app.texts()).not.toContain("Disconnect and restore");
+  await app.press("id:details-claude-code");
   await app.press("id:preview-claude-code");
   await app.waitFor("id:preview");
   await app.waitFor("text:+");
@@ -227,6 +233,18 @@ test("connects an agent to a model with its switch and disconnects it", async ()
   await app.press("id:pick-reset");
   await app.waitUntil(() => wrote("env.ANTHROPIC_DEFAULT_OPUS_MODEL = local-relay/model-b:max"));
 
+  // Its own settings: where a long conversation is compacted is a variable
+  // of its settings, at 272K until another size is typed, then its own again
+  await app.waitFor("id:settings-claude-code");
+  expect(app.texts()).toContain("Long conversations");
+  await app.press("id:setting-claude-code-compact_at-at");
+  await app.waitUntil(() => wrote("env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = 272000"));
+  expect(app.texts()).toContain("Compact at 272K");
+  await app.press("id:setting-claude-code-compact_at-own");
+  await app.waitUntil(() => !wrote("CLAUDE_CODE_AUTO_COMPACT_WINDOW"));
+  // Claude's own models: no provider here has them, and pansy has no subscription of Claude's
+  expect(app.texts()).toContain("claude-* models need a provider that has them: pansy serves no Claude subscription");
+
   // The model its subagents start on: a key more in its settings, then none
   await app.waitFor("id:subagents-claude-code");
   expect(app.texts()).toContain("left to Claude Code");
@@ -247,6 +265,75 @@ test("connects an agent to a model with its switch and disconnects it", async ()
   await app.waitFor("text:Disconnect Claude Code from pansy?");
   await app.press("id:disconnect-confirm");
   await app.waitUntil(() => app.texts().includes("Not connected · Claude Code uses its own settings"));
+});
+
+test("picks the models an agent lists and the names it lists them by, and Codex's own settings", async () => {
+  const app = await launch();
+  await app.press("id:nav-agents");
+  const wrote = (line: string) => app.texts().some((t) => t.includes(line));
+  // OpenCode lists pansy's models itself: every one, until some are picked out
+  await app.waitFor("id:agent-opencode");
+  await app.press("id:connect-opencode");
+  await app.waitFor("id:picker");
+  await app.type("id:picker-search", "model-b");
+  await app.press("id:pick-local-relay/model-b");
+  await app.waitUntil(() => app.texts().some((t) => /^Connected · \d+ models in OpenCode's \/models$/.test(t)));
+  const all = app.texts().find((t) => /^Connected · \d+ models in OpenCode's \/models$/.test(t)) ?? "";
+  const n = Number(/\d+/.exec(all)?.[0] ?? "0");
+  expect(n).toBeGreaterThan(1);
+  await app.press("id:details-opencode");
+  await app.waitFor("id:model-list-opencode");
+  await app.press("id:pick-models-opencode");
+  await app.waitFor("id:pick-models");
+  expect(app.texts()).toContain(`All ${n} models`);
+  // The one it is on stays; another goes
+  expect(app.texts()).toContain("Current");
+  await app.press("id:pick-local-relay/model-a");
+  await app.waitFor(`text:Showing ${n - 1} / ${n} models`);
+  await app.press("id:pick-save");
+  await app.waitUntil(() => app.texts().includes(`Connected · ${n - 1} models in OpenCode's /models`));
+  expect(app.texts()).toContain("1 hidden");
+  // Only the picked ones, then every one again
+  await app.press("id:pick-models-opencode");
+  await app.waitFor("id:pick-models");
+  await app.press("id:pick-none");
+  await app.waitFor(`text:Showing 1 / ${n} models`);
+  await app.press("id:pick-all");
+  await app.waitFor(`text:All ${n} models`);
+  await app.press("id:pick-save");
+  await app.waitUntil(() => app.texts().includes(`Connected · ${n} models in OpenCode's /models`));
+
+  // The names in its list: as Settings has them, or its own way
+  expect(app.texts()).toContain("As in Settings · On");
+  await app.press("id:names-opencode");
+  await app.press("id:names-opencode-off");
+  await app.waitFor("text:OpenCode's list shows “DeepSeek V3”");
+  await app.press("id:names-opencode");
+  await app.press("id:names-opencode-settings");
+  await app.waitFor("text:OpenCode's list shows “DeepSeek · DeepSeek V3”");
+  await app.press("id:connect-opencode");
+  await app.press("id:disconnect-confirm");
+  await app.waitUntil(() => app.texts().includes("Not connected · OpenCode uses its own settings"));
+
+  // Codex's own settings: its background compaction is a table of its config
+  await app.press("id:connect-codex");
+  await app.waitFor("id:picker");
+  await app.type("id:picker-search", "model-b");
+  await app.press("id:pick-local-relay/model-b");
+  await app.waitUntil(() => app.texts().includes("Connected · new sessions take it"));
+  await app.press("id:details-codex");
+  await app.waitFor("id:settings-codex");
+  await app.press("id:changes-codex");
+  await app.press("id:setting-codex-background_compaction-on");
+  await app.waitUntil(() => wrote('features.async_compaction = {"enabled":true}'));
+  await app.press("id:setting-codex-compact_at-at");
+  await app.waitUntil(() => wrote("model_auto_compact_token_limit = 272000"));
+  await app.press("id:setting-codex-background_compaction-off");
+  await app.press("id:setting-codex-compact_at-own");
+  await app.waitUntil(() => !wrote("async_compaction") && !wrote("model_auto_compact_token_limit"));
+  await app.press("id:connect-codex");
+  await app.press("id:disconnect-confirm");
+  await app.waitUntil(() => app.texts().includes("Not connected · Codex uses its own settings"));
 });
 
 test("checks the agents in Diagnostics, and restores one for now and connects it again", async () => {

@@ -1,0 +1,44 @@
+# fx (fx.sh), as magpie's fx.go: pansy is a provider of the user's own in
+# ~/.fx/settings.json, keyless (auth none), on chat completions, the models
+# it lists under model_metadata; "provider" names it and models.pansy is
+# the model. No program: `fx` is other tools' name too, so ~/.fx is the sign
+# of it. fx takes 256 models in a provider and refuses the file past that.
+id = "fx"
+name = "fx"
+protocol = "chat"
+dirs = [".fx"]
+
+[files]
+settings = "~/.fx/settings.json"
+
+[[set]]
+file = "settings"
+key = ["providers", "pansy"]
+
+[set.value]
+protocol = "openai-chat-completions"
+base_url = "{v1}"
+auth = { type = "none" }
+tool_choice_mode = "send"
+model_metadata = { "$each_model" = { supports_tool_use = true, supports_vision = false } }
+
+[[set]]
+file = "settings"
+key = ["provider"]
+value = "pansy"
+
+[[set]]
+file = "settings"
+key = ["models", "pansy"]
+value = "{model}"
+
+[base_url]
+file = "settings"
+key = ["providers", "pansy", "base_url"]
+
+[model]
+file = "settings"
+key = ["models", "pansy"]
+
+[run]
+unsupported = "fx reads its providers from its settings file alone; connect it instead (pansy fx <model>)."

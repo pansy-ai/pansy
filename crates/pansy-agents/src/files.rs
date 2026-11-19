@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::Path;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use serde_json::Value;
 
 use crate::jsonedit;
@@ -30,16 +30,21 @@ pub fn read_text(path: &Path) -> Result<String> {
 
 /// The value at `path` in `text`, `None` when it is not there.
 pub fn get(format: Format, text: &str, path: &[&str]) -> Result<Option<Value>> {
+    let text = text.strip_prefix(BOM).unwrap_or(text);
     match format {
         Format::Json => {
             let root = jsonedit::to_value(text).map_err(|e| anyhow!(e))?;
-            Ok(path.iter().try_fold(&root, |v, k| v.get(*k)).cloned())
+            Ok(jsonedit::walk(&root, path).cloned())
         }
         Format::Toml => {
             if text.trim().is_empty() {
                 return Ok(None);
             }
             let doc: toml_edit::DocumentMut = text.parse()?;
+            if path.iter().any(|step| jsonedit::selector(step).is_some()) {
+                let root = toml_to_json(doc.as_item()).unwrap_or_default();
+                return Ok(jsonedit::walk(&root, path).cloned());
+            }
             let mut item = doc.as_item();
             for key in path {
                 match item.get(key) {
@@ -49,6 +54,7 @@ pub fn get(format: Format, text: &str, path: &[&str]) -> Result<Option<Value>> {
             }
             Ok(toml_to_json(item))
         }
+        _ if picks_item(path) => Ok(None),
         Format::Env => {
             let key = path.last().copied().unwrap_or_default();
             Ok(env_lines(text)
@@ -61,6 +67,16 @@ pub fn get(format: Format, text: &str, path: &[&str]) -> Result<Option<Value>> {
 
 /// `text` with `path` set to `value`, or removed when `value` is `None`.
 pub fn set(format: Format, text: &str, path: &[&str], value: Option<&Value>) -> Result<String> {
+    // A file that starts with a byte order mark keeps it.
+    match text.strip_prefix(BOM) {
+        Some(rest) => Ok(format!("{BOM}{}", set_plain(format, rest, path, value)?)),
+        None => set_plain(format, text, path, value),
+    }
+}
+
+const BOM: char = '\u{feff}';
+
+fn set_plain(format: Format, text: &str, path: &[&str], value: Option<&Value>) -> Result<String> {
     match format {
         Format::Json => match value {
             Some(v) => jsonedit::set(text, path, v),
@@ -74,6 +90,16 @@ pub fn set(format: Format, text: &str, path: &[&str], value: Option<&Value>) -> 
                 text.parse()?
             };
             let (last, parents) = path.split_last().ok_or_else(|| anyhow!("an empty key"))?;
+            if parents
+                .iter()
+                .any(|step| jsonedit::selector(step).is_some())
+            {
+                bail!("in TOML a list's item is set whole: {}", path.join("."));
+            }
+            if let Some((by, is)) = jsonedit::selector(last) {
+                toml_item(&mut doc, parents, by, is, value)?;
+                return Ok(doc.to_string());
+            }
             let mut table = doc.as_table_mut();
             for key in parents {
                 if value.is_none() && !table.contains_key(key) {
@@ -105,13 +131,40 @@ pub fn set(format: Format, text: &str, path: &[&str], value: Option<&Value>) -> 
                     }
                 }
                 None => {
+                    // A comment above the key is the user's: it stays, above
+                    // the key that follows.
+                    let above = table
+                        .key(last)
+                        .and_then(|k| k.leaf_decor().prefix()?.as_str().map(str::to_owned))
+                        .filter(|p| p.contains('#'));
+                    let next = table
+                        .iter()
+                        .skip_while(|(k, _)| k != last)
+                        .nth(1)
+                        .filter(|(_, v)| v.is_value())
+                        .map(|(k, _)| k.to_owned());
                     table.remove(last);
+                    if let (Some(above), Some(next)) = (above, next)
+                        && let Some(mut key) = table.key_mut(&next)
+                    {
+                        let own = key
+                            .leaf_decor()
+                            .prefix()
+                            .and_then(|p| p.as_str())
+                            .unwrap_or_default()
+                            .to_owned();
+                        key.leaf_decor_mut().set_prefix(format!("{above}{own}"));
+                    }
                     // Tables left empty go too, deepest first.
                     prune(doc.as_table_mut(), parents);
                 }
             }
             Ok(doc.to_string())
         }
+        _ if picks_item(path) => bail!(
+            "a list's item ({}) is set in JSON and TOML alone",
+            path.join(".")
+        ),
         Format::Env => {
             let key = path.last().copied().unwrap_or_default();
             Ok(env_set(text, key, value.and_then(Value::as_str)))
@@ -128,6 +181,108 @@ pub fn set(format: Format, text: &str, path: &[&str], value: Option<&Value>) -> 
                 .as_deref(),
         )),
     }
+}
+
+/// Whether a step of `path` picks an item of a list.
+fn picks_item(path: &[&str]) -> bool {
+    path.iter().any(|step| jsonedit::selector(step).is_some())
+}
+
+/// Sets, adds or removes the item of the list at `list` that `by` and `is`
+/// pick: a `[[table]]` of its own for a list of tables, else an item of an
+/// array. The other items stay as they are written.
+fn toml_item(
+    doc: &mut toml_edit::DocumentMut,
+    list: &[&str],
+    by: &str,
+    is: &str,
+    value: Option<&Value>,
+) -> Result<()> {
+    let (last, parents) = list
+        .split_last()
+        .ok_or_else(|| anyhow!("a TOML file is a table, not a list"))?;
+    let mut table = doc.as_table_mut();
+    for key in parents {
+        if value.is_none() && !table.contains_key(key) {
+            return Ok(());
+        }
+        let entry = table.entry(key).or_insert_with(|| {
+            let mut t = toml_edit::Table::new();
+            t.set_implicit(true);
+            toml_edit::Item::Table(t)
+        });
+        table = entry
+            .as_table_mut()
+            .ok_or_else(|| anyhow!("{key} is not a table"))?;
+    }
+    let new_table = |v: &Value| -> Option<toml_edit::Table> {
+        let mut t = toml_edit::Table::new();
+        for (k, v) in v.as_object()? {
+            t.insert(k, toml_edit::Item::Value(json_to_toml(v)?));
+        }
+        Some(t)
+    };
+    match table.get_mut(last) {
+        Some(toml_edit::Item::ArrayOfTables(tables)) => {
+            let at = tables
+                .iter()
+                .position(|t| !by.is_empty() && t.get(by).and_then(|v| v.as_str()) == Some(is));
+            match (value, at) {
+                (Some(v), at) => {
+                    let new = new_table(v).ok_or_else(|| anyhow!("no TOML table for {v}"))?;
+                    match at.and_then(|i| tables.get_mut(i)) {
+                        Some(old) => {
+                            let decor = old.decor().clone();
+                            *old = new;
+                            *old.decor_mut() = decor;
+                        }
+                        None => tables.push(new),
+                    }
+                }
+                (None, Some(i)) => tables.remove(i),
+                (None, None) => {}
+            }
+        }
+        Some(toml_edit::Item::Value(toml_edit::Value::Array(items))) => {
+            let at = items
+                .iter()
+                .position(|v| toml_value_to_json(v).is_some_and(|v| jsonedit::picks(&v, by, is)));
+            match (value, at) {
+                (Some(v), at) => {
+                    let new = json_to_toml(v).ok_or_else(|| anyhow!("no TOML for {v}"))?;
+                    match at {
+                        Some(i) => {
+                            items.replace(i, new);
+                        }
+                        None => items.push(new),
+                    }
+                }
+                (None, Some(i)) => {
+                    items.remove(i);
+                }
+                (None, None) => {}
+            }
+        }
+        Some(_) => bail!("{last} is not a list"),
+        None => {
+            if let Some(v) = value {
+                let item = match new_table(v) {
+                    Some(t) => {
+                        let mut tables = toml_edit::ArrayOfTables::new();
+                        tables.push(t);
+                        toml_edit::Item::ArrayOfTables(tables)
+                    }
+                    None => {
+                        let mut items = toml_edit::Array::new();
+                        items.push(json_to_toml(v).ok_or_else(|| anyhow!("no TOML for {v}"))?);
+                        toml_edit::Item::Value(toml_edit::Value::Array(items))
+                    }
+                };
+                table.insert(last, item);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Removes the tables along `path` that are empty, deepest first.
@@ -147,17 +302,29 @@ fn prune(table: &mut toml_edit::Table, path: &[&str]) {
     }
 }
 
+fn toml_value_to_json(v: &toml_edit::Value) -> Option<Value> {
+    match v {
+        toml_edit::Value::String(s) => Some(Value::String(s.value().clone())),
+        toml_edit::Value::Integer(i) => Some(Value::from(*i.value())),
+        toml_edit::Value::Float(f) => serde_json::Number::from_f64(*f.value()).map(Value::Number),
+        toml_edit::Value::Boolean(b) => Some(Value::Bool(*b.value())),
+        // A list and a table written in one line are what they hold, so
+        // putting one back writes a list or a table again, not its text.
+        toml_edit::Value::Array(items) => Some(Value::Array(
+            items.iter().filter_map(toml_value_to_json).collect(),
+        )),
+        toml_edit::Value::InlineTable(t) => Some(Value::Object(
+            t.iter()
+                .filter_map(|(k, v)| Some((k.to_owned(), toml_value_to_json(v)?)))
+                .collect(),
+        )),
+        other => Some(Value::String(other.to_string().trim().to_owned())),
+    }
+}
+
 fn toml_to_json(item: &toml_edit::Item) -> Option<Value> {
     match item {
-        toml_edit::Item::Value(v) => match v {
-            toml_edit::Value::String(s) => Some(Value::String(s.value().clone())),
-            toml_edit::Value::Integer(i) => Some(Value::from(*i.value())),
-            toml_edit::Value::Float(f) => {
-                serde_json::Number::from_f64(*f.value()).map(Value::Number)
-            }
-            toml_edit::Value::Boolean(b) => Some(Value::Bool(*b.value())),
-            other => Some(Value::String(other.to_string().trim().to_owned())),
-        },
+        toml_edit::Item::Value(v) => toml_value_to_json(v),
         toml_edit::Item::Table(t) => {
             let mut map = serde_json::Map::new();
             for (k, v) in t.iter() {
@@ -167,7 +334,13 @@ fn toml_to_json(item: &toml_edit::Item) -> Option<Value> {
             }
             Some(Value::Object(map))
         }
-        _ => None,
+        toml_edit::Item::ArrayOfTables(tables) => Some(Value::Array(
+            tables
+                .iter()
+                .filter_map(|t| toml_to_json(&toml_edit::Item::Table(t.clone())))
+                .collect(),
+        )),
+        toml_edit::Item::None => None,
     }
 }
 
@@ -463,6 +636,73 @@ mod tests {
             )
             .unwrap(),
             None
+        );
+    }
+
+    #[test]
+    fn sets_adds_and_removes_an_item_of_a_toml_list() {
+        let mine = "# mine\nactive = \"own\"\nenabled = [\"a\"]\n\n[[providers]]\nname = \"own\" # kept\nurl = \"x\"\n";
+        let item = json!({"name": "pansy", "url": "u"});
+        let path = ["providers", "[name=pansy]"];
+        let added = set(Format::Toml, mine, &path, Some(&item)).unwrap();
+        assert!(added.starts_with(mine), "{added}");
+        assert!(
+            added.contains("[[providers]]\nname = \"pansy\"\nurl = \"u\"\n"),
+            "{added}"
+        );
+        assert_eq!(
+            get(Format::Toml, &added, &path).unwrap(),
+            Some(item.clone())
+        );
+        assert_eq!(
+            get(Format::Toml, &added, &["providers", "[name=pansy]", "url"]).unwrap(),
+            Some(json!("u"))
+        );
+        assert_eq!(get(Format::Toml, mine, &path).unwrap(), None);
+        let again = set(
+            Format::Toml,
+            &added,
+            &path,
+            Some(&json!({"name": "pansy", "url": "v"})),
+        )
+        .unwrap();
+        assert_eq!(again.matches("[[providers]]").count(), 2);
+        assert!(again.contains("url = \"v\""));
+        assert_eq!(set(Format::Toml, &added, &path, None).unwrap(), mine);
+
+        let on = ["enabled", "[=b]"];
+        let more = set(Format::Toml, mine, &on, Some(&json!("b"))).unwrap();
+        assert!(more.contains("enabled = [\"a\", \"b\"]"), "{more}");
+        assert_eq!(set(Format::Toml, &more, &on, None).unwrap(), mine);
+        // a byte order mark stays where it is
+        let marked = set(Format::Json, "\u{feff}{\"a\": 1}", &["b"], Some(&json!(2))).unwrap();
+        assert_eq!(marked, "\u{feff}{\"a\": 1, \"b\": 2}");
+        assert_eq!(get(Format::Json, &marked, &["b"]).unwrap(), Some(json!(2)));
+        // a key taken out leaves the comment above it
+        let less = set(Format::Toml, mine, &["active"], None).unwrap();
+        assert!(less.starts_with("# mine\nenabled = [\"a\"]\n"), "{less}");
+
+        // a list there is none of: tables of their own
+        let new = set(
+            Format::Toml,
+            "",
+            &["models", "[id=m]"],
+            Some(&json!({"id": "m"})),
+        )
+        .unwrap();
+        assert_eq!(new, "[[models]]\nid = \"m\"\n");
+        assert_eq!(
+            set(Format::Toml, &new, &["models", "[id=m]"], None).unwrap(),
+            ""
+        );
+        assert!(
+            set(
+                Format::Yaml,
+                "",
+                &["a", "[id=m]"],
+                Some(&json!({"id": "m"}))
+            )
+            .is_err()
         );
     }
 

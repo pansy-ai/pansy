@@ -1,0 +1,41 @@
+# Qoder's CLI (qodercli), as magpie's qoder.go wires it: a provider of its own
+# in "providers", asked at baseUrl + /chat/completions, and model.name as
+# "<provider>/<model>". Qoder offers custom providers only to a signed-in
+# account whose plan has BYOK, and reads its settings as a session starts.
+id = "qoder"
+name = "Qoder"
+protocol = "chat"
+programs = ["qodercli"]
+dirs = [".qoder"]
+
+[files]
+settings = "{env:QODER_CONFIG_DIR|~/.qoder}/settings.json"
+
+[[set]]
+file = "settings"
+key = ["providers", "pansy"]
+
+[set.value]
+displayName = "Pansy"
+protocol = "openai"
+baseUrl = "{v1}"
+apiKey = "{key}"
+model = "{model}"
+models = [{ "$each_model" = { model = "{id}", displayName = "{name}", capabilities = { tools = true, vision = false } } }]
+
+[[set]]
+file = "settings"
+key = ["model", "name"]
+value = "pansy/{model}"
+
+[base_url]
+file = "settings"
+key = ["providers", "pansy", "baseUrl"]
+
+[model]
+file = "settings"
+key = ["model", "name"]
+prefix = "pansy/"
+
+[run]
+unsupported = "Qoder reads its providers from settings.json alone; connect it instead (pansy qoder <model>)."

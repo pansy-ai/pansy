@@ -1,0 +1,87 @@
+# Claude Desktop on a third-party gateway, after magpie's claudedesktop.go
+# (desktopOn): a gateway profile in Claude-3p/configLibrary, listed and
+# applied by its _meta.json, and deploymentMode "3p" in both
+# claude_desktop_config.json files, written last. These are Linux's folders;
+# macOS and Windows keep them elsewhere. Desktop has no model key: it lists
+# the gateway's /v1/models, and keeps only ids that read as Anthropic's.
+# The profile's id is a UUID as Desktop makes them, its last part "pansy" in
+# hex, as magpie's is "magpie".
+id = "claude-desktop"
+name = "Claude Desktop"
+protocol = "anthropic"
+dirs = [".config/Claude", ".config/Claude-3p"]
+note = "Claude Desktop reads this at start-up: quit and reopen it. It then runs with no Anthropic sign-in, Code and Cowork on pansy's models."
+
+[files]
+config = "{env:XDG_CONFIG_HOME|~/.config}/Claude/claude_desktop_config.json"
+config3p = "{env:XDG_CONFIG_HOME|~/.config}/Claude-3p/claude_desktop_config.json"
+profile = "{env:XDG_CONFIG_HOME|~/.config}/Claude-3p/configLibrary/00000000-0000-4000-8000-0070616e7379.json"
+meta = "{env:XDG_CONFIG_HOME|~/.config}/Claude-3p/configLibrary/_meta.json"
+
+[[set]]
+file = "profile"
+key = ["inferenceProvider"]
+value = "gateway"
+
+[[set]]
+file = "profile"
+key = ["inferenceGatewayBaseUrl"]
+value = "{base_url}"
+
+[[set]]
+file = "profile"
+key = ["inferenceGatewayApiKey"]
+value = "{key}"
+
+[[set]]
+file = "profile"
+key = ["inferenceGatewayAuthScheme"]
+value = "bearer"
+
+# Policies magpie seeds once and then leaves to the user.
+[[set]]
+file = "profile"
+key = ["disableDeploymentModeChooser"]
+value = true
+
+[[set]]
+file = "profile"
+key = ["coworkEgressAllowedHosts"]
+value = ["*"]
+
+[[set]]
+file = "profile"
+key = ["claudeAiImport"]
+value = { enabled = true, bannerBehavior = "detect" }
+
+[[set]]
+file = "profile"
+key = ["toolSearchEnabled"]
+value = true
+
+[[set]]
+file = "meta"
+key = ["entries", "[id=00000000-0000-4000-8000-0070616e7379]"]
+value = { id = "00000000-0000-4000-8000-0070616e7379", name = "pansy" }
+
+[[set]]
+file = "meta"
+key = ["appliedId"]
+value = "00000000-0000-4000-8000-0070616e7379"
+
+[[set]]
+file = "config3p"
+key = ["deploymentMode"]
+value = "3p"
+
+[[set]]
+file = "config"
+key = ["deploymentMode"]
+value = "3p"
+
+[base_url]
+file = "profile"
+key = ["inferenceGatewayBaseUrl"]
+
+[run]
+unsupported = "Claude Desktop is a desktop app that reads its gateway profile at start-up; connect it instead (pansy claude-desktop <model>)."

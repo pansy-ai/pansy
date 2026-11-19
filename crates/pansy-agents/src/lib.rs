@@ -49,6 +49,9 @@ pub struct FieldView {
     pub levels: Vec<&'static str>,
     /// With none given, the main model's.
     pub follows: bool,
+    /// The least and the most a size may be.
+    pub min: Option<u64>,
+    pub max: Option<u64>,
     /// What the user gave it, while the agent is connected.
     pub value: Option<String>,
 }
@@ -80,8 +83,14 @@ pub struct AgentView {
     /// Every subagent of it goes on that model, whatever one its lead
     /// names: the gateway sees to it.
     pub subagent_every: bool,
-    /// What else may be set for it: a tier's model, an effort.
+    /// What else may be set for it: a tier's model, an effort, a setting
+    /// of its own.
     pub fields: Vec<FieldView>,
+    /// It lists the gateway's models itself: which ones is the user's pick.
+    pub lists_models: bool,
+    /// Not connected, it is signed in to its vendor (its Claude
+    /// subscription, ChatGPT): what it is on now.
+    pub signed_in: bool,
     pub config_files: Vec<String>,
     pub recent: Vec<String>,
     pub note: Option<&'static str>,
@@ -117,7 +126,12 @@ pub fn view(agent: &Agent, state: &State) -> AgentView {
         None => {
             let base = gateway_url();
             let (file, format, path) = agent.base_url_key();
-            read_key(&file, format, &path).is_some_and(|url| is_ours(&url, &base))
+            if path.is_empty() {
+                // No key says where it points: by what pansy wrote.
+                saved.is_some_and(|s| s.model.is_some() && !s.touched.is_empty())
+            } else {
+                read_key(&file, format, &path).is_some_and(|url| is_ours(&url, &base))
+            }
         }
     };
     let model = if !connected {
@@ -152,11 +166,15 @@ pub fn view(agent: &Agent, state: &State) -> AgentView {
                 kind: f.kind,
                 levels: f.levels.clone(),
                 follows: f.follows,
+                min: f.min,
+                max: f.max,
                 value: saved
                     .and_then(|s| s.fields.get(f.key).cloned())
                     .filter(|_| connected),
             })
             .collect(),
+        lists_models: agent.lists_models(),
+        signed_in: !connected && agent.signed_in(),
         config_files: agent
             .files()
             .iter()
@@ -389,6 +407,7 @@ fn formats(agent: &Agent) -> BTreeMap<String, files::Format> {
                 subagent_model: Some(""),
                 fields: &fields,
                 choices: &[],
+                names: agent::no_fields(),
             })
             .into_iter()
             .map(|e| (e.file.display().to_string(), e.format)),
@@ -437,6 +456,25 @@ pub fn changes(id: &str) -> Result<Vec<FileChange>> {
 pub(crate) fn find(id: &str) -> Result<&'static Agent> {
     agent::find(id)
         .ok_or_else(|| anyhow!("pansy does not know an agent {id}; `pansy agents` lists them"))
+}
+
+/// The gateway's models as the agent `id` lists them: the ones the user left
+/// in its list (Model list › Pick), and the name each model goes by there,
+/// after its provider's unless Provider in model names is off for it.
+pub(crate) fn offered(id: &str) -> (Vec<String>, BTreeMap<String, String>) {
+    let settings = config::load_settings().unwrap_or_default();
+    let with_provider = settings.names_provider(id);
+    let all = pansy_core::manage::choices().unwrap_or_default();
+    let names = all
+        .iter()
+        .map(|c| (c.id.clone(), c.label(with_provider)))
+        .collect();
+    let choices = all
+        .into_iter()
+        .map(|c| c.id)
+        .filter(|model| settings.lists(id, model))
+        .collect();
+    (choices, names)
 }
 
 /// Copies `file` into `backups/<agent>/` the first time pansy changes it.
@@ -491,11 +529,7 @@ fn wire(agent: &Agent, model: &str, others: Others, state: &mut State) -> Result
     let mut fields = others.fields;
     fields.retain(|key, _| agent.fields().iter().any(|f| f.key == key));
     let base = gateway_url();
-    let choices: Vec<String> = pansy_core::manage::choices()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|c| c.id)
-        .collect();
+    let (choices, names) = offered(agent.id);
     let wiring = agent::Wiring {
         base_url: &base,
         key: AGENT_KEY,
@@ -504,6 +538,7 @@ fn wire(agent: &Agent, model: &str, others: Others, state: &mut State) -> Result
         subagent_model: subagent,
         fields: &fields,
         choices: &choices,
+        names: &names,
     };
     let edits = agent.edits_checked(&wiring)?;
     let left_out = agent.left_out(&wiring);
@@ -514,7 +549,13 @@ fn wire(agent: &Agent, model: &str, others: Others, state: &mut State) -> Result
     for e in &left_out {
         by_file.entry(e.file.clone()).or_default().1.push(e);
     }
+    // A file pansy set keys in and sets none in now is looked at too: its
+    // keys go back.
+    let formats = formats(agent);
     let record = state.agent(agent.id);
+    for t in &record.touched {
+        by_file.entry(PathBuf::from(&t.file)).or_default();
+    }
     for (file, (edits, left_out)) in by_file {
         let mut text = files::read_text(&file)?;
         let original = text.clone();
@@ -530,22 +571,30 @@ fn wire(agent: &Agent, model: &str, others: Others, state: &mut State) -> Result
         {
             record.files.remove(&file_key);
         }
+        let mut set: Vec<&Vec<String>> = Vec::new();
         for e in edits {
             let path: Vec<&str> = e.path.iter().map(String::as_str).collect();
-            if !record
+            let mine = record
                 .touched
                 .iter()
-                .any(|t| t.file == file_key && t.path == e.path)
-            {
+                .any(|t| t.file == file_key && t.path == e.path);
+            if !mine {
+                if e.if_there && !holds(e.format, &text, &path)? {
+                    continue;
+                }
                 let before = files::get(e.format, &text, &path)
                     .with_context(|| format!("reading {}", file.display()))?;
+                if e.remove && before.is_none() {
+                    continue;
+                }
                 record.touched.push(Touched {
                     file: file_key.clone(),
                     path: e.path.clone(),
                     before,
                 });
             }
-            text = files::set(e.format, &text, &path, Some(&e.value))
+            set.push(&e.path);
+            text = files::set(e.format, &text, &path, (!e.remove).then_some(&e.value))
                 .with_context(|| format!("editing {}", file.display()))?;
         }
         // A key pansy set for a model there is none of now: as it was.
@@ -561,6 +610,24 @@ fn wire(agent: &Agent, model: &str, others: Others, state: &mut State) -> Result
             let path: Vec<&str> = e.path.iter().map(String::as_str).collect();
             text = files::set(e.format, &text, &path, was.before.as_ref())
                 .with_context(|| format!("editing {}", file.display()))?;
+        }
+        // And a key a manifest set before and sets no more (a model gone
+        // from the list, a table's key): as it was, the last set first.
+        if agent.plugged().is_none()
+            && let Some(format) = formats.get(&file_key).copied()
+        {
+            let mut at = record.touched.len();
+            while at > 0 {
+                at -= 1;
+                let t = &record.touched[at];
+                if t.file != file_key || set.contains(&&t.path) {
+                    continue;
+                }
+                let was = record.touched.remove(at);
+                let path: Vec<&str> = was.path.iter().map(String::as_str).collect();
+                text = files::set(format, &text, &path, was.before.as_ref())
+                    .with_context(|| format!("editing {}", file.display()))?;
+            }
         }
         if text != original {
             back_up(agent.id, &file)?;
@@ -657,10 +724,10 @@ pub fn set_field(id: &str, key: &str, value: Option<&str>) -> Result<()> {
         .iter()
         .find(|f| f.key == key)
         .ok_or_else(|| anyhow!("{} has no setting {key} that pansy knows", agent.name))?;
-    let value = value.map(str::trim).filter(|v| !v.is_empty());
-    if let Some(why) = value.and_then(|v| field.refuses(v)) {
-        bail!("{why}");
-    }
+    let value = match value.map(str::trim).filter(|v| !v.is_empty()) {
+        Some(value) => Some(field.accept(value).map_err(|why| anyhow!(why))?),
+        None => None,
+    };
     let mut state = State::load()?;
     let current = view(agent, &state)
         .model
@@ -668,11 +735,62 @@ pub fn set_field(id: &str, key: &str, value: Option<&str>) -> Result<()> {
     let saved = state.clone();
     let mut others = Others::saved(&saved, id);
     match value {
-        Some(value) => others.fields.insert(key.to_owned(), value.to_owned()),
+        Some(value) => others.fields.insert(key.to_owned(), value),
         None => others.fields.remove(key),
     };
     wire(agent, &current, others, &mut state)?;
     state.save()
+}
+
+/// Whether what holds the key at `path` (the table it is in, the list it
+/// is an item of) is in `text`.
+pub(crate) fn holds(format: files::Format, text: &str, path: &[&str]) -> Result<bool> {
+    match path.split_last() {
+        Some((_, [])) | None => Ok(!text.trim().is_empty()),
+        Some((_, parents)) => Ok(files::get(format, text, parents)?.is_some()),
+    }
+}
+
+/// Connects the agent again, when it is connected: what it lists changed.
+fn rewire(agent: &Agent) -> Result<()> {
+    match view(agent, &State::load()?).model {
+        Some(model) => connect(agent.id, &model),
+        None => Ok(()),
+    }
+}
+
+/// Picks which of the gateway's models the agent lists; a connected one's
+/// list is written again. The models it is set to stay in it.
+pub fn set_listed(id: &str, models: pansy_core::settings::AgentModels) -> Result<()> {
+    let agent = find(id)?;
+    if !agent.lists_models() {
+        bail!(
+            "{} lists no models of pansy's: it starts on the one picked for it",
+            agent.name
+        );
+    }
+    config::update_settings(|s| {
+        s.agent_models.insert(agent.id.to_owned(), models);
+        s.check().map_err(|e| anyhow!(e))
+    })?;
+    rewire(agent)
+}
+
+/// Whether the agent lists a model with its provider's name before it;
+/// `None` follows Settings' Provider in model names again.
+pub fn set_names(id: &str, with_provider: Option<bool>) -> Result<()> {
+    let agent = find(id)?;
+    if !agent.lists_models() {
+        bail!("{} shows no names of pansy's for its models", agent.name);
+    }
+    config::update_settings(|s| {
+        match with_provider {
+            Some(on) => s.agent_names.insert(agent.id.to_owned(), on),
+            None => s.agent_names.remove(agent.id),
+        };
+        Ok(())
+    })?;
+    rewire(agent)
 }
 
 /// Puts back every key pansy set in the agent's config.

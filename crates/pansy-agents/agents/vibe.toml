@@ -1,0 +1,56 @@
+# Mistral Vibe (the `vibe` CLI), as magpie's vibe.go wires it: a [[providers]]
+# entry (the gateway's /v1 as chat completions), one [[models]] entry per
+# model, aliased "pansy/<id>", and active_model, an alias. Vibe reads a
+# provider's key from the environment alone, never from config.toml, and
+# sends a keyless provider's extra_headers as they are: the key goes there,
+# as an Authorization header. Vibe reads its settings at start-up.
+id = "vibe"
+name = "Mistral Vibe"
+protocol = "chat"
+programs = ["vibe"]
+dirs = [".vibe"]
+picks_in = "/model"
+
+[files]
+config = "{env:VIBE_HOME|~/.vibe}/config.toml"
+
+[[set]]
+file = "config"
+key = ["providers", "[name=pansy]"]
+
+[set.value]
+name = "pansy"
+api_base = "{v1}"
+api_style = "openai"
+backend = "generic"
+extra_headers = { Authorization = "Bearer {key}" }
+
+[[set]]
+file = "config"
+key = ["models", "[alias=pansy/{id}]"]
+each_model = true
+
+[set.value]
+name = "{id}"
+provider = "pansy"
+alias = "pansy/{id}"
+thinking_levels = ["off"]
+supports_images = false
+max_context_length = 128000
+
+[[set]]
+file = "config"
+key = ["active_model"]
+value = "pansy/{model}"
+
+[base_url]
+file = "config"
+key = ["providers", "[name=pansy]", "api_base"]
+
+[model]
+file = "config"
+key = ["active_model"]
+prefix = "pansy/"
+
+[run]
+unsupported = "Mistral Vibe reads its providers from config.toml alone; connect it instead (pansy vibe <model>)."

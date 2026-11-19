@@ -1,0 +1,64 @@
+# ZCode, as magpie's zcode.go. ZCode 3.14 and later keeps its providers as
+# rules in ~/.zcode/v2/provider_config.json: the provider one item of
+# providerRules, each model one of providerModelRules. An older ZCode reads
+# provider.<id> of config.json; both are written, as magpie writes both.
+# The provider starts on Anthropic Messages, asked at baseUrl + /v1/messages.
+# The model is picked per task in ZCode's own picker, so connecting puts
+# pansy's models there and writes no model. Each model has the 200000
+# window magpie gives one it doesn't know.
+# A data folder moved in ZCode's settings (dataBaseDir) is not followed.
+id = "zcode"
+name = "ZCode"
+protocol = "anthropic"
+dirs = [".zcode"]
+note = "Restart ZCode to see pansy's models in its model picker."
+
+[files]
+config = "~/.zcode/v2/config.json"
+rules = "~/.zcode/v2/provider_config.json"
+
+[[set]]
+file = "rules"
+key = ["schemaVersion"]
+value = 1
+
+[[set]]
+file = "rules"
+key = ["config", "providerConfigRules", "providerRules", "[providerId=pansy]"]
+
+[set.value]
+providerId = "pansy"
+providerName = "Pansy"
+enabled = true
+
+[set.value.config]
+group = "standard-personal"
+access = { type = "api-key", apiKey = "{key}" }
+api = { type = "anthropic-messages", baseUrl = "{base_url}" }
+personalModelIds = [{ "$each_model" = "{id}" }]
+modelOrder = [{ "$each_model" = "{id}" }]
+
+[[set]]
+file = "rules"
+key = ["config", "modelConfigRules", "providerModelRules", "[modelId={id}]"]
+each_model = true
+value = { providerId = "pansy", modelId = "{id}", config = { properties = { inputFormat = { supportsImage = false } } } }
+
+[[set]]
+file = "config"
+key = ["provider", "pansy"]
+
+[set.value]
+name = "Pansy"
+kind = "anthropic"
+enabled = true
+source = "custom"
+options = { apiKey = "{key}", baseURL = "{base_url}" }
+models = { "$each_model" = { name = "{name}", limit = { context = 200000 }, modalities = { input = ["text"], output = ["text"] } } }
+
+[base_url]
+file = "config"
+key = ["provider", "pansy", "options", "baseURL"]
+
+[run]
+unsupported = "ZCode reads its providers from its own files alone and its model is picked in its window; connect it instead (pansy zcode <model>)."

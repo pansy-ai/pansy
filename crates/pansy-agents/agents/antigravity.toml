@@ -1,0 +1,58 @@
+# Antigravity, Google's desktop app (2.15 and later), after magpie's
+# antigravity.go: its enterprise gateway block on the OpenAI wire protocol,
+# the same in ~/.gemini/config/config.json (2.30 on) and
+# ~/.antigravity/settings.json (up to 2.29), each version reading its own
+# alone. Its picker lists the gateway's /v1/models.
+id = "antigravity"
+name = "Antigravity"
+protocol = "chat"
+# ~/.antigravity is the IDE's and agy's too; this one holds the file only
+# the app's backend writes.
+dirs = [".gemini/antigravity"]
+note = "Antigravity reads its gateway at start-up: restart it to use pansy's models. On a gateway it uses no Google sign-in, so what Google turns on for your account is off until it is disconnected. An agy with no model provider of its own follows it too."
+
+[files]
+config = "~/.gemini/config/config.json"
+legacy = "~/.antigravity/settings.json"
+
+[[set]]
+file = "config"
+key = ["gateway"]
+value = { enabled = true, url = "{base_url}", apiKey = "{key}", wireProtocol = "openai" }
+
+[[set]]
+file = "config"
+key = ["models", "defaultModelId"]
+value = "{model}"
+
+# A list of the user's would hide the gateway's models from the picker.
+[[set]]
+file = "config"
+key = ["models", "list"]
+remove = true
+
+[[set]]
+file = "legacy"
+key = ["gateway"]
+value = { enabled = true, url = "{base_url}", apiKey = "{key}", wireProtocol = "openai" }
+
+[[set]]
+file = "legacy"
+key = ["models", "defaultModelId"]
+value = "{model}"
+
+[[set]]
+file = "legacy"
+key = ["models", "list"]
+remove = true
+
+[base_url]
+file = "config"
+key = ["gateway", "url"]
+
+[model]
+file = "config"
+key = ["models", "defaultModelId"]
+
+[run]
+unsupported = "Antigravity is a desktop app that reads its gateway from its settings files at start-up; connect it instead (pansy antigravity <model>)."

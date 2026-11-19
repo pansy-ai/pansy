@@ -1,0 +1,55 @@
+# Ante (antigma.ai), as magpie's ante.go points it: a provider of its own in
+# catalog.json on OpenAiCompatible (Chat Completions), its models in
+# preferred_models, Ante's picker; settings.json's provider and model are
+# what a session starts on. No auth block: the gateway takes this computer's
+# requests without a key.
+id = "ante"
+name = "Ante"
+protocol = "chat"
+programs = ["ante"]
+dirs = [".ante"]
+
+[files]
+catalog = "{env:ANTE_HOME|~/.ante}/catalog.json"
+settings = "{env:ANTE_HOME|~/.ante}/settings.json"
+
+[[set]]
+file = "catalog"
+key = ["providers", "pansy", "display_name"]
+value = "Pansy"
+
+[[set]]
+file = "catalog"
+key = ["providers", "pansy", "base_url"]
+value = "{v1}"
+
+[[set]]
+file = "catalog"
+key = ["providers", "pansy", "wire_style"]
+value = "OpenAiCompatible"
+
+[[set]]
+file = "catalog"
+key = ["providers", "pansy", "preferred_models"]
+value = [{ "$each_model" = { id = "{id}", display_name = "{name}" } }]
+
+[[set]]
+file = "settings"
+key = ["provider"]
+value = "pansy"
+
+[[set]]
+file = "settings"
+key = ["model"]
+value = "{model}"
+
+[base_url]
+file = "catalog"
+key = ["providers", "pansy", "base_url"]
+
+[model]
+file = "settings"
+key = ["model"]
+
+[run]
+unsupported = "Ante reads its providers from its catalog file alone; connect it instead (pansy ante <model>)."

@@ -1,0 +1,111 @@
+# Goose. Follows magpie's goose.go (gooseProviderJSON, setGooseModel) and
+# agents.go (gooseIn): pansy as a custom provider, a file of its own in
+# custom_providers, and the provider and model goose uses in config.yaml.
+# Goose keeps those in one of two layouts, flat keys (GOOSE_PROVIDER,
+# GOOSE_MODEL) or active_provider and a providers map; magpie writes the one
+# the file is in, this writes both, and goose reads the map first.
+id = "goose"
+name = "Goose"
+protocol = "chat"
+programs = ["goose"]
+dirs = [".config/goose"]
+
+[files]
+config = "{env:XDG_CONFIG_HOME|~/.config}/goose/config.yaml"
+provider = "{env:XDG_CONFIG_HOME|~/.config}/goose/custom_providers/pansy.json"
+
+[[field]]
+key = "effort"
+kind = "effort"
+levels = ["off", "low", "medium", "high", "max"]
+
+[[set]]
+file = "provider"
+key = ["name"]
+value = "pansy"
+
+[[set]]
+file = "provider"
+key = ["engine"]
+value = "openai"
+
+[[set]]
+file = "provider"
+key = ["display_name"]
+value = "Pansy"
+
+[[set]]
+file = "provider"
+key = ["description"]
+value = "Every model Pansy has, through its local gateway"
+
+[[set]]
+file = "provider"
+key = ["api_key_env"]
+value = ""
+
+[[set]]
+file = "provider"
+key = ["base_url"]
+value = "{v1}"
+
+[[set]]
+file = "provider"
+key = ["headers"]
+value = { Authorization = "Bearer {key}" }
+
+[[set]]
+file = "provider"
+key = ["requires_auth"]
+value = false
+
+[[set]]
+file = "provider"
+key = ["skip_canonical_filtering"]
+value = true
+
+[[set]]
+file = "provider"
+key = ["models"]
+value = [{ "$each_model" = { name = "{id}" } }]
+
+[[set]]
+file = "provider"
+key = ["dynamic_models"]
+value = false
+
+[[set]]
+file = "config"
+key = ["active_provider"]
+value = "pansy"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy"]
+value = { enabled = true, model = "{model}", configured = true }
+
+[[set]]
+file = "config"
+key = ["GOOSE_PROVIDER"]
+value = "pansy"
+
+[[set]]
+file = "config"
+key = ["GOOSE_MODEL"]
+value = "{model}"
+
+[[set]]
+file = "config"
+key = ["GOOSE_THINKING_EFFORT"]
+value = "{effort}"
+
+[base_url]
+file = "provider"
+key = ["base_url"]
+
+[model]
+file = "config"
+key = ["providers", "pansy", "model"]
+
+[run]
+unsupported = "Goose loads pansy as a custom provider from a file; connect it instead (pansy goose <model>)."

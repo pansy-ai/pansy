@@ -8,10 +8,13 @@ import { Button as BaseButton, Checkbox, Input as BaseInput, Menu, MenuItem, Swi
 import { tr } from "./i18n";
 import { ICONS } from "./icons";
 import alma from "./logos/alma.png";
+import atomcode from "./logos/atomcode.png";
 import ccSwitch from "./logos/cc-switch.png";
 import crush from "./logos/crush.png";
 import gpustack from "./logos/gpustack.png";
 import mlxServe from "./logos/mlx-serve.png";
+import mothx from "./logos/mothx.png";
+import snow from "./logos/snow.png";
 import zcode from "./logos/zcode.png";
 import { LOGOS } from "./logos";
 import { presets } from "./model";
@@ -80,7 +83,7 @@ export function EffortBars(props: { lit: number; color?: Color; size?: number })
 }
 
 /** The logos that are pictures rather than SVG. */
-const PICTURES = { alma, "cc-switch": ccSwitch, crush, gpustack, "mlx-serve": mlxServe, zcode };
+const PICTURES = { alma, atomcode, "cc-switch": ccSwitch, crush, gpustack, "mlx-serve": mlxServe, mothx, snow, zcode };
 
 export type LogoName = keyof typeof LOGOS | keyof typeof PICTURES | "generic";
 
@@ -92,6 +95,55 @@ const AGENT_LOGOS: Record<string, LogoName> = {
   opencode: "opencode",
   "qwen-code": "qwen-color",
   crush: "crush",
+  "claude-desktop": "claude-color",
+  antigravity: "antigravity-color",
+  mimocode: "mimocode",
+  deveco: "deveco-color",
+  pi: "pi",
+  stepcode: "stepfun-color",
+  mothx: "mothx",
+  penguin: "penguin-color",
+  omo: "omo",
+  "prime-agent": "prime-agent",
+  mu: "mu",
+  goose: "goose",
+  vscode: "vscode",
+  "vscode-insiders": "vscode",
+  "copilot-jetbrains": "githubcopilot",
+  "copilot-cli": "githubcopilot",
+  reasonix: "reasonix-color",
+  commandcode: "commandcode",
+  fx: "fx",
+  hermes: "hermes",
+  morph: "mistermorph-color",
+  "kimi-cli": "kimi",
+  muse: "meta-color",
+  empryo: "empryo-color",
+  nanobot: "nanobot-color",
+  miniq: "miniq-color",
+  paimon: "paimon",
+  ante: "generic",
+  qwenpaw: "qwenpaw",
+  openclaw: "openclaw",
+  jcode: "jcode",
+  vibe: "mistral-color",
+  "minimax-code": "minimax-color",
+  droid: "factory",
+  qoder: "qoder",
+  "qoder-cn": "qoder",
+  grok: "xai",
+  "grok-app": "grok",
+  zcode: "zcode",
+  workbuddy: "workbuddy-color",
+  "workbuddy-ai": "workbuddy-color",
+  codebuddy: "codebuddy-color",
+  pencil: "generic",
+  openpencil: "generic",
+  "tuanjie-cowork": "tuanjie-cowork-color",
+  liveagent: "liveagent-color",
+  t3code: "t3code",
+  atomcode: "atomcode",
+  snow: "snow",
 };
 
 /** Whether a logo of this name is bundled. */
@@ -565,6 +617,8 @@ export function Input(props: {
   label?: string;
   class?: string;
   onSubmit?: () => void;
+  /** The field was left: what was typed is taken. */
+  onBlur?: () => void;
   /** Several lines: the field grows with its text. */
   multiline?: boolean;
 }) {
@@ -581,7 +635,10 @@ export function Input(props: {
       testID={props.testID}
       accessibilityLabel={props.label ?? props.placeholder}
       onFocus={() => focused.set(true)}
-      onBlur={() => focused.set(false)}
+      onBlur={() => {
+        focused.set(false);
+        props.onBlur?.();
+      }}
       class={`${props.multiline ? "min-h-[84px] py-[6px]" : "h-[26px]"} rounded-[7px] border bg-card px-[9px] text-[12.5px] text-foreground placeholder:text-faint ${props.mono ? "font-mono" : ""} ${focused() ? "border-primary" : "border-border"} ${props.class ?? ""}`}
       style={focused() ? { boxShadow: `0 0 0 3px ${token("accent")}` } : undefined}
     />

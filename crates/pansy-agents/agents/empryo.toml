@@ -1,0 +1,34 @@
+# Empryo, as magpie's empryo.go points it: an item of its own in the
+# "providers" list, an OpenAI-compatible endpoint it lists models from
+# (modelsAPI) and asks /chat/completions of; with no envVar it sends no key.
+# defaultModel is "<provider id>/<model id>".
+id = "empryo"
+name = "Empryo"
+protocol = "chat"
+programs = ["empryo"]
+dirs = [".empryo"]
+
+[files]
+config = "~/.empryo/config.json"
+
+[[set]]
+file = "config"
+key = ["providers", "[id=pansy]"]
+value = { id = "pansy", name = "Pansy", baseURL = "{v1}", modelsAPI = "{v1}/models" }
+
+[[set]]
+file = "config"
+key = ["defaultModel"]
+value = "pansy/{model}"
+
+[base_url]
+file = "config"
+key = ["providers", "[id=pansy]", "baseURL"]
+
+[model]
+file = "config"
+key = ["defaultModel"]
+prefix = "pansy/"
+
+[run]
+unsupported = "Empryo reads its providers from its config files alone; connect it instead (pansy empryo <model>)."

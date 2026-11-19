@@ -1,0 +1,31 @@
+# Copilot in JetBrains IDEs, as magpie's copilotjetbrains.go wires it: a
+# custom endpoint provider in the Copilot language server's byok.json.
+id = "copilot-jetbrains"
+name = "Copilot (JetBrains)"
+protocol = "chat"
+
+[files]
+byok = "{env:XDG_CONFIG_HOME|~/.config}/github-copilot/byok.json"
+
+[[set]]
+file = "byok"
+key = ["pansy-provider-config"]
+value = { groupName = "pansy", apiType = "chatCompletions" }
+
+[[set]]
+file = "byok"
+key = ["pansy-api-key"]
+value = "{key}"
+
+[[set]]
+file = "byok"
+key = ["pansy-models-config"]
+
+[set.value."$each_model"]
+deploymentUrl = "{v1}/chat/completions"
+isRegistered = true
+isCustomModel = true
+modelCapabilities = { name = "{name}", maxInputTokens = 128000, maxOutputTokens = 16000, toolCalling = true, vision = false }
+
+[run]
+unsupported = "Copilot in a JetBrains IDE is not started from a command line."

@@ -12,12 +12,12 @@
 // subscriptions' and keys' allowances, which pansy doesn't read yet: as
 // magpie's with none, it has no tab.
 import { colorScheme, computed, createAnimatedValue, createMotion, effect, reduceMotion, Scroll, signal, Text, token, View, type JSX } from "nsh";
-import { Popover } from "nsh/base";
+import { Menu, MenuItem, Popover } from "nsh/base";
 import { Application, Window } from "nsh/desktop";
 import { Agents, Panel as Place, Usage } from "pansy/native";
 import { DisconnectDialog } from "./AgentModals";
 import { HEART, WAG } from "./Brand";
-import { arrange, askDisconnect, connect, disconnectIn, disconnecting, here, isHidden, kindOf, status } from "./agentState";
+import { arrange, askDisconnect, connect, disconnectIn, disconnecting, effortName, fieldOf, here, isHidden, kindOf, setField, status } from "./agentState";
 import { fontClass, tr, trn } from "./i18n";
 import {
   act,
@@ -58,7 +58,7 @@ import { agentName, cancelled, clock, dur, failed, hueOf, providerName, short, s
 import { spin, wayOf, Wires, type Wire } from "./Routing";
 import { UpdatePill } from "./Update";
 import { dayLabel } from "./Usage";
-import { agentLogo, Icon, IconButton, Logo, MOTION, providerLogo, Segs, SHADOW, Switch, TextButton } from "./parts";
+import { agentLogo, EffortBars, effortLit, Icon, IconButton, Logo, MOTION, providerLogo, Segs, SHADOW, Switch, TextButton } from "./parts";
 
 /** The panel's title, by which Hyprland's rule finds it, and its size: magpie's 440 points wide, 220 to 560 tall. */
 const TITLE = "pansy panel";
@@ -280,7 +280,59 @@ function Field(props: { agent: Agent; small?: boolean }) {
   );
 }
 
-/** An opened line: connected or not, said, with its switch; then the models it starts on. */
+/** A new session's effort, in an opened line: its level and its bars; a press lists the agent's own and each level, lowest first. */
+function Effort(props: { agent: Agent }) {
+  const a = () => props.agent;
+  const levels = () => fieldOf(a(), "effort")?.levels ?? [];
+  const value = () => fieldOf(a(), "effort")?.value ?? null;
+  const stops = (): (string | null)[] => [null, ...levels()];
+  return (
+    <Menu
+      placement="bottom"
+      align="start"
+      offset={4}
+      trigger={
+        <View
+          testID={`panel-effort-${a().id}`}
+          accessibilityLabel={tr("%s: %s", tr("Effort"), effortName(value()))}
+          class={`h-[30px] flex-row items-center gap-2 rounded-[8px] bg-card px-[10px] ${MOTION}`}
+          style={{ boxShadow: `inset 0 0 0 1px ${ring()}` }}
+        >
+          <Text class="w-[62px] text-[11px] text-faint line-clamp-1">{tr("Effort")}</Text>
+          <Text class={`flex-1 text-[12.5px] line-clamp-1 ${value() ? "text-foreground" : "text-muted-foreground"}`}>{effortName(value())}</Text>
+          <EffortBars lit={effortLit(levels(), value(), 4)} color={value() ? "foreground" : "muted-foreground"} />
+          <Icon name="chev-down" color="faint" size={11} />
+        </View>
+      }
+      popupClass="min-w-[168px] rounded-[10px] border border-border bg-popover p-1"
+      popupStyle={{ boxShadow: SHADOW.pop() }}
+    >
+      <Each of={stops()} key={(s) => s ?? ""}>
+        {(s) => (
+          <MenuItem
+            role="menuitemradio"
+            checked={value() === s()}
+            testID={`panel-effort-${a().id}-${s() ?? "default"}`}
+            onSelect={() => {
+              if (s() !== value()) void setField(a(), "effort", s() ?? "");
+            }}
+            class="h-[28px] flex-row items-center gap-2 rounded-[7px] px-2 hover:bg-pill focus:bg-pill"
+          >
+            <View class="w-3">
+              <If when={value() === s()}>
+                <Icon name="tick" color="primary" size={12} />
+              </If>
+            </View>
+            <EffortBars lit={effortLit(levels(), s(), 4)} color={s() ? "foreground" : "muted-foreground"} size={13} />
+            <Text class="text-[12.5px] text-foreground">{effortName(s())}</Text>
+          </MenuItem>
+        )}
+      </Each>
+    </Menu>
+  );
+}
+
+/** An opened line: connected or not, said, with its switch; then the models it starts on, and its effort. */
 function Body(props: { agent: Agent }) {
   const a = () => props.agent;
   const kind = () => kindOf(a());
@@ -313,6 +365,9 @@ function Body(props: { agent: Agent }) {
         <Field agent={a()} />
         <If when={a().connected && a().hasSmallModel}>
           <Field agent={a()} small />
+        </If>
+        <If when={a().connected && fieldOf(a(), "effort")}>
+          <Effort agent={a()} />
         </If>
       </If>
     </View>

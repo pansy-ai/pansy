@@ -1,0 +1,59 @@
+# Command Code, as magpie's commandcode.go: pansy is a provider of the
+# user's own in providers.json, keyless (Command Code refuses a key written
+# out; the gateway asks for none on this computer), and settings.json names
+# the model "pansy/<model>", which Command Code splits at the first "/".
+# It still wants its own sign-in (cmd login) for these. reasoningEffort
+# keeps an effort for each model, by the model's name.
+id = "commandcode"
+name = "Command Code"
+protocol = "chat"
+programs = ["command-code"]
+dirs = [".commandcode"]
+note = "Command Code wants its own sign-in (cmd login) even for models through pansy."
+
+[[field]]
+key = "effort"
+kind = "effort"
+levels = ["low", "medium", "high", "xhigh", "max"]
+
+[files]
+settings = "~/.commandcode/settings.json"
+providers = "~/.commandcode/providers.json"
+
+[[set]]
+file = "providers"
+key = ["provider", "pansy"]
+
+[set.value]
+name = "Pansy"
+api = "openai-completions"
+baseURL = "{v1}"
+apiKey = false
+models = { "$each_model" = { name = "{name}" } }
+
+[[set]]
+file = "settings"
+key = ["model"]
+value = "pansy/{model}"
+
+[[set]]
+file = "settings"
+key = ["modelProvider"]
+value = "pansy"
+
+[[set]]
+file = "settings"
+key = ["reasoningEffort", "pansy/{model}"]
+value = "{effort}"
+
+[base_url]
+file = "providers"
+key = ["provider", "pansy", "baseURL"]
+
+[model]
+file = "settings"
+key = ["model"]
+prefix = "pansy/"
+
+[run]
+unsupported = "Command Code reads its providers from providers.json alone; connect it instead (pansy commandcode <model>)."

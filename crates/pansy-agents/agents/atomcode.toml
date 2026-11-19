@@ -1,0 +1,51 @@
+# AtomCode, as magpie's atomcode.go points it: an account table at the
+# gateway's /v1 on Chat Completions, one [models."pansy/<model>"] table for
+# each model beside the user's own, and both defaults naming the one picked
+# (default_model wins). The window is the one magpie tells AtomCode of a
+# model it doesn't know; AtomCode compacts as it nears it.
+id = "atomcode"
+name = "AtomCode"
+protocol = "chat"
+programs = ["atomcode"]
+dirs = [".atomcode"]
+npm = "@atomgit.com/atomcode"
+
+[files]
+config = "{env:ATOMCODE_HOME|~/.atomcode}/config.toml"
+
+[[set]]
+file = "config"
+key = ["provider_accounts", "pansy"]
+value = { provider = "openai-compatible", base_url = "{v1}", api_key = "{key}" }
+
+[[set]]
+file = "config"
+key = ["models", "pansy/{id}"]
+each_model = true
+value = { account = "pansy", model = "{id}", context_window = 128000, supports_vision = false }
+
+[[set]]
+file = "config"
+key = ["default_provider"]
+value = "pansy/{model}"
+
+[[set]]
+file = "config"
+key = ["default_model"]
+value = "pansy/{model}"
+
+[base_url]
+file = "config"
+key = ["provider_accounts", "pansy", "base_url"]
+
+[model]
+file = "config"
+key = ["default_model"]
+prefix = "pansy/"
+
+[[install]]
+via = "npm"
+command = "npm install -g @atomgit.com/atomcode"
+
+[run]
+unsupported = "AtomCode reads its accounts and models from config.toml alone; connect it instead (pansy atomcode <model>)."

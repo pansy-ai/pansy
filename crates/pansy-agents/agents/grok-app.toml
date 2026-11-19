@@ -1,0 +1,72 @@
+# Grok App (RongleCat/grok-app), as magpie's grokapp.go wires it: a provider
+# channel, [model.pansy] in agent-home/config.toml, written as the App
+# writes one. [models] default, the App's route, is left as it is: pressing
+# Use on Pansy in the App's Settings › Account is what switches to it.
+# app_models is a JSON list in a string, so it holds the model picked alone.
+id = "grok-app"
+name = "Grok App"
+protocol = "chat"
+dirs = [".local/share/grok-app", ".grok-app"]
+note = "Pansy is a custom provider in Grok App's Settings › Account; Grok App stays on its current route until you press Use on Pansy there."
+
+[files]
+config = [
+  "~/.grok-app/agent-home/config.toml",
+  "{env:XDG_DATA_HOME|~/.local/share}/grok-app/agent-home/config.toml",
+]
+
+[[set]]
+file = "config"
+key = ["model", "pansy", "model"]
+value = "{model}"
+
+[[set]]
+file = "config"
+key = ["model", "pansy", "base_url"]
+value = "{v1}"
+
+[[set]]
+file = "config"
+key = ["model", "pansy", "name"]
+value = "Pansy"
+
+[[set]]
+file = "config"
+key = ["model", "pansy", "api_key"]
+value = "{key}"
+
+[[set]]
+file = "config"
+key = ["model", "pansy", "api_backend"]
+value = "chat_completions"
+
+[[set]]
+file = "config"
+key = ["model", "pansy", "app_provider_mode"]
+value = "generic"
+
+[[set]]
+file = "config"
+key = ["model", "pansy", "app_models"]
+value = '[{"id":{model:q},"name":{model:q}}]'
+
+[[set]]
+file = "config"
+key = ["model", "pansy", "app_efforts"]
+value = "[]"
+
+[[set]]
+file = "config"
+key = ["model", "pansy", "supports_reasoning_effort"]
+value = false
+
+[base_url]
+file = "config"
+key = ["model", "pansy", "base_url"]
+
+[model]
+file = "config"
+key = ["model", "pansy", "model"]
+
+[run]
+unsupported = "Grok App is a desktop app that reads its providers from its config.toml alone; connect it instead (pansy grok-app <model>)."

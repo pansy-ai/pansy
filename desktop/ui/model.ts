@@ -158,11 +158,15 @@ export interface Preset {
 export interface AgentField {
   /** How its manifest names it: `effort`, `opus`, `opus_effort`. */
   key: string;
-  kind: "model" | "effort";
+  /** A model, an effort, or a setting of the agent's own: a size in tokens, a percent, a switch (`on`). */
+  kind: "model" | "effort" | "tokens" | "percent" | "switch";
   /** An effort's levels, the lowest first. */
   levels: string[];
   /** With none given, the main model's. */
   follows: boolean;
+  /** The least and the most a size may be. */
+  min: number | null;
+  max: number | null;
   /** What the user gave it, while the agent is connected. */
   value: string | null;
 }
@@ -201,8 +205,12 @@ export interface Agent {
   hasSubagentModel: boolean;
   /** Every subagent of it goes on that model, whatever one its lead names: the gateway sees to it. */
   subagentEvery: boolean;
-  /** What else may be set for it: a tier's model, an effort. */
+  /** What else may be set for it: a tier's model, an effort, a setting of its own. */
   fields: AgentField[];
+  /** It lists pansy's models itself: which ones is the user's pick. */
+  listsModels: boolean;
+  /** Not connected, it is signed in to its vendor itself (its Claude subscription, ChatGPT). */
+  signedIn: boolean;
   configFiles: string[];
   recent: string[];
   note: string | null;
@@ -462,6 +470,19 @@ export interface SettingsView {
   keyStore: string;
   /** The Plugins page's 「国内镜像」: the plugin list, Bun and plugins from mirrors in China first. */
   chinaMirror: boolean;
+  /** A model is listed with its provider's name before its own. */
+  providerInNames: boolean;
+  /** The agents that have it their own way, by agent id. */
+  agentNames: Record<string, boolean>;
+  /** Which models each agent lists, by agent id; one not here lists all. */
+  agentModels: Record<string, AgentModels>;
+}
+
+/** Which of pansy's models one agent lists: all but `hidden`, or with `onlyPicked` the `picked` alone. */
+export interface AgentModels {
+  hidden?: string[];
+  onlyPicked?: boolean;
+  picked?: string[];
 }
 
 /** One value a request had masked, as often as it had it: never the value itself. */

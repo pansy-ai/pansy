@@ -24,7 +24,7 @@ key = ["provider", "pansy"]
 npm = "@ai-sdk/openai-compatible"
 name = "Pansy"
 options = { baseURL = "{v1}", apiKey = "{key}" }
-models = { "$each_model" = { name = "{id}" } }
+models = { "$each_model" = { name = "{name}" } }
 
 [[set]]
 file = "config"
@@ -65,4 +65,4 @@ small_model = "pansy/{small}"
 npm = "@ai-sdk/openai-compatible"
 name = "Pansy"
 options = { baseURL = "{v1}", apiKey = "{key}" }
-models = { "$each_model" = { name = "{id}" } }
+models = { "$each_model" = { name = "{name}" } }

@@ -1,0 +1,34 @@
+# WorkBuddy AI, as magpie's workbuddy.go: models of one's own are the items of
+# ~/.workbuddy-ai/models.json, a list, each asked at its url under its apiKey
+# on OpenAI's chat completions. The model is picked per task in its window,
+# so connecting puts pansy's models in that picker and writes no model.
+# Where magpie knows a model's window it writes it; here each has the 200000
+# magpie gives one it doesn't know. It may not see a rewrite of the file
+# until it is restarted.
+id = "workbuddy-ai"
+name = "WorkBuddy AI"
+protocol = "chat"
+dirs = [".workbuddy-ai"]
+note = "WorkBuddy AI may not see the change until it is restarted; pick a pansy model in its model picker."
+
+[files]
+models = "~/.workbuddy-ai/models.json"
+
+[[set]]
+file = "models"
+key = ["[id={id}]"]
+each_model = true
+
+[set.value]
+id = "{id}"
+name = "{name}"
+vendor = "pansy"
+apiKey = "{key}"
+url = "{v1}/chat/completions"
+maxInputTokens = 200000
+supportsToolCall = true
+supportsImages = false
+supportsReasoning = false
+
+[run]
+unsupported = "WorkBuddy AI reads its models from models.json alone and its model is picked in its window; connect it instead (pansy workbuddy-ai <model>)."

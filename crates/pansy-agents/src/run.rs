@@ -356,11 +356,7 @@ pub fn launch(
     let project = root(folder);
     let key = pansy_core::project::key_for(&project);
     let base = crate::gateway_url();
-    let choices: Vec<String> = pansy_core::manage::choices()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|c| c.id)
-        .collect();
+    let (choices, names) = crate::offered(agent.id);
     // A connected agent's tiers and efforts go with a run of it too.
     let fields = saved
         .as_ref()
@@ -375,6 +371,7 @@ pub fn launch(
             subagent_model: subagent.as_deref(),
             fields,
             choices: &choices,
+            names: &names,
         })
         .map_err(|why| anyhow!(why))?;
     let mut args = run.args;

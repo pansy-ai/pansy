@@ -1,0 +1,53 @@
+# CodeBuddy Code, as magpie's codebuddy.go: models of one's own are the
+# items of "models" in ~/.codebuddy/models.json, WorkBuddy's format, each
+# asked at its url under its apiKey on OpenAI's chat completions; a list of
+# the models to show (availableModels), where there is one, names them too.
+# The model a session starts on is settings.json's "model", read when a
+# session starts. Each model has the 200000 window magpie gives one it
+# doesn't know. The CodeBuddy IDE reads the same models.json.
+id = "codebuddy"
+name = "CodeBuddy"
+protocol = "chat"
+programs = ["codebuddy"]
+dirs = [".codebuddy"]
+npm = "@tencent-ai/codebuddy-code"
+note = "CodeBuddy Code reads its model when a session starts; restart open codebuddy sessions, or run /clear in them."
+
+[files]
+settings = "{env:CODEBUDDY_CONFIG_DIR|~/.codebuddy}/settings.json"
+models = "{env:CODEBUDDY_CONFIG_DIR|~/.codebuddy}/models.json"
+
+[[set]]
+file = "models"
+key = ["models", "[id={id}]"]
+each_model = true
+
+[set.value]
+id = "{id}"
+name = "{name}"
+vendor = "pansy"
+apiKey = "{key}"
+url = "{v1}/chat/completions"
+maxInputTokens = 200000
+supportsToolCall = true
+supportsImages = false
+supportsReasoning = false
+
+[[set]]
+file = "models"
+key = ["availableModels", "[={id}]"]
+each_model = true
+if_there = true
+value = "{id}"
+
+[[set]]
+file = "settings"
+key = ["model"]
+value = "{model}"
+
+[model]
+file = "settings"
+key = ["model"]
+
+[run]
+unsupported = "CodeBuddy Code takes pansy's models from its models.json alone; connect it instead (pansy codebuddy <model>)."

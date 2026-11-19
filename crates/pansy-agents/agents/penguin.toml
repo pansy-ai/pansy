@@ -1,0 +1,61 @@
+# PenguinHarness, as magpie's penguin.go wires it: a provider group on
+# OpenAI Responses, one [[models]] entry for each model beside the user's
+# own, and default_model, in the default Project's config.
+id = "penguin"
+name = "PenguinHarness"
+protocol = "responses"
+programs = ["penguin"]
+dirs = [".penguin"]
+npm = "@prismshadow/penguin-cli"
+self_update = ["update", "--yes"]
+
+[files]
+config = "{env:PENGUIN_HOME|~/.penguin/data}/default_project/.project_config.toml"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy", "base_url"]
+value = "{v1}"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy", "client_type"]
+value = "openai-responses"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy", "api_key"]
+value = "{key}"
+
+# Penguin refuses a default_model that names no entry: the entries first.
+[[set]]
+file = "config"
+key = ["models", "[model_id={id}]"]
+each_model = true
+value = { provider = "pansy", model_id = "{id}", display_name = "{name}", vision = false }
+
+[[set]]
+file = "config"
+key = ["default_model"]
+value = { provider = "pansy", model_id = "{model}" }
+
+[base_url]
+file = "config"
+key = ["providers", "pansy", "base_url"]
+
+[model]
+file = "config"
+key = ["default_model", "model_id"]
+
+[[install]]
+via = "powershell"
+command = "irm https://penguin.ooo/install.ps1 | iex"
+os = ["windows"]
+
+[[install]]
+via = "script"
+command = "curl -fsSL https://penguin.ooo/install.sh | sh"
+os = ["linux", "macos"]
+
+[run]
+unsupported = "pansy knows no way to point one run of PenguinHarness elsewhere by its arguments or environment; connect it instead (pansy penguin <model>)."

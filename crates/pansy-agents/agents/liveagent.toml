@@ -1,0 +1,50 @@
+# LiveAgent, as magpie's liveagent.go wires it: a provider of K-brain's
+# config.json, on Chat Completions (magpie's "magpie" provider, type codex
+# with a requestFormat, as LiveAgent's settings write an OpenAI-compatible
+# one). K-brain appends only /chat/completions to an OpenAI baseUrl, so it is
+# the gateway's /v1. K-brain refuses a field it doesn't know: only magpie's
+# are written. It reads the file when it starts and writes it whole when a
+# setting changes: quit LiveAgent before connecting.
+id = "liveagent"
+name = "LiveAgent"
+protocol = "chat"
+dirs = [".liveagent"]
+note = "LiveAgent keeps its settings in memory while it runs and writes them all back when one changes: quit LiveAgent before changing this, then open it and pick a Pansy model in its model picker."
+
+[files]
+config = "{env:LIVEAGENT_HOME|~/.liveagent}/config.json"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy"]
+
+[set.value]
+name = "Pansy"
+type = "codex"
+baseUrl = "{v1}"
+api = "openai-completions"
+apiKey = "{key}"
+modelOrder = [{ "$each_model" = "{id}" }]
+requestFormat = "openai-completions"
+models = [{ "$each_model" = { id = "{id}", displayName = "{name}" } }]
+
+[[set]]
+file = "config"
+key = ["defaultModel"]
+value = "{model}"
+
+[[set]]
+file = "config"
+key = ["defaultProvider"]
+value = "pansy"
+
+[base_url]
+file = "config"
+key = ["providers", "pansy", "baseUrl"]
+
+[model]
+file = "config"
+key = ["defaultModel"]
+
+[run]
+unsupported = "LiveAgent's backend reads its providers from config.json alone; connect it instead (pansy liveagent <model>)."

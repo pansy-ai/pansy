@@ -583,6 +583,18 @@ pub struct Choice {
     pub group: bool,
 }
 
+impl Choice {
+    /// The name a list shows it by: its own, after its provider's when
+    /// `with_provider` (a group has none).
+    pub fn label(&self, with_provider: bool) -> String {
+        if with_provider && !self.group {
+            format!("{} · {}", self.provider, self.name)
+        } else {
+            self.name.clone()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -296,6 +296,60 @@ async fn agents_reach_a_chat_vendor_through_the_gateway() {
         .collect();
     assert_eq!(ids, ["fake/fake-chat", "group/daily"]);
 
+    // An agent is listed the models left in its list, by the names asked
+    // for it; another one, and a request for a model kept from it, as before.
+    pansy_core::config::update_settings(|s| {
+        s.set(
+            "agentModels",
+            r#"{"opencode": {"hidden": ["group/daily"]}}"#,
+        )
+        .map_err(|e| anyhow::anyhow!(e))?;
+        s.set("agentNames", r#"{"opencode": false}"#)
+            .map_err(|e| anyhow::anyhow!(e))
+    })
+    .unwrap();
+    let listed = async |agent: &str| -> Vec<(String, String)> {
+        let request = Request::get("/v1/models")
+            .header("user-agent", agent)
+            .header("anthropic-version", "2023-06-01")
+            .body(Body::empty())
+            .unwrap();
+        let response = gateway.router().oneshot(request).await.unwrap();
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let list: Value = serde_json::from_slice(&bytes).unwrap();
+        list["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| {
+                (
+                    m["id"].as_str().unwrap().to_owned(),
+                    m["display_name"].as_str().unwrap().to_owned(),
+                )
+            })
+            .collect()
+    };
+    let opencode = listed("opencode/2.3.0").await;
+    assert_eq!(opencode.len(), 1, "{opencode:?}");
+    assert_eq!(opencode[0].0, "fake/fake-chat");
+    assert!(!opencode[0].1.contains(" · "), "{opencode:?}");
+    let claude = listed("claude-cli/2").await;
+    assert_eq!(claude.len(), 2, "{claude:?}");
+    assert!(claude[0].1.contains(" · "), "{claude:?}");
+    let response = gateway
+        .router()
+        .oneshot(
+            Request::get("/v1/models/group/daily")
+                .header("user-agent", "opencode/2.3.0")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
     // What was used is on record.
     let records = pansy_core::usage::recent(1);
     assert_eq!(records.len(), 4, "{records:#?}");

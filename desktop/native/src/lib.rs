@@ -864,6 +864,34 @@ impl Agents {
         .await
     }
 
+    /// Picks which of pansy's models the agent lists (JSON, see
+    /// `pansy_core::settings::AgentModels`); a connected one's list is
+    /// written again. The settings as they are then (JSON).
+    pub async fn set_listed(id: String, models: String) -> Result<String, String> {
+        off(move || {
+            pansy_agents::set_listed(&id, serde_json::from_str(&models)?)?;
+            Ok(to_json(&config::load_settings()?))
+        })
+        .await
+    }
+
+    /// Whether the agent's list names a model's provider before the model:
+    /// `on`, `off`, or empty to follow Settings again. The settings as they
+    /// are then (JSON).
+    pub async fn set_names(id: String, mode: String) -> Result<String, String> {
+        off(move || {
+            let with_provider = match mode.as_str() {
+                "" => None,
+                "on" => Some(true),
+                "off" => Some(false),
+                other => anyhow::bail!("{other}: on, off or nothing"),
+            };
+            pansy_agents::set_names(&id, with_provider)?;
+            Ok(to_json(&config::load_settings()?))
+        })
+        .await
+    }
+
     /// Points the agent at the gateway with `model`.
     pub async fn connect(id: String, model: String) -> Result<(), String> {
         off(move || pansy_agents::connect(&id, &model)).await
@@ -1248,7 +1276,9 @@ impl Settings {
                 return Ok(());
             }
             config::update_settings(|s| s.set(&key, &value).map_err(|e| anyhow::anyhow!(e)))?;
-            if key == "port" {
+            // A new port, and the names models are listed by, go into the
+            // connected agents' files.
+            if key == "port" || key == "providerInNames" {
                 let problems = pansy_agents::reconnect_all()?;
                 if !problems.is_empty() {
                     anyhow::bail!("{}", problems.join("; "));

@@ -32,7 +32,11 @@
 //! `{key}`, `{model}` and `{small}` filled in (`{model:q}`: in quotes, as
 //! JSON and TOML write a string), or a table or list of such. A table whose
 //! one key is `"$each_model"` becomes one entry for each model the gateway
-//! offers, by its id (`{id}`); alone in a list, one item for each.
+//! offers, by its id (`{id}`) and the name it is listed by (`{name}`: its
+//! own, after its provider's unless Provider in model names is off); alone
+//! in a list, one item for each. The user picks which ones an agent lists
+//! (Agents › Model list › Pick): the rest are left out, but those the agent
+//! is set to.
 //!
 //! `{subagent}` is the model the agent's subagents start on, for an agent
 //! that has a key for it (`subagent_model = true`). The user may give none:
@@ -55,6 +59,18 @@
 //! and `joins = ":"` nothing at all, the value being written after what it
 //! goes with (`"{opus}{opus_effort}"` is `a/x:high`: the gateway reads the
 //! effort off the model's name).
+//!
+//! Three more kinds are settings of the agent's own, each a row of its
+//! sheet on the Agents page: `tokens` (a size, `272k` or `272000`; `min`
+//! and `max` bound it), `percent` (1 to 100) and `switch` (`on`, or none).
+//! `{compact_at:n}` alone in a text writes the number, not its text. A
+//! `[[set]]` with `when = "<field>"` is left out, as one naming a field
+//! with no value is, until that field has one: what a switch turns on.
+//!
+//! `[sign_in]` says where the agent keeps its own sign-in to its vendor
+//! (`file`, a path of its own) and the `key` that is there while it is
+//! signed in: pansy looks whether it is there, never at what it holds, to
+//! say what an agent not connected is on now.
 //!
 //! A file's format is its ending's: `.toml`, `.yaml`, `.env`, else JSON
 //! (with comments). A path's `~/` is the home directory, and
@@ -124,6 +140,16 @@ pub struct Set {
     pub file: usize,
     pub key: Vec<&'static str>,
     pub value: Value,
+    /// The field that must have a value for the key to be set.
+    pub when: Option<&'static str>,
+    /// One key for each model the agent lists: `{id}` and `{name}` in the
+    /// key and the value are that model's.
+    pub each_model: bool,
+    /// The key is taken out while the agent is connected, not set.
+    pub remove: bool,
+    /// Set only where what holds the key (the list, for an item of one) is
+    /// in the file already.
+    pub if_there: bool,
 }
 
 /// Where a value is read back.
@@ -181,6 +207,38 @@ pub enum FieldKind {
     Model,
     /// How hard a model thinks: one of the field's levels.
     Effort,
+    /// A size in tokens.
+    Tokens,
+    /// A share, 1 to 100.
+    Percent,
+    /// On, or not given.
+    Switch,
+}
+
+impl FieldKind {
+    /// Whether it is a setting of the agent's own, a row of its sheet.
+    pub fn is_setting(self) -> bool {
+        matches!(
+            self,
+            FieldKind::Tokens | FieldKind::Percent | FieldKind::Switch
+        )
+    }
+}
+
+/// A size as the user writes it: `272000`, `272k`, `1m`, `1.5M`.
+pub fn parse_tokens(text: &str) -> Option<u64> {
+    let t = text
+        .trim()
+        .replace([',', '_', ' '], "")
+        .to_ascii_lowercase();
+    let (number, scale) = match t.as_bytes().last()? {
+        b'k' => (&t[..t.len() - 1], 1_000.0),
+        b'm' => (&t[..t.len() - 1], 1_000_000.0),
+        _ => (t.as_str(), 1.0),
+    };
+    let n: f64 = number.parse().ok()?;
+    (n.is_finite() && n >= 0.0 && (scale > 1.0 || n.fract() == 0.0))
+        .then(|| (n * scale).round() as u64)
 }
 
 /// One more thing the user may set for the agent.
@@ -195,6 +253,9 @@ pub struct Field {
     /// What is written before its value, which goes after another's; with
     /// none given, nothing is.
     pub joins: &'static str,
+    /// The least and the most a size may be.
+    pub min: Option<u64>,
+    pub max: Option<u64>,
 }
 
 impl Field {
@@ -208,22 +269,59 @@ impl Field {
         }
     }
 
-    /// Why `value` can't be given to it, if it can't.
-    pub fn refuses(&self, value: &str) -> Option<String> {
+    /// `value` as it is kept (a size as its digits), or why it can't be
+    /// given to the field.
+    pub fn accept(&self, value: &str) -> Result<String, String> {
         match self.kind {
-            FieldKind::Model => None,
-            FieldKind::Effort if self.levels.contains(&value) => None,
-            FieldKind::Effort => Some(format!(
+            FieldKind::Model => Ok(value.to_owned()),
+            FieldKind::Effort if self.levels.contains(&value) => Ok(value.to_owned()),
+            FieldKind::Effort => Err(format!(
                 "{} is one of {}, not {value}",
                 self.key,
                 self.levels.join(", ")
             )),
+            FieldKind::Tokens => {
+                let n = parse_tokens(value).ok_or_else(|| {
+                    format!("{} is a number of tokens like 272k, not {value}", self.key)
+                })?;
+                if self.min.is_some_and(|min| n < min) || self.max.is_some_and(|max| n > max) {
+                    return Err(match (self.min, self.max) {
+                        (Some(min), Some(max)) => {
+                            format!("{} is {min} to {max} tokens, not {n}", self.key)
+                        }
+                        (Some(min), None) => {
+                            format!("{} is {min} tokens or more, not {n}", self.key)
+                        }
+                        (_, Some(max)) => format!("{} is {max} tokens at most, not {n}", self.key),
+                        (None, None) => unreachable!("a bound was passed"),
+                    });
+                }
+                Ok(n.to_string())
+            }
+            FieldKind::Percent => value
+                .trim()
+                .trim_end_matches('%')
+                .trim()
+                .parse::<u64>()
+                .ok()
+                .filter(|n| (1..=100).contains(n))
+                .map(|n| n.to_string())
+                .ok_or_else(|| format!("{} is a percent from 1 to 100, not {value}", self.key)),
+            FieldKind::Switch if value == "on" => Ok(value.to_owned()),
+            FieldKind::Switch => Err(format!("{} is on or off, not {value}", self.key)),
         }
+    }
+
+    /// Why `value` can't be given to it, if it can't.
+    pub fn refuses(&self, value: &str) -> Option<String> {
+        self.accept(value).err()
     }
 }
 
 /// The names a value's text may have in braces beside a field's.
-const VARS: [&str; 7] = ["base_url", "v1", "key", "model", "small", "subagent", "id"];
+const VARS: [&str; 8] = [
+    "base_url", "v1", "key", "model", "small", "subagent", "id", "name",
+];
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Manifest {
@@ -252,6 +350,9 @@ pub struct Manifest {
     pub model: KeyAt,
     pub install: Vec<InstallOn>,
     pub run: Option<RunSpec>,
+    /// Where its own sign-in to its vendor is kept: the file, and the key
+    /// that is there while it is signed in.
+    pub sign_in: Option<(FilePath, Vec<&'static str>)>,
 }
 
 impl Manifest {
@@ -286,11 +387,19 @@ struct Raw {
     files: Map<String, Value>,
     #[serde(default)]
     set: Vec<RawSet>,
-    base_url: RawKey,
-    model: RawKey,
+    base_url: Option<RawKey>,
+    model: Option<RawKey>,
     #[serde(default)]
     install: Vec<RawInstall>,
     run: Option<RawRun>,
+    sign_in: Option<RawSignIn>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawSignIn {
+    file: String,
+    key: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -304,6 +413,8 @@ struct RawField {
     follows: bool,
     #[serde(default)]
     joins: String,
+    min: Option<u64>,
+    max: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -311,7 +422,14 @@ struct RawField {
 struct RawSet {
     file: String,
     key: Vec<String>,
-    value: Value,
+    value: Option<Value>,
+    when: Option<String>,
+    #[serde(default)]
+    each_model: bool,
+    #[serde(default)]
+    remove: bool,
+    #[serde(default)]
+    if_there: bool,
 }
 
 #[derive(Deserialize)]
@@ -410,7 +528,16 @@ pub fn parse(text: &str) -> Result<Manifest> {
             .position(|(n, _)| n == name)
             .ok_or_else(|| anyhow!("no file named {name} among the agent's files"))
     };
-    let key_at = |raw: &RawKey, what: &str| -> Result<KeyAt> {
+    let key_at = |raw: &Option<RawKey>, what: &str| -> Result<KeyAt> {
+        // Without one, pansy goes by what it wrote: the agent keeps no such
+        // key where it can be read back.
+        let Some(raw) = raw else {
+            return Ok(KeyAt {
+                file: 0,
+                key: Vec::new(),
+                prefix: "",
+            });
+        };
         if raw.key.is_empty() {
             bail!("{what} has no key");
         }
@@ -435,13 +562,22 @@ pub fn parse(text: &str) -> Result<Manifest> {
         let kind = match f.kind.as_str() {
             "model" => FieldKind::Model,
             "effort" => FieldKind::Effort,
-            other => bail!("no kind of field {other}: model or effort"),
+            "tokens" => FieldKind::Tokens,
+            "percent" => FieldKind::Percent,
+            "switch" => FieldKind::Switch,
+            other => bail!("no kind of field {other}: model, effort, tokens, percent or switch"),
         };
         if (kind == FieldKind::Effort) == f.levels.is_empty() {
             bail!(
                 "the field {}: an effort has levels, and only an effort",
                 f.key
             );
+        }
+        if kind.is_setting() && !f.joins.is_empty() {
+            bail!("the field {}: joins is for a model or an effort", f.key);
+        }
+        if (f.min.is_some() || f.max.is_some()) && kind != FieldKind::Tokens {
+            bail!("the field {}: min and max are for tokens", f.key);
         }
         if f.follows && (kind != FieldKind::Model || !f.joins.is_empty()) {
             bail!(
@@ -455,6 +591,8 @@ pub fn parse(text: &str) -> Result<Manifest> {
             levels: leak_all(&f.levels),
             follows: f.follows,
             joins: leak(&f.joins),
+            min: f.min,
+            max: f.max,
         });
     }
     let mut set = Vec::new();
@@ -462,10 +600,35 @@ pub fn parse(text: &str) -> Result<Manifest> {
         if s.key.is_empty() {
             bail!("a key to set is empty");
         }
+        if let Some(when) = &s.when
+            && !fields.iter().any(|f| f.key == when)
+        {
+            bail!("when = \"{when}\" names no field of the agent");
+        }
+        if s.remove == s.value.is_some() {
+            bail!("the key {} has a value, or remove = true", s.key.join("."));
+        }
+        let per_model = |text: &str| named(text).any(|n| n == "id" || n == "name");
+        if s.each_model && !s.key.iter().any(|k| per_model(k)) {
+            bail!(
+                "each_model = true: the key {} names no {{id}}",
+                s.key.join(".")
+            );
+        }
+        if !s.each_model && s.key.iter().any(|k| per_model(k)) {
+            bail!(
+                "the key {} names a model of the list: each_model = true",
+                s.key.join(".")
+            );
+        }
         set.push(Set {
             file: index(&s.file)?,
             key: leak_all(&s.key),
-            value: s.value.clone(),
+            value: s.value.clone().unwrap_or(Value::Null),
+            when: s.when.as_deref().map(leak),
+            each_model: s.each_model,
+            remove: s.remove,
+            if_there: s.if_there,
         });
     }
     let run = match &raw.run {
@@ -532,7 +695,18 @@ pub fn parse(text: &str) -> Result<Manifest> {
             "subagent_every = true is for an agent with a model for subagents (subagent_model = true)"
         );
     }
+    if raw
+        .sign_in
+        .as_ref()
+        .is_some_and(|s| s.file.trim().is_empty() || s.key.is_empty())
+    {
+        bail!("sign_in names a file and the key there");
+    }
     Ok(Manifest {
+        sign_in: raw
+            .sign_in
+            .as_ref()
+            .map(|s| (FilePath(vec![s.file.clone()]), leak_all(&s.key))),
         base_url: key_at(&raw.base_url, "base_url")?,
         model: key_at(&raw.model, "model")?,
         id: raw.id,
@@ -578,7 +752,7 @@ fn names_subagent(value: &Value) -> bool {
     }
 }
 
-/// pansy's own agents, in the order the Agents page lists them.
+/// pansy's own agents, in the order the Agents page lists them: magpie's.
 pub fn builtin() -> &'static [Manifest] {
     static BUILTIN: LazyLock<Vec<Manifest>> = LazyLock::new(|| {
         [
@@ -588,6 +762,55 @@ pub fn builtin() -> &'static [Manifest] {
             include_str!("../agents/opencode.toml"),
             include_str!("../agents/qwen-code.toml"),
             include_str!("../agents/crush.toml"),
+            include_str!("../agents/claude-desktop.toml"),
+            include_str!("../agents/antigravity.toml"),
+            include_str!("../agents/mimocode.toml"),
+            include_str!("../agents/deveco.toml"),
+            include_str!("../agents/pi.toml"),
+            include_str!("../agents/stepcode.toml"),
+            include_str!("../agents/mothx.toml"),
+            include_str!("../agents/penguin.toml"),
+            include_str!("../agents/omo.toml"),
+            include_str!("../agents/prime-agent.toml"),
+            include_str!("../agents/mu.toml"),
+            include_str!("../agents/goose.toml"),
+            include_str!("../agents/vscode.toml"),
+            include_str!("../agents/vscode-insiders.toml"),
+            include_str!("../agents/copilot-jetbrains.toml"),
+            include_str!("../agents/copilot-cli.toml"),
+            include_str!("../agents/reasonix.toml"),
+            include_str!("../agents/commandcode.toml"),
+            include_str!("../agents/fx.toml"),
+            include_str!("../agents/hermes.toml"),
+            include_str!("../agents/morph.toml"),
+            include_str!("../agents/kimi-cli.toml"),
+            include_str!("../agents/muse.toml"),
+            include_str!("../agents/empryo.toml"),
+            include_str!("../agents/nanobot.toml"),
+            include_str!("../agents/miniq.toml"),
+            include_str!("../agents/paimon.toml"),
+            include_str!("../agents/ante.toml"),
+            include_str!("../agents/qwenpaw.toml"),
+            include_str!("../agents/openclaw.toml"),
+            include_str!("../agents/jcode.toml"),
+            include_str!("../agents/vibe.toml"),
+            include_str!("../agents/minimax-code.toml"),
+            include_str!("../agents/droid.toml"),
+            include_str!("../agents/qoder.toml"),
+            include_str!("../agents/qoder-cn.toml"),
+            include_str!("../agents/grok.toml"),
+            include_str!("../agents/grok-app.toml"),
+            include_str!("../agents/zcode.toml"),
+            include_str!("../agents/workbuddy.toml"),
+            include_str!("../agents/workbuddy-ai.toml"),
+            include_str!("../agents/codebuddy.toml"),
+            include_str!("../agents/pencil.toml"),
+            include_str!("../agents/openpencil.toml"),
+            include_str!("../agents/tuanjie-cowork.toml"),
+            include_str!("../agents/liveagent.toml"),
+            include_str!("../agents/t3code.toml"),
+            include_str!("../agents/atomcode.toml"),
+            include_str!("../agents/snow.toml"),
         ]
         .iter()
         .map(|text| parse(text).expect("a built-in agent's manifest"))
@@ -629,13 +852,20 @@ pub struct Vars<'a> {
     fields: Vec<(&'static str, Option<String>)>,
     /// Every model the gateway offers, then the agent's own.
     models: Vec<&'a str>,
+    /// The name each is listed by, by its id.
+    names: &'a std::collections::BTreeMap<String, String>,
 }
 
 /// The names in braces in `text` (`{model}`, `{model:q}`).
 fn named(text: &str) -> impl Iterator<Item = &str> {
     text.split('{').skip(1).filter_map(|after| {
         let inside = &after[..after.find('}')?];
-        Some(inside.strip_suffix(":q").unwrap_or(inside))
+        Some(
+            inside
+                .strip_suffix(":q")
+                .or_else(|| inside.strip_suffix(":n"))
+                .unwrap_or(inside),
+        )
     })
 }
 
@@ -670,7 +900,19 @@ impl<'a> Vars<'a> {
                 .map(|f| (f.key, f.filled(given(f), w.model)))
                 .collect(),
             models,
+            names: w.names,
         }
+    }
+
+    /// Whether the key `set` is left out: its value is ([`Vars::leaves_out`]),
+    /// or the field it waits for has none.
+    pub fn skips(&self, set: &Set) -> bool {
+        self.leaves_out(&set.value)
+            || set.when.is_some_and(|when| {
+                self.fields
+                    .iter()
+                    .any(|(key, filled)| *key == when && filled.is_none())
+            })
     }
 
     /// Whether `value` is a text left out: it names `{subagent}` or a
@@ -690,6 +932,22 @@ impl<'a> Vars<'a> {
         })
     }
 
+    /// The models the agent lists: the gateway's, then its own.
+    pub fn models(&self) -> &[&'a str] {
+        &self.models
+    }
+
+    /// A key's step with its variables filled in; `id`, the model of the
+    /// list it is for.
+    pub fn step(&self, step: &str, id: Option<&str>) -> String {
+        self.text_with(step, id)
+    }
+
+    /// [`Vars::fill`], for one model of the list.
+    pub fn fill_for(&self, value: &Value, id: &str) -> Value {
+        self.fill_with(value, Some(id))
+    }
+
     /// Whether there is a model for subagents.
     pub fn has_subagent(&self) -> bool {
         self.subagent.is_some()
@@ -704,6 +962,10 @@ impl<'a> Vars<'a> {
             "small" => self.small,
             "subagent" => self.subagent?,
             "id" => id?,
+            "name" => {
+                let id = id?;
+                self.names.get(id).map_or(id, String::as_str)
+            }
             _ => self
                 .fields
                 .iter()
@@ -757,7 +1019,15 @@ impl<'a> Vars<'a> {
 
     fn fill_with(&self, value: &Value, id: Option<&str>) -> Value {
         match value {
-            Value::String(s) => Value::String(self.text_with(s, id)),
+            Value::String(s) => {
+                // `{name:n}` alone: the number, not its text.
+                if let Some(name) = s.strip_prefix('{').and_then(|r| r.strip_suffix(":n}"))
+                    && let Some(n) = self.var(name, id).and_then(|v| v.parse::<u64>().ok())
+                {
+                    return Value::Number(n.into());
+                }
+                Value::String(self.text_with(s, id))
+            }
             Value::Array(items) => {
                 if let [Value::Object(only)] = items.as_slice()
                     && let Some(each) = each_model(only)
@@ -843,6 +1113,7 @@ mod tests {
             subagent_model: None,
             fields: crate::agent::no_fields(),
             choices,
+            names: crate::agent::no_fields(),
         }
     }
 
@@ -896,8 +1167,9 @@ mod tests {
     #[test]
     fn reads_the_agents_built_in() {
         let ids: Vec<&str> = builtin().iter().map(|m| m.id.as_str()).collect();
+        // pansy's first six, then magpie's others; none twice
         assert_eq!(
-            ids,
+            ids[..6],
             [
                 "claude-code",
                 "codex",
@@ -907,6 +1179,11 @@ mod tests {
                 "crush"
             ]
         );
+        assert_eq!(ids.len(), 55);
+        let mut once = ids.clone();
+        once.sort_unstable();
+        once.dedup();
+        assert_eq!(once.len(), ids.len());
     }
 
     #[test]

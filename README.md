@@ -95,6 +95,8 @@ pansy codex moonshot/kimi-k2-0905-preview   # Codex on Kimi
 pansy group add "Daily" models=deepseek/deepseek-chat,moonshot/kimi-k2-0905-preview
 pansy gemini group/daily                    # fails over between them
 pansy claude opus anthropic/claude-opus-4-5 # Claude Code's opus tier; `pansy claude effort high`
+pansy codex compact_at 200k                 # an agent's own settings; `default` puts one back
+pansy opencode list hide moonshot/kimi-k2   # which models an agent lists; `pansy opencode names off`
 pansy agents update all                     # the agents' own CLIs, to their newest
 pansy save work && pansy use work           # profiles
 pansy usage                                 # what went through the gateway
@@ -162,7 +164,8 @@ Copilot and Gemini Code Assist subscriptions, and magpie's community plugins
 Antigravity's and Grok's subscriptions and the allowances, masking with a local model, quotas and costs, intent routing and
 the `smart`/`pace` modes, the library (instructions, MCP servers, skills),
 search and image tools, sync, remote pansy and LAN gateway keys per client,
-the TUI, and the rest of magpie's 80+ agents. See
+the TUI, and the 34 of magpie's agents that are set through their apps,
+databases or key stores rather than a config file. See
 [docs/parity.md](docs/parity.md).
 
 ## License

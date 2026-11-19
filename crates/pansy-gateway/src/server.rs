@@ -241,12 +241,16 @@ pub fn agent_of(headers: &HeaderMap) -> String {
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default()
         .to_ascii_lowercase();
+    // The first that is in the user agent: one that holds another's name
+    // (workbuddy-ai, github-copilot in VS Code's) comes before it.
     const KNOWN: &[(&str, &str)] = &[
         ("claude-cli", "claude-code"),
         ("claude-code", "claude-code"),
         ("codex", "codex"),
         ("geminicli", "gemini-cli"),
         ("gemini-cli", "gemini-cli"),
+        ("mimocode", "mimocode"),
+        ("deveco", "deveco"),
         ("opencode", "opencode"),
         ("qwen", "qwen-code"),
         ("crush", "crush"),
@@ -254,6 +258,8 @@ pub fn agent_of(headers: &HeaderMap) -> String {
         ("goose", "goose"),
         ("factory", "droid"),
         ("droid", "droid"),
+        ("githubcopilotchat", "vscode"),
+        ("vscode_agent_host", "vscode"),
         ("copilot", "copilot-cli"),
         ("cursor", "cursor"),
         ("zed", "zed"),
@@ -261,6 +267,28 @@ pub fn agent_of(headers: &HeaderMap) -> String {
         ("roo", "roo-code"),
         ("kilo", "kilo-code"),
         ("pi-coding-agent", "pi"),
+        ("stepcode", "stepcode"),
+        ("reasonix", "reasonix"),
+        ("command-code", "commandcode"),
+        ("commandcode", "commandcode"),
+        ("hermes-agent", "hermes"),
+        ("mistermorph", "morph"),
+        ("muse-build", "muse"),
+        ("muse-code", "muse"),
+        ("nanobot", "nanobot"),
+        ("paimon/", "paimon"),
+        ("mistral-vibe", "vibe"),
+        ("minimax-code", "minimax-code"),
+        ("minimaxcode", "minimax-code"),
+        ("grok-shell", "grok"),
+        ("grok-pager", "grok"),
+        ("xai-grok-build", "grok"),
+        ("zcode", "zcode"),
+        ("workbuddy-ai", "workbuddy-ai"),
+        ("workbuddy", "workbuddy"),
+        ("codebuddy", "codebuddy"),
+        ("atomcode", "atomcode"),
+        ("omo/", "omo"),
     ];
     KNOWN
         .iter()
@@ -1560,29 +1588,47 @@ async fn root() -> Response {
 }
 
 /// Every model an agent can name: each provider's as `provider/model`, the
-/// groups, and with `bareModelIds` each model's own id once.
-fn model_ids(config: &Config) -> Vec<(String, String)> {
+/// groups, and with `bareModelIds` each model's own id once. For `agent`,
+/// the ones the user left in its list (a model kept from it still answers),
+/// each by the name the agent's list shows: after its provider's unless
+/// Provider in model names is off for it.
+fn model_ids(config: &Config, agent: Option<&str>) -> Vec<(String, String)> {
+    let settings = &config.settings;
+    let with_provider = match agent {
+        Some(agent) => settings.names_provider(agent),
+        None => settings.provider_in_names,
+    };
+    let lists = |id: &str| agent.is_none_or(|agent| settings.lists(agent, id));
     let mut ids = Vec::new();
     let mut bare = Vec::new();
     let mut seen = std::collections::HashSet::new();
     for provider in config.providers.iter().filter(|p| p.enabled) {
         for model in provider.visible_models() {
+            let id = format!("{}/{}", provider.id, model.id);
+            if !lists(&id) {
+                continue;
+            }
             let name = if model.name.is_empty() {
                 model.id.clone()
             } else {
                 model.name.clone()
             };
-            ids.push((
-                format!("{}/{}", provider.id, model.id),
-                format!("{} · {name}", provider.name),
-            ));
-            if config.settings.bare_model_ids && seen.insert(model.id.clone()) {
+            let shown = if with_provider {
+                format!("{} · {name}", provider.name)
+            } else {
+                name.clone()
+            };
+            ids.push((id, shown));
+            if settings.bare_model_ids && seen.insert(model.id.clone()) {
                 bare.push((model.id.clone(), name));
             }
         }
     }
     for group in &config.groups {
-        ids.push((format!("group/{}", group.id), group.name.clone()));
+        let id = format!("group/{}", group.id);
+        if lists(&id) {
+            ids.push((id, group.name.clone()));
+        }
     }
     ids.extend(bare);
     ids
@@ -1598,7 +1644,7 @@ async fn models(State(gateway): State<Arc<Gateway>>, request: Request) -> Respon
         );
     }
     let headers = request.headers();
-    let ids = model_ids(&config);
+    let ids = model_ids(&config, Some(&agent_of(headers)));
     if headers.contains_key("anthropic-version") {
         let data: Vec<Value> = ids
             .iter()
@@ -1637,7 +1683,7 @@ async fn model(State(gateway): State<Arc<Gateway>>, request: Request) -> Respons
             .map(|(_, id)| id)
             .unwrap_or_default(),
     );
-    match model_ids(&config).into_iter().find(|(m, _)| *m == id) {
+    match model_ids(&config, None).into_iter().find(|(m, _)| *m == id) {
         Some((id, _)) => {
             let owner = id.split_once('/').map_or("pansy", |(owner, _)| owner);
             json_response(&json!({"id": id, "object": "model", "created": 0, "owned_by": owner}))
@@ -1655,7 +1701,7 @@ async fn gemini_models(State(gateway): State<Arc<Gateway>>, request: Request) ->
             "this gateway needs its key from other computers",
         );
     }
-    let models: Vec<Value> = model_ids(&config)
+    let models: Vec<Value> = model_ids(&config, Some(&agent_of(request.headers())))
         .iter()
         .map(|(id, name)| {
             json!({"name": format!("models/{id}"), "displayName": name,

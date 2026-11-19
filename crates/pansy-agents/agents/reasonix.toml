@@ -1,0 +1,67 @@
+# Reasonix Studio 2.x and its CLI, as magpie's reasonix.go: both read
+# config.toml and .env under REASONIX_HOME or ~/.reasonix. pansy is one
+# [[providers]] item, found by its name, beside the user's own; its key is
+# named by api_key_env and kept in .env. default_model is the executor's
+# model as "pansy/<model>", agent.planner_model the planner's. Where Studio
+# has a desktop.provider_access list, pansy joins it.
+id = "reasonix"
+name = "Reasonix Studio"
+protocol = "chat"
+programs = ["reasonix"]
+dirs = [".reasonix"]
+note = "Reasonix reads its global settings at start-up: start a new process to load changes. A project's or session's model can override these."
+
+[files]
+config = "{env:REASONIX_HOME|~/.reasonix}/config.toml"
+env = "{env:REASONIX_HOME|~/.reasonix}/.env"
+
+[[field]]
+key = "planner"
+kind = "model"
+
+[[set]]
+file = "config"
+key = ["providers", "[name=pansy]"]
+
+[set.value]
+name = "pansy"
+kind = "openai"
+base_url = "{v1}"
+api_key_env = "PANSY_REASONIX_API_KEY"
+models = [{ "$each_model" = "{id}" }]
+default = "{model}"
+reasoning_protocol = "openai"
+no_proxy = true
+
+[[set]]
+file = "config"
+key = ["desktop", "provider_access", "[=pansy]"]
+value = "pansy"
+if_there = true
+
+[[set]]
+file = "env"
+key = ["PANSY_REASONIX_API_KEY"]
+value = "{key}"
+
+[[set]]
+file = "config"
+key = ["default_model"]
+value = "pansy/{model}"
+
+[[set]]
+file = "config"
+key = ["agent", "planner_model"]
+value = "pansy/{planner}"
+
+[base_url]
+file = "config"
+key = ["providers", "[name=pansy]", "base_url"]
+
+[model]
+file = "config"
+key = ["default_model"]
+prefix = "pansy/"
+
+[run]
+unsupported = "Reasonix reads its providers from config.toml alone; connect it instead (pansy reasonix <model>)."

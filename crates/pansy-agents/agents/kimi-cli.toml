@@ -1,0 +1,54 @@
+# Kimi Code (the kimi CLI, 2.x), as magpie's kimi.go points it: a provider of
+# type "kimi" (its own chat completions) at the gateway, one
+# [models."pansy/<id>"] table for each model, so they join its /model picker,
+# and default_model naming the one picked. Kimi refuses a config whose
+# default_model or a model's provider is missing: the provider goes in
+# first, the default last. The old kimi-cli (~/.kimi) takes no "tool_use"
+# and is not wired.
+id = "kimi-cli"
+name = "Kimi Code"
+protocol = "chat"
+programs = ["kimi"]
+dirs = [".kimi-code"]
+picks_in = "/model"
+
+[files]
+config = "{env:KIMI_CODE_HOME|~/.kimi-code}/config.toml"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy", "type"]
+value = "kimi"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy", "base_url"]
+value = "{v1}"
+
+[[set]]
+file = "config"
+key = ["providers", "pansy", "api_key"]
+value = "{key}"
+
+[[set]]
+file = "config"
+key = ["models", "pansy/{id}"]
+each_model = true
+value = { provider = "pansy", model = "{id}", max_context_size = 128000, display_name = "{name}", capabilities = ["tool_use"] }
+
+[[set]]
+file = "config"
+key = ["default_model"]
+value = "pansy/{model}"
+
+[base_url]
+file = "config"
+key = ["providers", "pansy", "base_url"]
+
+[model]
+file = "config"
+key = ["default_model"]
+prefix = "pansy/"
+
+[run]
+unsupported = "Kimi Code reads its providers from its config file alone; connect it instead (pansy kimi-cli <model>)."

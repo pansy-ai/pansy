@@ -1,0 +1,64 @@
+# nanobot (HKUDS/nanobot), as magpie's nanobot.go points it: a provider of
+# its own under providers, an OpenAI-compatible endpoint, sent a User-Agent
+# of nanobot's name; a model "pansy/<id>" is asked of it as <id>.
+# No program: nanobot is other tools' name too.
+id = "nanobot"
+name = "nanobot"
+protocol = "chat"
+dirs = [".nanobot"]
+
+[files]
+config = "~/.nanobot/config.json"
+
+# A modelPreset goes over the provider and the model, and the window is the
+# old model's: out while connected, in either spelling nanobot reads.
+[[set]]
+file = "config"
+key = ["agents", "defaults", "modelPreset"]
+remove = true
+
+[[set]]
+file = "config"
+key = ["agents", "defaults", "model_preset"]
+remove = true
+
+[[set]]
+file = "config"
+key = ["agents", "defaults", "contextWindowTokens"]
+remove = true
+
+[[set]]
+file = "config"
+key = ["agents", "defaults", "context_window_tokens"]
+remove = true
+
+[[set]]
+file = "config"
+key = ["providers", "pansy"]
+
+[set.value]
+apiKey = "{key}"
+apiBase = "{v1}"
+extraHeaders = { "User-Agent" = "nanobot" }
+
+[[set]]
+file = "config"
+key = ["agents", "defaults", "provider"]
+value = "pansy"
+
+[[set]]
+file = "config"
+key = ["agents", "defaults", "model"]
+value = "pansy/{model}"
+
+[base_url]
+file = "config"
+key = ["providers", "pansy", "apiBase"]
+
+[model]
+file = "config"
+key = ["agents", "defaults", "model"]
+prefix = "pansy/"
+
+[run]
+unsupported = "nanobot reads its providers from its config file alone; connect it instead (pansy nanobot <model>)."

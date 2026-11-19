@@ -1,0 +1,48 @@
+# OpenPencil (ZSeven-W/openpencil), as magpie's openpencil.go: one entry of
+# builtin_agents in its settings.json, id pansy, kind openai-compat, which
+# posts to base_url + /chat/completions. version must be 1 or OpenPencil
+# ignores the file. The model is picked in its chat's picker
+# (builtin:pansy:<model>); "model" is the entry's first, here the one it
+# was connected with. OpenPencil reads the file when it starts and writes it
+# all back when it quits: quit it before connecting.
+# Linux's path; a Mac keeps it in ~/Library/Application Support/openpencil,
+# Windows in %APPDATA%\openpencil.
+id = "openpencil"
+name = "OpenPencil"
+protocol = "chat"
+dirs = [".config/openpencil", ".openpencil"]
+note = "OpenPencil reads its settings when it starts and writes them all back when it quits: quit OpenPencil before changing this, then open it and pick a pansy model in its chat's model picker."
+
+[files]
+settings = "{env:XDG_CONFIG_HOME|~/.config}/openpencil/settings.json"
+
+[[set]]
+file = "settings"
+key = ["version"]
+value = 1
+
+[[set]]
+file = "settings"
+key = ["builtin_agents", "[id=pansy]"]
+
+[set.value]
+id = "pansy"
+preset = "custom"
+display_name = "Pansy"
+kind = "openai-compat"
+api_key = "{key}"
+model = "{model}"
+models = [{ "$each_model" = "{id}" }]
+base_url = "{v1}"
+enabled = true
+
+[base_url]
+file = "settings"
+key = ["builtin_agents", "[id=pansy]", "base_url"]
+
+[model]
+file = "settings"
+key = ["builtin_agents", "[id=pansy]", "model"]
+
+[run]
+unsupported = "OpenPencil reads its builtin agents from its settings.json alone; connect it instead (pansy openpencil <model>)."

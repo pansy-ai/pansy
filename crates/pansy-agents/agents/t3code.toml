@@ -1,0 +1,35 @@
+# T3 Code, as magpie's t3code.go wires it: a provider instance of its own in
+# settings.json, T3's claudeAgent driver (Claude Code) with the gateway's
+# address and key in the instance's environment, and every model one of its
+# custom models. The model is picked in T3 Code's model picker, not in a
+# file. T3's server watches the file and reloads it.
+id = "t3code"
+name = "T3 Code"
+protocol = "anthropic"
+dirs = [".t3"]
+note = "T3 Code lists every model of pansy under its Pansy provider; pick one in T3 Code's model picker."
+
+[files]
+settings = "{env:T3CODE_HOME|~/.t3}/userdata/settings.json"
+
+[[set]]
+file = "settings"
+key = ["providerInstances", "pansy"]
+
+[set.value]
+driver = "claudeAgent"
+displayName = "Pansy"
+enabled = true
+environment = [
+  { name = "ANTHROPIC_BASE_URL", value = "{base_url}", sensitive = false },
+  { name = "ANTHROPIC_AUTH_TOKEN", value = "{key}", sensitive = false },
+  { name = "ENABLE_TOOL_SEARCH", value = "true", sensitive = false },
+]
+config = { customModels = [{ "$each_model" = { slug = "{id}", name = "{name}" } }] }
+
+[base_url]
+file = "settings"
+key = ["providerInstances", "pansy", "environment", "[name=ANTHROPIC_BASE_URL]", "value"]
+
+[run]
+unsupported = "T3 Code is a window that reads its provider instances from settings.json alone; connect it instead (pansy t3code <model>)."

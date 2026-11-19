@@ -14,6 +14,7 @@ enum Node {
     },
     Array {
         range: Range<usize>,
+        items: Vec<Node>,
     },
     Scalar {
         range: Range<usize>,
@@ -23,7 +24,7 @@ enum Node {
 impl Node {
     fn range(&self) -> Range<usize> {
         match self {
-            Node::Object { range, .. } | Node::Array { range } | Node::Scalar { range } => {
+            Node::Object { range, .. } | Node::Array { range, .. } | Node::Scalar { range } => {
                 range.clone()
             }
         }
@@ -109,6 +110,7 @@ impl Parser<'_> {
             }
             b'[' => {
                 self.pos += 1;
+                let mut items = Vec::new();
                 loop {
                     self.skip();
                     match self.peek().ok_or("unclosed array")? {
@@ -116,12 +118,11 @@ impl Parser<'_> {
                             self.pos += 1;
                             return Ok(Node::Array {
                                 range: start..self.pos,
+                                items,
                             });
                         }
                         b',' => self.pos += 1,
-                        _ => {
-                            self.value()?;
-                        }
+                        _ => items.push(self.value()?),
                     }
                 }
             }
@@ -276,25 +277,108 @@ fn render(value: &Value, indent: &str, unit: &str) -> String {
     text.replace('\n', &format!("\n{indent}"))
 }
 
-/// Sets `path` to `value` in `text`, creating the objects on the way.
+/// A step of a path that picks an item of a list: `[id=pansy]`, the item
+/// whose `id` is `pansy`; `[=pansy]`, the item that is the text `pansy`.
+pub fn selector(step: &str) -> Option<(&str, &str)> {
+    step.strip_prefix('[')?.strip_suffix(']')?.split_once('=')
+}
+
+/// Whether `item` is the one the selector picks.
+pub fn picks(item: &Value, key: &str, value: &str) -> bool {
+    match key {
+        "" => item.as_str() == Some(value),
+        _ => item.get(key).and_then(Value::as_str) == Some(value),
+    }
+}
+
+/// The value at `path` in `root`.
+pub fn walk<'a>(root: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    path.iter().try_fold(root, |v, step| match selector(step) {
+        Some((key, value)) => v.as_array()?.iter().find(|item| picks(item, key, value)),
+        None => v.get(*step),
+    })
+}
+
+/// `value` under `path`: an object for each key, a list of one for each
+/// step that picks an item.
+fn nest(path: &[&str], value: &Value) -> Value {
+    path.iter().rev().fold(value.clone(), |rest, step| {
+        if selector(step).is_some() {
+            Value::Array(vec![rest])
+        } else {
+            let mut map = serde_json::Map::new();
+            map.insert(step.to_string(), rest);
+            Value::Object(map)
+        }
+    })
+}
+
+/// The item of `items` the selector picks.
+fn picked(text: &str, items: &[Node], key: &str, value: &str) -> Option<usize> {
+    items
+        .iter()
+        .position(|item| to_value(&text[item.range()]).is_ok_and(|v| picks(&v, key, value)))
+}
+
+/// `text` with `value` added after the list's last item.
+fn append(text: &str, list: Range<usize>, items: &[Node], value: &Value, unit: &str) -> String {
+    match items.last() {
+        Some(last) => {
+            let end = last.range().end;
+            let (rendered, lead) = if text[list.clone()].contains('\n') {
+                let indent = indent_at(text, last.range().start);
+                (render(value, &indent, unit), format!(",\n{indent}"))
+            } else {
+                let indent = indent_at(text, list.start);
+                (render(value, &indent, unit), ", ".to_owned())
+            };
+            // A trailing comma after the last item serves the new one.
+            let after = &text[end..list.end - 1];
+            match after.find(|c: char| !c.is_whitespace()) {
+                Some(i) if after.as_bytes()[i] == b',' => {
+                    let at = end + i + 1;
+                    format!("{}{}{rendered},{}", &text[..at], &lead[1..], &text[at..])
+                }
+                _ => format!("{}{lead}{rendered}{}", &text[..end], &text[end..]),
+            }
+        }
+        None => {
+            let indent = indent_at(text, list.start);
+            let inner = format!("{indent}{unit}");
+            let rendered = render(value, &inner, unit);
+            format!(
+                "{}[\n{inner}{rendered}\n{indent}]{}",
+                &text[..list.start],
+                &text[list.end..]
+            )
+        }
+    }
+}
+
+/// Sets `path` to `value` in `text`, creating the objects on the way. A
+/// step that picks an item of a list ([`selector`]) sets that item, or adds
+/// it after the others.
 pub fn set(text: &str, path: &[&str], value: &Value) -> Result<String, String> {
     if text.trim().is_empty() {
-        let mut root = Value::Object(Default::default());
-        let mut at = &mut root;
-        for key in path {
-            at = at
-                .as_object_mut()
-                .unwrap()
-                .entry(key.to_string())
-                .or_insert(Value::Object(Default::default()));
-        }
-        *at = value.clone();
-        return Ok(format!("{}\n", render(&root, "", "  ")));
+        return Ok(format!("{}\n", render(&nest(path, value), "", "  ")));
     }
     let root = parse(text)?;
     let unit = indent_unit(text);
     let mut node = &root;
     for (depth, key) in path.iter().enumerate() {
+        if let Some((by, is)) = selector(key) {
+            let Node::Array { range, items } = node else {
+                return Err(format!("{} is not a list", path[..depth].join(".")));
+            };
+            match picked(text, items, by, is) {
+                Some(i) => node = &items[i],
+                None => {
+                    let rest = nest(&path[depth + 1..], value);
+                    return Ok(append(text, range.clone(), items, &rest, &unit));
+                }
+            }
+            continue;
+        }
         let Node::Object { range, members } = node else {
             return Err(format!("{} is not an object", path[..depth].join(".")));
         };
@@ -302,12 +386,7 @@ pub fn set(text: &str, path: &[&str], value: &Value) -> Result<String, String> {
             Some(member) => node = &member.value,
             None => {
                 // Build what is missing below this object.
-                let mut rest = value.clone();
-                for k in path[depth + 1..].iter().rev() {
-                    let mut map = serde_json::Map::new();
-                    map.insert(k.to_string(), rest);
-                    rest = Value::Object(map);
-                }
+                let rest = nest(&path[depth + 1..], value);
                 return Ok(insert(text, range.clone(), members, key, &rest, &unit));
             }
         }
@@ -396,6 +475,29 @@ pub fn remove(text: &str, path: &[&str]) -> Result<String, String> {
     let root = parse(text)?;
     let mut node = &root;
     for (depth, key) in path.iter().enumerate() {
+        if let Some((by, is)) = selector(key) {
+            let Node::Array { range, items } = node else {
+                return Ok(text.to_owned());
+            };
+            let Some(i) = picked(text, items, by, is) else {
+                return Ok(text.to_owned());
+            };
+            if depth + 1 < path.len() {
+                node = &items[i];
+                continue;
+            }
+            // The item with what parted it from the next; the last, with
+            // what parted it from the one before; the only one, with all
+            // the list held.
+            let cut = if let Some(next) = items.get(i + 1) {
+                items[i].range().start..next.range().start
+            } else if i > 0 {
+                items[i - 1].range().end..items[i].range().end
+            } else {
+                range.start + 1..range.end - 1
+            };
+            return Ok(format!("{}{}", &text[..cut.start], &text[cut.end..]));
+        }
         let Node::Object { range, members } = node else {
             return Ok(text.to_owned());
         };
@@ -513,6 +615,74 @@ mod tests {
         assert_eq!(
             set("", &["x", "y"], &json!(1)).unwrap(),
             "{\n  \"x\": {\n    \"y\": 1\n  }\n}\n"
+        );
+    }
+
+    #[test]
+    fn sets_adds_and_removes_an_item_of_a_list() {
+        let mine = "{\n  // mine\n  \"providers\": [\n    { \"id\": \"own\", \"url\": \"x\" } // kept\n  ]\n}\n";
+        let item = json!({"id": "pansy", "url": "u"});
+        let added = set(mine, &["providers", "[id=pansy]"], &item).unwrap();
+        assert_eq!(
+            added,
+            "{\n  // mine\n  \"providers\": [\n    { \"id\": \"own\", \"url\": \"x\" },\n    {\n      \"id\": \"pansy\",\n      \"url\": \"u\"\n    } // kept\n  ]\n}\n"
+        );
+        assert_eq!(
+            walk(
+                &to_value(&added).unwrap(),
+                &["providers", "[id=pansy]", "url"]
+            ),
+            Some(&json!("u"))
+        );
+        // again: the item is replaced, not added twice
+        let again = set(
+            &added,
+            &["providers", "[id=pansy]"],
+            &json!({"id": "pansy", "url": "v"}),
+        )
+        .unwrap();
+        assert_eq!(
+            to_value(&again).unwrap()["providers"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(to_value(&again).unwrap()["providers"][1]["url"], "v");
+        let inside = set(&added, &["providers", "[id=pansy]", "url"], &json!("w")).unwrap();
+        assert_eq!(to_value(&inside).unwrap()["providers"][1]["url"], "w");
+        let gone = remove(&added, &["providers", "[id=pansy]"]).unwrap();
+        assert_eq!(to_value(&gone).unwrap(), to_value(mine).unwrap());
+        assert!(gone.contains("// mine") && gone.contains("\"own\""));
+
+        // a list of texts, on one line, and one there is none of yet
+        let one = "{\"on\": [\"a\", \"b\"]}";
+        let more = set(one, &["on", "[=c]"], &json!("c")).unwrap();
+        assert_eq!(more, "{\"on\": [\"a\", \"b\", \"c\"]}");
+        assert_eq!(set(&more, &["on", "[=c]"], &json!("c")).unwrap(), more);
+        assert_eq!(remove(&more, &["on", "[=c]"]).unwrap(), one);
+        assert_eq!(
+            remove(&more, &["on", "[=a]"]).unwrap(),
+            "{\"on\": [\"b\", \"c\"]}"
+        );
+        let new = set("{}", &["list", "[id=p]"], &json!({"id": "p"})).unwrap();
+        assert_eq!(to_value(&new).unwrap(), json!({"list": [{"id": "p"}]}));
+        assert_eq!(
+            to_value(&remove(&new, &["list", "[id=p]"]).unwrap()).unwrap(),
+            json!({"list": []})
+        );
+        // the file is the list
+        let root = set("", &["[id=p]"], &json!({"id": "p"})).unwrap();
+        assert_eq!(to_value(&root).unwrap(), json!([{"id": "p"}]));
+        let root = set(
+            "[\n  {\"id\": \"own\"},\n]\n",
+            &["[id=p]"],
+            &json!({"id": "p"}),
+        )
+        .unwrap();
+        assert_eq!(
+            to_value(&root).unwrap(),
+            json!([{"id": "own"}, {"id": "p"}])
         );
     }
 

@@ -30,6 +30,9 @@ registry_port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0
 python3 -m http.server "$registry_port" --bind 127.0.0.1 --directory "$scratch/registry" > /dev/null 2>&1 &
 registry_pid=$!
 trap 'kill "$registry_pid" 2> /dev/null; rm -rf -- "$scratch"' EXIT
+# OpenCode's settings folder: an agent that lists pansy's models itself,
+# for Pick and the names in its list (its program is never run).
+mkdir -p "$scratch/home/.config/opencode"
 # A session of it for the Sessions page, written days ago (one written in
 # the last minute may still be running, and is not deleted).
 session="$scratch/home/.claude/projects/-work-app/11111111-2222-4333-8444-555555555555.jsonl"

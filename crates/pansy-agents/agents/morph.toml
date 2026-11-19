@@ -1,0 +1,65 @@
+# Mister Morph, as magpie's morph.go: it has no list of providers, so llm in
+# config.yaml is taken over: inference_provider openai_response_compatible
+# at the gateway's /v1 (morph adds no second /v1), on OpenAI's Responses API.
+# The User-Agent names morph to the gateway; its requests otherwise carry
+# the OpenAI SDK's. llm.context_window_tokens is taken out while connected,
+# as magpie does for a model whose window it doesn't know: the user's was
+# their own model's. No program: `morph` is other tools' name too.
+id = "morph"
+name = "Mister Morph"
+protocol = "responses"
+dirs = [".morph"]
+
+[files]
+config = "{env:MISTER_MORPH_CONFIG|~/.morph/config.yaml}"
+
+[[field]]
+key = "effort"
+kind = "effort"
+levels = ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+[[set]]
+file = "config"
+key = ["llm", "inference_provider"]
+value = "openai_response_compatible"
+
+[[set]]
+file = "config"
+key = ["llm", "endpoint"]
+value = "{v1}"
+
+[[set]]
+file = "config"
+key = ["llm", "api_key"]
+value = "{key}"
+
+[[set]]
+file = "config"
+key = ["llm", "model"]
+value = "{model}"
+
+[[set]]
+file = "config"
+key = ["llm", "context_window_tokens"]
+remove = true
+
+[[set]]
+file = "config"
+key = ["llm", "headers", "User-Agent"]
+value = "mistermorph"
+
+[[set]]
+file = "config"
+key = ["llm", "reasoning_effort"]
+value = "{effort}"
+
+[base_url]
+file = "config"
+key = ["llm", "endpoint"]
+
+[model]
+file = "config"
+key = ["llm", "model"]
+
+[run]
+unsupported = "Mister Morph reads its model from its config file alone; connect it instead (pansy morph <model>)."

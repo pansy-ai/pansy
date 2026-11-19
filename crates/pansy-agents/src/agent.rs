@@ -20,12 +20,34 @@ use crate::files::Format;
 use crate::manifest::{self, Field, Manifest, Vars};
 
 /// One key to set in an agent's config.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Edit {
     pub file: PathBuf,
     pub format: Format,
     pub path: Vec<String>,
     pub value: Value,
+    /// The key is taken out, not set.
+    pub remove: bool,
+    /// Only where what holds the key is in the file already.
+    pub if_there: bool,
+}
+
+// As derived, with `remove` and `if_there` said only when they are so.
+impl std::fmt::Debug for Edit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut out = f.debug_struct("Edit");
+        out.field("file", &self.file)
+            .field("format", &self.format)
+            .field("path", &self.path)
+            .field("value", &self.value);
+        if self.remove {
+            out.field("remove", &true);
+        }
+        if self.if_there {
+            out.field("if_there", &true);
+        }
+        out.finish()
+    }
 }
 
 fn edit(file: &Path, format: Format, path: &[&str], value: Value) -> Edit {
@@ -34,6 +56,30 @@ fn edit(file: &Path, format: Format, path: &[&str], value: Value) -> Edit {
         format,
         path: path.iter().map(|s| s.to_string()).collect(),
         value,
+        remove: false,
+        if_there: false,
+    }
+}
+
+/// A table for a YAML file, as its keys one by one: pansy writes YAML a
+/// line at a time.
+fn leaves(e: Edit, out: &mut Vec<Edit>) {
+    match &e.value {
+        Value::Object(map) if e.format == Format::Yaml && !e.remove => {
+            for (k, v) in map {
+                let mut path = e.path.clone();
+                path.push(k.clone());
+                leaves(
+                    Edit {
+                        path,
+                        value: v.clone(),
+                        ..e.clone()
+                    },
+                    out,
+                );
+            }
+        }
+        _ => out.push(e),
     }
 }
 
@@ -53,8 +99,11 @@ pub struct Wiring<'a> {
     /// What the user gave the agent's fields (a tier's model, an effort), by
     /// their keys; one not among them has none.
     pub fields: &'a BTreeMap<String, String>,
-    /// Every model the gateway offers, for agents that list them.
+    /// The gateway's models the agent lists, for one that lists them.
     pub choices: &'a [String],
+    /// The name each model is listed by, by its id; its id, for one not
+    /// among them.
+    pub names: &'a BTreeMap<String, String>,
 }
 
 /// No field given a value.
@@ -360,6 +409,48 @@ impl Agent {
         }
     }
 
+    /// Whether it lists the gateway's models itself: its manifest spreads
+    /// them (`$each_model`) into its config.
+    pub fn lists_models(&self) -> bool {
+        fn spreads(value: &Value) -> bool {
+            match value {
+                Value::Object(map) => map.contains_key("$each_model") || map.values().any(spreads),
+                Value::Array(items) => items.iter().any(spreads),
+                _ => false,
+            }
+        }
+        match self.kind {
+            Kind::Listed(m) => m.set.iter().any(|s| s.each_model || spreads(&s.value)),
+            Kind::Plugin(p) => p.connect,
+        }
+    }
+
+    /// Whether it is signed in to its vendor itself, as its manifest's
+    /// `[sign_in]` tells: the key is there, whatever it holds. Never, with
+    /// reading the agents' sign-ins turned off.
+    pub fn signed_in(&self) -> bool {
+        let Kind::Listed(m) = self.kind else {
+            return false;
+        };
+        let Some((file, key)) = &m.sign_in else {
+            return false;
+        };
+        if !pansy_core::config::load_settings()
+            .unwrap_or_default()
+            .agent_sign_ins
+        {
+            return false;
+        }
+        let file = file.resolve();
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            return false;
+        };
+        crate::files::get(format_of("", &file), &text, key)
+            .ok()
+            .flatten()
+            .is_some_and(|v| !v.is_null())
+    }
+
     /// What the user may set for it beside its models: a manifest's fields.
     pub fn fields(&self) -> &'static [Field] {
         match self.kind {
@@ -476,19 +567,30 @@ impl Agent {
             }
             Kind::Listed(m) => {
                 let vars = Vars::of(w, &m.fields);
-                m.set
-                    .iter()
-                    .filter(|s| !vars.leaves_out(&s.value))
-                    .map(|s| {
-                        let file = m.file(s.file);
-                        Edit {
-                            format: format_of("", &file),
-                            file,
-                            path: s.key.iter().map(|k| (*k).to_owned()).collect(),
-                            value: vars.fill(&s.value),
+                let mut out = Vec::new();
+                for s in m.set.iter().filter(|s| !vars.skips(s)) {
+                    let file = m.file(s.file);
+                    let format = format_of("", &file);
+                    let one = |id: Option<&str>| Edit {
+                        format,
+                        file: file.clone(),
+                        path: s.key.iter().map(|k| vars.step(k, id)).collect(),
+                        value: match id {
+                            Some(id) => vars.fill_for(&s.value, id),
+                            None => vars.fill(&s.value),
+                        },
+                        remove: s.remove,
+                        if_there: s.if_there,
+                    };
+                    if s.each_model {
+                        for id in vars.models() {
+                            leaves(one(Some(id)), &mut out);
                         }
-                    })
-                    .collect()
+                    } else {
+                        leaves(one(None), &mut out);
+                    }
+                }
+                out
             }
         }
     }
@@ -501,16 +603,20 @@ impl Agent {
             return Vec::new();
         };
         let vars = Vars::of(w, &m.fields);
+        // One key for each model, or a table in YAML, is many keys: what is
+        // not set any more goes back as the agent is wired (`wire`).
         m.set
             .iter()
-            .filter(|s| vars.leaves_out(&s.value))
+            .filter(|s| vars.skips(s) && !s.each_model)
             .map(|s| {
                 let file = m.file(s.file);
                 Edit {
                     format: format_of("", &file),
                     file,
-                    path: s.key.iter().map(|k| (*k).to_owned()).collect(),
+                    path: s.key.iter().map(|k| vars.step(k, None)).collect(),
                     value: Value::Null,
+                    remove: false,
+                    if_there: false,
                 }
             })
             .collect()

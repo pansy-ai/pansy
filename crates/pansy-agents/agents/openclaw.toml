@@ -1,0 +1,55 @@
+# OpenClaw, as magpie's openclaw.go wires it: a provider of its own in
+# models.providers (OpenAI's chat completions) and agents.defaults.model, a
+# ref "provider/model" split at the first slash. Its schema is strict, so a
+# model entry holds only the keys magpie writes. OpenClaw takes the change
+# without a restart; a chat that already has a model keeps it until
+# /model default. Where the config has a list of the models allowed
+# (agents.defaults.modelPolicy.allow, or the older agents.defaults.models),
+# pansy's are added to it.
+id = "openclaw"
+name = "OpenClaw"
+protocol = "chat"
+programs = ["openclaw"]
+dirs = [".openclaw"]
+
+[files]
+config = "{env:OPENCLAW_STATE_DIR|~/.openclaw}/openclaw.json"
+
+[[set]]
+file = "config"
+key = ["models", "providers", "pansy"]
+
+[set.value]
+baseUrl = "{v1}"
+apiKey = "{key}"
+api = "openai-completions"
+models = [{ "$each_model" = { id = "{id}", name = "{id}", reasoning = false, input = ["text"], contextWindow = 128000 } }]
+
+[[set]]
+file = "config"
+key = ["agents", "defaults", "model"]
+value = "pansy/{model}"
+
+[[set]]
+file = "config"
+key = ["agents", "defaults", "models", "pansy/{model}"]
+value = {}
+if_there = true
+
+[[set]]
+file = "config"
+key = ["agents", "defaults", "modelPolicy", "allow", "[=pansy/*]"]
+value = "pansy/*"
+if_there = true
+
+[base_url]
+file = "config"
+key = ["models", "providers", "pansy", "baseUrl"]
+
+[model]
+file = "config"
+key = ["agents", "defaults", "model"]
+prefix = "pansy/"
+
+[run]
+unsupported = "OpenClaw reads its providers from openclaw.json alone; connect it instead (pansy openclaw <model>)."

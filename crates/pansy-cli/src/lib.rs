@@ -44,8 +44,17 @@ Agents
                                       Code: low to max; Codex: low to xhigh); Claude Code's
                                       tiers opus, sonnet and fable and its auto_mode, each a
                                       provider/model, and opus_effort, sonnet_effort,
-                                      haiku_effort, fable_effort and subagent_effort.
+                                      haiku_effort, fable_effort and subagent_effort; where a
+                                      long conversation is compacted, compact_at (272k; Claude
+                                      Code, Codex), and Codex's context_window,
+                                      subagent_effort, background_compaction (on) and
+                                      background_compaction_at (a percent).
                                       default takes it back; alone, what it is set to
+  <agent> list [all|hide|show|only <provider/model>…]
+                                      which of pansy's models the agent lists (OpenCode,
+                                      Crush); only: a model that comes later stays off
+  <agent> names [on|off|default]      its list names a model's provider before the model
+                                      (settings' providerInNames, for every agent)
   <agent> <provider/model> --show     what connecting would write into the agent's files,
                                       key by key, and nothing written
   <agent> off                         put the agent's config back as it was
@@ -430,7 +439,14 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
         }
         ["settings", "set", key, value] => {
             config::update_settings(|s| s.set(key, value).map_err(|e| anyhow!(e)))?;
-            if *key == "port" {
+            if ["providerInNames", "agentNames", "agentModels"].contains(key) {
+                for p in pansy_agents::reconnect_all()? {
+                    eprintln!("pansy: {p}");
+                }
+                println!(
+                    "Set {key} to {value}; the connected agents' model lists are written again."
+                );
+            } else if *key == "port" {
                 let problems = pansy_agents::reconnect_all()?;
                 for p in problems {
                     eprintln!("pansy: {p}");
@@ -476,6 +492,8 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
                     Ok(())
                 }
                 ["off"] => disconnect(id),
+                ["list", rest @ ..] => agent_list(id, rest),
+                ["names", rest @ ..] => agent_names(id, rest),
                 [key, rest @ ..]
                     if rest.len() <= 1
                         && pansy_agents::agent::find(id)
@@ -493,7 +511,13 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
                         [value] => {
                             let value = (*value != "default" && *value != "off").then_some(*value);
                             pansy_agents::set_field(id, key, value)?;
-                            match value {
+                            // As it is kept: a size as its digits.
+                            let kept = pansy_agents::list()
+                                .into_iter()
+                                .find(|v| v.id == id)
+                                .and_then(|v| v.fields.into_iter().find(|f| f.key == *key))
+                                .and_then(|f| f.value);
+                            match kept.as_deref().or(value) {
                                 Some(value) => println!("Set {name}'s {key} to {value}."),
                                 None => println!("{name}'s {key} is its own again."),
                             }
@@ -535,13 +559,119 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
                 [model] => connect(id, model),
                 _ => {
                     bail!(
-                        "usage: pansy {agent} <provider/model> | off | --small <provider/model> | --subagent <provider/model>|off | <setting> [<value>|default]"
+                        "usage: pansy {agent} <provider/model> | off | --small <provider/model> | --subagent <provider/model>|off | <setting> [<value>|default] | list [all|hide|show|only <provider/model>…] | names [on|off|default]"
                     )
                 }
             },
             None => bail!("no command {agent}; `pansy help` lists them"),
         },
     }
+}
+
+/// `pansy <agent> list …`: which of pansy's models the agent lists.
+fn agent_list(id: &str, rest: &[&str]) -> Result<()> {
+    let agent = pansy_agents::agent::find(id).ok_or_else(|| anyhow!("no agent {id}"))?;
+    let settings = config::load_settings()?;
+    let all: Vec<String> = manage::choices()?.into_iter().map(|c| c.id).collect();
+    let mut models = settings.agent_models.get(id).cloned().unwrap_or_default();
+    let known = |names: &[&str]| -> Result<Vec<String>> {
+        if names.is_empty() {
+            bail!("name the models, as provider/model");
+        }
+        for name in names {
+            if !all.iter().any(|m| m == name) {
+                bail!("no model {name}; `pansy models` lists them");
+            }
+        }
+        Ok(names.iter().map(|n| (*n).to_owned()).collect())
+    };
+    match rest {
+        [] => {
+            if !agent.lists_models() {
+                println!(
+                    "{} lists no models of pansy's: it starts on the one picked for it.",
+                    agent.name
+                );
+                return Ok(());
+            }
+            let shown = all.iter().filter(|m| models.lists(m)).count();
+            println!(
+                "{} lists {shown} of {} models{}",
+                agent.name,
+                all.len(),
+                if models.only_picked {
+                    ", only the ones picked: a new one stays off until it is"
+                } else {
+                    ""
+                }
+            );
+            for m in &all {
+                println!("  {} {m}", if models.lists(m) { "✓" } else { "·" });
+            }
+            return Ok(());
+        }
+        ["all"] => models = Default::default(),
+        ["hide", names @ ..] => {
+            let names = known(names)?;
+            if models.only_picked {
+                models.picked.retain(|m| !names.contains(m));
+            } else {
+                models.hidden.extend(names);
+            }
+        }
+        ["show", names @ ..] => {
+            let names = known(names)?;
+            if models.only_picked {
+                models.picked.extend(names);
+            } else {
+                models.hidden.retain(|m| !names.contains(m));
+            }
+        }
+        ["only", names @ ..] => {
+            models = pansy_core::settings::AgentModels {
+                only_picked: true,
+                picked: known(names)?,
+                ..Default::default()
+            }
+        }
+        _ => bail!(
+            "usage: pansy {id} list [all | hide <provider/model>… | show <provider/model>… | only <provider/model>…]"
+        ),
+    }
+    pansy_agents::set_listed(id, models.clone())?;
+    let shown = all.iter().filter(|m| models.lists(m)).count();
+    println!("{} lists {shown} of {} models.", agent.name, all.len());
+    Ok(())
+}
+
+/// `pansy <agent> names …`: whether its list names a model's provider.
+fn agent_names(id: &str, rest: &[&str]) -> Result<()> {
+    let agent = pansy_agents::agent::find(id).ok_or_else(|| anyhow!("no agent {id}"))?;
+    let said = |on: bool| if on { "on" } else { "off" };
+    match rest {
+        [] => {
+            let settings = config::load_settings()?;
+            match settings.agent_names.get(id) {
+                Some(on) => println!("{}", said(*on)),
+                None => println!("as in settings ({})", said(settings.provider_in_names)),
+            }
+            return Ok(());
+        }
+        ["on"] => pansy_agents::set_names(id, Some(true))?,
+        ["off"] => pansy_agents::set_names(id, Some(false))?,
+        ["default"] => pansy_agents::set_names(id, None)?,
+        _ => bail!("usage: pansy {id} names [on|off|default]"),
+    }
+    println!(
+        "{}'s list names a model's provider: {}.",
+        agent.name,
+        match rest {
+            ["default"] => "as in settings (providerInNames)",
+            ["on"] => "on",
+            _ => "off",
+        }
+    );
+    Ok(())
 }
 
 fn agent_id(name: &str) -> &str {

@@ -1,0 +1,56 @@
+# mu, Pi under another name with its folder at ~/.mu/agent. Follows magpie's
+# mu.go, agents.go (piLikeKeyed, magpieProviderJSONAt "pi") and cliupdate.go:
+# pansy as a provider in models.json, the model a session starts on in
+# settings.json. No program is named: a mu on PATH is as often maildir-utils'.
+id = "mu"
+name = "mu"
+protocol = "chat"
+dirs = [".mu/agent"]
+npm = "mu-agent"
+
+[files]
+settings = "{env:MU_AGENT_DIR|~/.mu/agent}/settings.json"
+models = "{env:MU_AGENT_DIR|~/.mu/agent}/models.json"
+
+[[set]]
+file = "models"
+key = ["providers", "pansy"]
+
+[set.value]
+name = "Pansy"
+baseUrl = "{v1}"
+api = "openai-completions"
+apiKey = "{key}"
+compat = { sendSessionAffinityHeaders = true }
+models = [{ "$each_model" = { id = "{id}", name = "{name}" } }]
+
+[[set]]
+file = "settings"
+key = ["defaultProvider"]
+value = "pansy"
+
+[[set]]
+file = "settings"
+key = ["defaultModel"]
+value = "{model}"
+
+[[set]]
+file = "settings"
+key = ["enabledModels", "[=pansy/{model}]"]
+value = "pansy/{model}"
+if_there = true
+
+[base_url]
+file = "models"
+key = ["providers", "pansy", "baseUrl"]
+
+[model]
+file = "settings"
+key = ["defaultModel"]
+
+[[install]]
+via = "npm"
+command = "npm install -g mu-agent"
+
+[run]
+unsupported = "mu reads its providers from models.json alone; connect it instead (pansy mu <model>)."

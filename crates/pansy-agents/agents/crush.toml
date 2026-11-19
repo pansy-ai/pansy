@@ -19,7 +19,7 @@ name = "Pansy"
 type = "openai"
 base_url = "{v1}"
 api_key = "{key}"
-models = [{ "$each_model" = { id = "{id}", name = "{id}", context_window = 128000, default_max_tokens = 16000 } }]
+models = [{ "$each_model" = { id = "{id}", name = "{name}", context_window = 128000, default_max_tokens = 16000 } }]
 
 [[set]]
 file = "config"

@@ -1,0 +1,33 @@
+# Paimon (aisk/paimon), as magpie's paimon.go points it: pydantic-ai's
+# litellm provider, an OpenAI-compatible proxy, at the gateway; a model is
+# "provider:name".
+id = "paimon"
+name = "Paimon"
+protocol = "chat"
+programs = ["paimon"]
+dirs = [".config/paimon"]
+
+[files]
+config = "{env:PAIMON_CONFIG_HOME|~/.config/paimon}/config.json"
+
+[[set]]
+file = "config"
+key = ["model"]
+value = "litellm:{model}"
+
+[[set]]
+file = "config"
+key = ["providers", "litellm"]
+value = { api_base = "{v1}", api_key = "{key}" }
+
+[base_url]
+file = "config"
+key = ["providers", "litellm", "api_base"]
+
+[model]
+file = "config"
+key = ["model"]
+prefix = "litellm:"
+
+[run]
+unsupported = "Paimon reads its provider from its config file alone; connect it instead (pansy paimon <model>)."

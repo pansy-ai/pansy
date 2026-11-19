@@ -1,0 +1,58 @@
+# Pi. Follows magpie's agents.go (pi, piLikeKeyed, magpieProviderJSONAt
+# "pi", piModelJSON) and cliupdate.go: pansy as a provider in models.json,
+# the model a session starts on in settings.json.
+id = "pi"
+name = "Pi"
+protocol = "chat"
+programs = ["pi"]
+dirs = [".pi/agent"]
+npm = "@earendil-works/pi-coding-agent"
+
+[files]
+settings = "{env:PI_CODING_AGENT_DIR|~/.pi/agent}/settings.json"
+models = "{env:PI_CODING_AGENT_DIR|~/.pi/agent}/models.json"
+
+[[set]]
+file = "models"
+key = ["providers", "pansy"]
+
+[set.value]
+name = "Pansy"
+baseUrl = "{v1}"
+api = "openai-completions"
+apiKey = "{key}"
+compat = { sendSessionAffinityHeaders = true }
+models = [{ "$each_model" = { id = "{id}", name = "{name}" } }]
+
+[[set]]
+file = "settings"
+key = ["defaultProvider"]
+value = "pansy"
+
+[[set]]
+file = "settings"
+key = ["defaultModel"]
+value = "{model}"
+
+# Pi's Ctrl+P list: while it names anything a session starts only on a model
+# in it, so the picked one joins a list that is there; none is made.
+[[set]]
+file = "settings"
+key = ["enabledModels", "[=pansy/{model}]"]
+value = "pansy/{model}"
+if_there = true
+
+[base_url]
+file = "models"
+key = ["providers", "pansy", "baseUrl"]
+
+[model]
+file = "settings"
+key = ["defaultModel"]
+
+[[install]]
+via = "npm"
+command = "npm install -g @earendil-works/pi-coding-agent"
+
+[run]
+unsupported = "Pi reads its providers from models.json alone; connect it instead (pansy pi <model>)."

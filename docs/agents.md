@@ -40,7 +40,31 @@ args = ["-c", "model={model:q}"]
   `{key}`, `{model}` and `{small}` filled in; `{model:q}` is in quotes, as
   JSON and TOML write a string. A table or list of such works too. A table
   whose one key is `"$each_model"` becomes one entry for each model the
-  gateway offers, by its id (`{id}`); alone in a list, one item each.
+  gateway offers the agent, by its id (`{id}`) and the name it is listed by
+  (`{name}`); alone in a list, one item each. The user picks which models an
+  agent lists and whether a name leads with its provider (`pansy <agent>
+  list`, `pansy <agent> names`).
+- **A key** is the steps down to it. A step in brackets picks an item of a
+  list: `[id=pansy]` the item whose `id` is `pansy`, `[=pansy/{model}]` the
+  item that is that text. Setting it replaces that item or adds it after the
+  others, which stay as they are written; disconnecting takes out that item
+  alone. JSON and TOML (`[[providers]]` tables, or an array) have them, and
+  a JSON file may be a list itself (`key = ["[id=pansy]"]`). A step takes
+  `{model}` and the other variables too (`["models", "pansy/{model}"]`).
+- **A `[[set]]`** may also say:
+  `each_model = true` — one key for each model the agent lists, `{id}` and
+  `{name}` in the key and the value being that model's
+  (`key = ["models", "pansy/{id}"]`), beside whatever else the table holds;
+  a model that leaves the list has its key put back;
+  `remove = true` (and no value) — the key is taken out while the agent is
+  connected and put back after;
+  `if_there = true` — set only where what holds the key (the list, for an
+  item of one) is in the file already.
+- **In YAML** a table is written as its keys, one by one; a list is not
+  written (pansy edits YAML a line at a time).
+- **`[base_url]` and `[model]`** say where the gateway's address and the
+  model are read back. An agent that keeps neither where it can be read
+  leaves them out: pansy then goes by what it wrote.
 - **A file's format** is its ending's: `.toml`, `.yaml`, `.env`, else JSON
   with comments. In a path, `~/` is the home folder and `{env:NAME|else}` a
   variable's value or what follows the bar; several paths are the first that
@@ -52,6 +76,14 @@ args = ["-c", "model={model:q}"]
   with `follows = true` is the agent's model when unset; an effort with
   `joins = ":"` is written as `:high` after a model's name, or as nothing.
   `pansy <agent> <key> <value>` sets one, `default` unsets it.
+  The kinds `tokens` (a size as `200k`, `1m` or digits, within `min` and
+  `max`), `percent` (1 to 100) and `switch` (`on`) are the rows of the
+  agent's settings sheet. `{key:n}` alone as a value writes a number, not
+  text; a `[[set]]` with `when = "<key>"` is left out until that field has a
+  value, whatever else it names.
+- **`[sign_in]`** is a `file` and a `key` in it that is there once the agent
+  is signed in to its own account. Only that the key is there is read, never
+  what it holds.
 - **`npm`** is the agent's package in npm's registry, where its newest
   version is looked up; **`self_update`** the arguments of its own updater
   (`["update"]`), run when it was not installed by a package manager.

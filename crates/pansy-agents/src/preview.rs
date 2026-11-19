@@ -17,11 +17,7 @@ pub fn preview(id: &str, model: &str) -> Result<Vec<FileChange>> {
         .ok()
         .and_then(|s| s.agents.get(id).cloned());
     let base = gateway_url();
-    let choices: Vec<String> = pansy_core::manage::choices()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|c| c.id)
-        .collect();
+    let (choices, names) = crate::offered(id);
     let edits = agent.edits(&agent::Wiring {
         base_url: &base,
         key: AGENT_KEY,
@@ -33,6 +29,7 @@ pub fn preview(id: &str, model: &str) -> Result<Vec<FileChange>> {
             .filter(|_| agent.subagent_model),
         fields: saved.as_ref().map_or(agent::no_fields(), |s| &s.fields),
         choices: &choices,
+        names: &names,
     });
     let mut out: Vec<FileChange> = Vec::new();
     for e in edits {
@@ -40,14 +37,20 @@ pub fn preview(id: &str, model: &str) -> Result<Vec<FileChange>> {
         let text = files::read_text(&e.file)?;
         let key: Vec<&str> = e.path.iter().map(String::as_str).collect();
         let now = files::get(e.format, &text, &key).with_context(|| format!("reading {file}"))?;
-        if now.as_ref() == Some(&e.value) {
+        if e.remove {
+            if now.is_none() {
+                continue;
+            }
+        } else if now.as_ref() == Some(&e.value)
+            || (e.if_there && now.is_none() && !crate::holds(e.format, &text, &key)?)
+        {
             continue;
         }
         let name = e.path.last().map(String::as_str).unwrap_or_default();
         let change = KeyChange {
             key: e.path.join("."),
             before: now.as_ref().map(|v| shown(name, v)),
-            after: Some(shown(name, &e.value)),
+            after: (!e.remove).then(|| shown(name, &e.value)),
         };
         match out.iter_mut().find(|f| f.path == file) {
             Some(f) => f.keys.push(change),

@@ -1,0 +1,41 @@
+# Factory's Droid CLI, as magpie's droid.go wires it: one customModels entry
+# per model, id "custom:pansy/<id>", after the user's own, and
+# sessionDefaultSettings.model, the model sessions start on. Every model is
+# on Chat Completions; droid warns as a session starts about one whose name
+# reads as OpenAI's or Claude's there. Droid reads its settings at start-up.
+id = "droid"
+name = "Droid"
+protocol = "chat"
+programs = ["droid"]
+dirs = [".factory"]
+picks_in = "/model"
+
+[files]
+settings = "{env:FACTORY_HOME_OVERRIDE|~}/.factory/settings.json"
+
+[[set]]
+file = "settings"
+key = ["customModels", "[id=custom:pansy/{id}]"]
+each_model = true
+
+[set.value]
+model = "{id}"
+id = "custom:pansy/{id}"
+displayName = "{name}"
+baseUrl = "{v1}"
+apiKey = "{key}"
+provider = "generic-chat-completion-api"
+noImageSupport = true
+
+[[set]]
+file = "settings"
+key = ["sessionDefaultSettings", "model"]
+value = "custom:pansy/{model}"
+
+[model]
+file = "settings"
+key = ["sessionDefaultSettings", "model"]
+prefix = "custom:pansy/"
+
+[run]
+unsupported = "Droid reads its custom models from settings.json alone; connect it instead (pansy droid <model>)."

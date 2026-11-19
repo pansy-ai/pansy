@@ -1,6 +1,8 @@
 //! pansy's own settings (`settings.json`). Every key has a default, so a
 //! missing or older file reads as one with the defaults.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 /// The gateway's port: P-A-N-S on a phone's keypad.
@@ -17,6 +19,38 @@ pub fn use_proxy(
         "direct" => Ok(builder.no_proxy()),
         proxy => Ok(builder
             .proxy(reqwest::Proxy::all(proxy).map_err(|e| format!("the proxy {proxy}: {e}"))?)),
+    }
+}
+
+/// Which of the gateway's models one agent lists (Agents › Model list ›
+/// Pick). A model kept from an agent still answers when it asks for it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AgentModels {
+    /// The models taken out of its list, as `provider/model`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub hidden: Vec<String>,
+    /// Only the models in `picked` are listed: one that comes later, of any
+    /// provider, stays off until it is picked.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub only_picked: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub picked: Vec<String>,
+}
+
+impl AgentModels {
+    /// Whether the agent lists `model`.
+    pub fn lists(&self, model: &str) -> bool {
+        if self.only_picked {
+            self.picked.iter().any(|m| m == model)
+        } else {
+            !self.hidden.iter().any(|m| m == model)
+        }
+    }
+
+    /// Whether it says nothing: every model listed.
+    pub fn is_empty(&self) -> bool {
+        !self.only_picked && self.hidden.is_empty()
     }
 }
 
@@ -83,6 +117,14 @@ pub struct Settings {
     /// Where API keys are kept: `file` (`providers.json`, 0600) or `system`
     /// (the login keyring or Keychain; the file then says only where).
     pub key_store: String,
+    /// A model is listed with its provider's name before its own
+    /// (`DeepSeek · DeepSeek V3`), in the gateway's model list and the lists
+    /// pansy writes into the agents' files; off, by its own name alone.
+    pub provider_in_names: bool,
+    /// The agents that have it their own way, by agent id.
+    pub agent_names: BTreeMap<String, bool>,
+    /// Which models each agent lists, by agent id; one not here lists all.
+    pub agent_models: BTreeMap<String, AgentModels>,
 }
 
 impl Default for Settings {
@@ -111,6 +153,9 @@ impl Default for Settings {
             import_ignored: Vec::new(),
             china_mirror: false,
             key_store: "file".into(),
+            provider_in_names: true,
+            agent_names: BTreeMap::new(),
+            agent_models: BTreeMap::new(),
         }
     }
 }
@@ -119,6 +164,21 @@ impl Settings {
     /// The address agents are pointed at.
     pub fn base_url(&self) -> String {
         format!("http://127.0.0.1:{}", self.port)
+    }
+
+    /// Whether `agent` lists a model with its provider's name before it.
+    pub fn names_provider(&self, agent: &str) -> bool {
+        self.agent_names
+            .get(agent)
+            .copied()
+            .unwrap_or(self.provider_in_names)
+    }
+
+    /// Whether `agent` lists `model` (`provider/model`).
+    pub fn lists(&self, agent: &str, model: &str) -> bool {
+        self.agent_models
+            .get(agent)
+            .is_none_or(|models| models.lists(model))
     }
 
     /// The keys `pansy settings set` knows, with what each holds.
@@ -186,6 +246,18 @@ impl Settings {
         (
             "keyStore",
             "where API keys are kept: file (providers.json) or system (the login keyring or Keychain)",
+        ),
+        (
+            "providerInNames",
+            "a model is listed with its provider's name before its own (true/false)",
+        ),
+        (
+            "agentNames",
+            "the agents that have providerInNames their own way (JSON: {\"opencode\": false})",
+        ),
+        (
+            "agentModels",
+            "which models each agent lists (JSON: {\"opencode\": {\"hidden\": [\"provider/model\"]}})",
         ),
     ];
 
@@ -298,6 +370,18 @@ impl Settings {
             let mut seen = std::collections::BTreeSet::new();
             list.retain(|id| seen.insert(id.clone()));
         }
+        for models in self.agent_models.values_mut() {
+            for list in [&mut models.hidden, &mut models.picked] {
+                let mut seen = std::collections::BTreeSet::new();
+                list.retain(|id| !id.trim().is_empty() && seen.insert(id.clone()));
+            }
+            if models.only_picked {
+                models.hidden.clear();
+            } else {
+                models.picked.clear();
+            }
+        }
+        self.agent_models.retain(|_, models| !models.is_empty());
         self.masking.check()
     }
 }
@@ -346,6 +430,31 @@ mod tests {
             s.set("masking", r#"{"rules": [{"kind": "regex", "value": "("}]}"#)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn an_agent_lists_the_models_left_to_it() {
+        let mut s = Settings::default();
+        assert!(s.lists("opencode", "a/x") && s.names_provider("opencode"));
+        s.set(
+            "agentModels",
+            r#"{"opencode": {"hidden": ["a/x", "a/x", ""]}, "crush": {"onlyPicked": true, "picked": ["b/y"], "hidden": ["a/x"]}, "codex": {}}"#,
+        )
+        .unwrap();
+        assert_eq!(s.agent_models["opencode"].hidden, ["a/x"]);
+        assert!(!s.lists("opencode", "a/x") && s.lists("opencode", "b/y"));
+        // Only the picked ones: a model that comes later stays off.
+        assert!(s.lists("crush", "b/y") && !s.lists("crush", "c/new"));
+        assert!(s.agent_models["crush"].hidden.is_empty());
+        // One that says nothing is not kept.
+        assert!(!s.agent_models.contains_key("codex"));
+        assert!(s.lists("codex", "a/x"));
+
+        s.set("providerInNames", "off").unwrap();
+        s.set("agentNames", r#"{"crush": true}"#).unwrap();
+        assert!(!s.names_provider("opencode") && s.names_provider("crush"));
+        let old: Settings = serde_json::from_str(r#"{"port": 9000}"#).unwrap();
+        assert!(old.provider_in_names && old.agent_models.is_empty());
     }
 
     #[test]

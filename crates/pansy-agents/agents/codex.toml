@@ -5,6 +5,9 @@
 # the lead's pick wins over it. So the model for subagents goes with every
 # request in a header of pansy's, and the gateway puts a subagent's
 # (x-openai-subagent: collab_spawn) on it whatever it asked for.
+# A conversation is compacted at model_auto_compact_token_limit, which
+# Codex holds under 90% of model_context_window. 0.163 and later summarise in the background too, past a
+# share of the window ([features.async_compaction], 65% unless said).
 id = "codex"
 name = "Codex"
 protocol = "responses"
@@ -20,6 +23,29 @@ config = "{env:CODEX_HOME|~/.codex}/config.toml"
 key = "effort"
 kind = "effort"
 levels = ["low", "medium", "high", "xhigh"]
+
+[[field]]
+key = "subagent_effort"
+kind = "effort"
+levels = ["low", "medium", "high", "xhigh"]
+
+[[field]]
+key = "compact_at"
+kind = "tokens"
+min = 10000
+
+[[field]]
+key = "context_window"
+kind = "tokens"
+min = 10000
+
+[[field]]
+key = "background_compaction"
+kind = "switch"
+
+[[field]]
+key = "background_compaction_at"
+kind = "percent"
 
 [[set]]
 file = "config"
@@ -61,6 +87,27 @@ file = "config"
 key = ["model_reasoning_effort"]
 value = "{effort}"
 
+[[set]]
+file = "config"
+key = ["agents", "default_subagent_reasoning_effort"]
+value = "{subagent_effort}"
+
+[[set]]
+file = "config"
+key = ["model_auto_compact_token_limit"]
+value = "{compact_at:n}"
+
+[[set]]
+file = "config"
+key = ["model_context_window"]
+value = "{context_window:n}"
+
+[[set]]
+file = "config"
+key = ["features", "async_compaction"]
+when = "background_compaction"
+value = { enabled = true, model_async_compact_threshold_percent = "{background_compaction_at:n}" }
+
 [base_url]
 file = "config"
 key = ["model_providers", "pansy", "base_url"]
@@ -68,6 +115,10 @@ key = ["model_providers", "pansy", "base_url"]
 [model]
 file = "config"
 key = ["model"]
+
+[sign_in]
+file = "{env:CODEX_HOME|~/.codex}/auth.json"
+key = ["tokens"]
 
 [[install]]
 via = "powershell"

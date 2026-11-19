@@ -1,0 +1,44 @@
+# Grok Build, xAI's grok CLI, as magpie's grok.go wires it: one
+# [model."pansy/<id>"] table per model beside the user's own, each with the
+# gateway's key (a model with no key of its own would be sent the user's xAI
+# sign-in), and [models] default. A signed-in Grok takes xAI's campaigns
+# above config.toml, and one may set the default model: campaigns = false
+# keeps the default the one picked. Grok reads its settings at start-up.
+id = "grok"
+name = "Grok Build"
+protocol = "chat"
+dirs = [".grok"]
+picks_in = "/model"
+
+[files]
+config = "{env:GROK_HOME|~/.grok}/config.toml"
+
+[[set]]
+file = "config"
+key = ["model", "pansy/{id}"]
+each_model = true
+
+[set.value]
+model = "{id}"
+name = "{name}"
+base_url = "{v1}"
+api_key = "{key}"
+api_backend = "chat_completions"
+
+[[set]]
+file = "config"
+key = ["features", "campaigns"]
+value = false
+
+[[set]]
+file = "config"
+key = ["models", "default"]
+value = "pansy/{model}"
+
+[model]
+file = "config"
+key = ["models", "default"]
+prefix = "pansy/"
+
+[run]
+unsupported = "Grok Build reads its own models from config.toml alone; connect it instead (pansy grok <model>)."

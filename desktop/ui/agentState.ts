@@ -5,7 +5,7 @@
 import { signal } from "nsh";
 import { Agents } from "pansy/native";
 import { tr, trCore } from "./i18n";
-import { act, agents, choiceName, choices, clis, loadAgents, loadVersions, reason, settings, toast, type Agent, type AgentField, type Cli, type FileChange, type SettingsView } from "./model";
+import { act, agents, choiceName, choices, clis, loadAgents, loadVersions, reason, settings, toast, type Agent, type AgentField, type AgentModels, type Choice, type Cli, type FileChange, type SettingsView } from "./model";
 
 /** The agent whose picker is open, and for which of its models: its main one, the one for quick tasks, its subagents', or a field's (a tier's). */
 export const picking = signal<{ id: string; small: boolean; subagent?: boolean; field?: string } | null>(null);
@@ -29,6 +29,8 @@ export const disconnecting = signal<Agent | null>(null);
 export const disconnectIn = signal<"main" | "panel">("main");
 /** Manage agents is open. */
 export const managing = signal(false);
+/** The agent whose list of models is being picked. */
+export const listing = signal<Agent | null>(null);
 
 /** The agents on this computer, or connected: the rows of the list. */
 export const here = () => agents().filter((a) => a.installed || a.connected);
@@ -141,8 +143,62 @@ export const TIERS = ["opus", "sonnet", "haiku", "fable"] as const;
 export const hasTiers = (a: Agent) => TIERS.some((t) => fieldOf(a, t));
 /** The fields the tiers' rows show: the rest are a new session's own settings. */
 const inTiers = (key: string) => TIERS.some((t) => key === t || key === `${t}_effort`) || key === "subagent_effort" || key === "auto_mode";
-/** The agent's fields with no row of their own: its effort, and whatever a manifest of the user's adds. */
-export const plainFields = (a: Agent) => a.fields.filter((f) => !(hasTiers(a) && inTiers(f.key)));
+/** Whether a field is a setting of the agent's own: a size, a share, a switch. */
+const isSetting = (f: AgentField) => f.kind === "tokens" || f.kind === "percent" || f.kind === "switch";
+/** The agent's fields with no row of their own: its effort, and whatever model or effort a manifest of the user's adds. */
+export const plainFields = (a: Agent) => a.fields.filter((f) => !isSetting(f) && !(hasTiers(a) && inTiers(f.key)));
+/** The share that goes with a switch, beside it in its row: `background_compaction_at` with `background_compaction`. */
+export const shareOf = (a: Agent, f: AgentField) => (f.kind === "switch" ? a.fields.find((x) => x.kind === "percent" && x.key === `${f.key}_at`) : undefined);
+/** The rows of the agent's own settings sheet: each setting but a share drawn beside its switch. */
+export const settingFields = (a: Agent) => a.fields.filter((f) => isSetting(f) && !a.fields.some((s) => shareOf(a, s) === f));
+
+/** A size as the window says it: 272K, 1M, 128.5K. */
+export function sizeName(tokens: number): string {
+  const short = (n: number) => String(Math.round(n * 10) / 10);
+  return tokens >= 1_000_000 ? `${short(tokens / 1_000_000)}M` : tokens >= 1_000 ? `${short(tokens / 1_000)}K` : String(tokens);
+}
+
+/** A size as it is typed (`272k`, `1.5m`, `272000`); null when it is none. */
+export function parseSize(text: string): number | null {
+  const m = /^(\d+(?:\.\d+)?)\s*([km]?)$/i.exec(text.trim().replaceAll(",", ""));
+  if (!m) return null;
+  const scale = m[2].toLowerCase() === "m" ? 1_000_000 : m[2].toLowerCase() === "k" ? 1_000 : 1;
+  const n = Number(m[1]) * scale;
+  return Number.isInteger(Math.round(n)) && (scale > 1 || Number.isInteger(Number(m[1]))) ? Math.round(n) : null;
+}
+
+/** The size a tokens setting starts from when it is first given one. */
+export const startSize = (f: AgentField) => Math.max(f.min ?? 0, f.key === "context_window" ? 1_000_000 : 272_000);
+
+/** A setting of the sheet by its name; one the window has no word for, by its key. */
+export function settingName(key: string): string {
+  switch (key) {
+    case "compact_at":
+      return tr("Long conversations");
+    case "context_window":
+      return tr("Context window");
+    case "background_compaction":
+      return tr("Background compaction");
+    default:
+      return fieldName(key);
+  }
+}
+
+/** What a setting of the sheet does, under its name. */
+export function settingSaid(a: Agent, key: string): string {
+  switch (key) {
+    case "compact_at":
+      return a.id === "codex"
+        ? tr("Codex summarises a conversation once it is this long; its own is 90% of the window it takes the model to have. The whole window is slower and costlier.")
+        : tr("%s summarises a conversation once it is this long; its own is close to the model's whole window, which is slower and costlier.", a.name);
+    case "context_window":
+      return tr("The window %s takes the model to have, for a model it doesn't know or has wrong. It compacts at 90% of it at most.", a.name);
+    case "background_compaction":
+      return tr("Codex 0.163 and later summarise while a turn goes on, past the share of the window typed (65% when empty). A Codex feature still under development.");
+    default:
+      return "";
+  }
+}
 
 /** A field by the name the window gives it; one the window has no word for, by its key. */
 export function fieldName(key: string): string {
@@ -161,6 +217,14 @@ export function fieldName(key: string): string {
       return tr("subagent effort");
     case "auto_mode":
       return tr("auto mode");
+    case "compact_at":
+      return tr("compact at");
+    case "context_window":
+      return tr("context window");
+    case "background_compaction":
+      return tr("background compaction");
+    case "background_compaction_at":
+      return tr("background compaction at");
     default:
       return key.replaceAll("_", " ");
   }
@@ -169,12 +233,74 @@ export function fieldName(key: string): string {
 /** An effort as the window says it; `null`, the agent's own. */
 export const effortName = (level: string | null) => (level ? trCore(level) : tr("default"));
 
+/** A field's value as the window says it. */
+function valueName(f: AgentField | undefined, value: string): string {
+  if (!value) return tr("default");
+  switch (f?.kind) {
+    case "model":
+      return choiceName(value);
+    case "tokens":
+      return sizeName(parseSize(value) ?? 0);
+    case "percent":
+      return `${value.replace(/%$/, "")}%`;
+    case "switch":
+      return tr("On");
+    default:
+      return effortName(value);
+  }
+}
+
 /** Gives a field its value; empty takes it back. What pansy changed in the agent's files is read again. */
 export function setField(agent: Agent, key: string, value: string) {
-  const said = tr("%s %s → %s", agent.name, fieldName(key), !value ? tr("default") : fieldOf(agent, key)?.kind === "model" ? choiceName(value) : effortName(value));
+  const said = tr("%s %s → %s", agent.name, fieldName(key), valueName(fieldOf(agent, key), value));
   return act(`agent:${agent.id}`, () => Agents.setField(agent.id, key, value), said).then(() => {
     void loadAgents();
     if (expanded() === agent.id) loadChanges(agent.id);
+  });
+}
+
+// ---- the models an agent lists, and the names it lists them by ----
+
+/** What the user picked for the agent's list; nothing picked, every model. */
+export const listedOf = (a: Agent): AgentModels => settings()?.agentModels?.[a.id] ?? {};
+/** Whether `models` leaves `id` in a list. */
+export const lists = (models: AgentModels, id: string) => (models.onlyPicked ? (models.picked ?? []).includes(id) : !(models.hidden ?? []).includes(id));
+/** The models the agent is set to: they stay in its list whatever is picked. */
+export const heldBy = (a: Agent): string[] => [a.model, a.smallModel, a.subagentModel, ...a.fields.filter((f) => f.kind === "model").map((f) => f.value)].filter((m): m is string => !!m);
+/** The models in the agent's list: those left in it, and those it is set to. */
+export function shownTo(a: Agent): Choice[] {
+  if (!a.listsModels) return choices();
+  const models = listedOf(a);
+  const held = heldBy(a);
+  return choices().filter((c) => lists(models, c.id) || held.includes(c.id));
+}
+
+/** Saves which models the agent lists; a connected one's list is written again. */
+export function setListed(a: Agent, models: AgentModels) {
+  const prev = settings();
+  if (prev) settings.set({ ...prev, agentModels: { ...prev.agentModels, [a.id]: models } });
+  return act(`agent:${a.id}`, async () => {
+    try {
+      settings.set(JSON.parse(await Agents.setListed(a.id, JSON.stringify(models))) as SettingsView);
+    } catch (error) {
+      settings.set(prev);
+      throw error;
+    }
+  }).then(() => {
+    void loadAgents();
+    if (expanded() === a.id) loadChanges(a.id);
+  });
+}
+
+/** Whether the agent's list names a model's provider: its own way, or `null`, as Settings has it. */
+export const namesOf = (a: Agent): boolean | null => settings()?.agentNames?.[a.id] ?? null;
+
+/** Saves it: `on`, `off`, or "" to follow Settings again. */
+export function setNames(a: Agent, mode: "" | "on" | "off") {
+  return act(`agent:${a.id}`, async () => {
+    settings.set(JSON.parse(await Agents.setNames(a.id, mode)) as SettingsView);
+  }).then(() => {
+    if (expanded() === a.id) loadChanges(a.id);
   });
 }
 
@@ -292,8 +418,9 @@ export function kindOf(a: Agent): "gone" | "empty" | "ok" {
 export function status(a: Agent): { tone: "on" | "off"; text: string } {
   if (kindOf(a) === "empty") return { tone: "off", text: tr("Add a key or a subscription first; then there are models to connect") };
   if (!a.connected && a.paused) return { tone: "off", text: tr("Restored for now · %s uses its own settings until it is connected again", a.name) };
+  if (!a.connected && a.signedIn) return { tone: "off", text: a.id === "claude-code" ? tr("Not connected · now on its Claude subscription") : a.id === "codex" ? tr("Not connected · now signed in with ChatGPT") : tr("Not connected · now on its own sign-in") };
   if (!a.connected) return { tone: "off", text: tr("Not connected · %s uses its own settings", a.name) };
-  if (a.picksIn) return { tone: "on", text: tr("Connected · %d models in %s's %s", choices().length, a.name, a.picksIn) };
+  if (a.picksIn) return { tone: "on", text: tr("Connected · %d models in %s's %s", shownTo(a).length, a.name, a.picksIn) };
   if (hasTiers(a)) return { tone: "on", text: tr("Connected · switch the opus · sonnet · haiku tiers in /model") };
   if (a.id === "codex") return { tone: "on", text: tr("Connected · new sessions take it") };
   return { tone: "on", text: tr("Connected · starts on the model picked here") };

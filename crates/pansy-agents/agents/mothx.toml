@@ -1,0 +1,44 @@
+# MothX, as magpie's mothx.go wires it: a provider on Chat Completions in
+# its settings.json, and defaultProvider and defaultModel naming it.
+id = "mothx"
+name = "MothX"
+protocol = "chat"
+programs = ["mothx"]
+dirs = [".mothx"]
+npm = "mothx-installer"
+note = "MothX reads its settings at start-up: restart open mothx sessions after connecting."
+
+[files]
+settings = "{env:MOTHX_DIR|~/.mothx}/settings.json"
+
+[[set]]
+file = "settings"
+key = ["providers", "pansy"]
+
+[set.value]
+baseUrl = "{v1}"
+api = "openai-chat"
+apiKey = "{key}"
+thinkingFormat = "openai"
+models = [{ "$each_model" = { id = "{id}", name = "{name}", reasoning = false, input = ["text"] } }]
+
+[[set]]
+file = "settings"
+key = ["defaultProvider"]
+value = "pansy"
+
+[[set]]
+file = "settings"
+key = ["defaultModel"]
+value = "{model}"
+
+[base_url]
+file = "settings"
+key = ["providers", "pansy", "baseUrl"]
+
+[model]
+file = "settings"
+key = ["defaultModel"]
+
+[run]
+unsupported = "pansy knows no way to point one run of MothX elsewhere by its arguments or environment; connect it instead (pansy mothx <model>)."

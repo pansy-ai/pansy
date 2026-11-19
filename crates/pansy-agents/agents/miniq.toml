@@ -1,0 +1,27 @@
+# miniQ (LeadingThink/miniQ), as magpie's miniq.go points it: settings.json's
+# one provider, on chat_completions ("auto" would guess the API from a
+# model's name). The daemon reads the file at its start.
+id = "miniq"
+name = "miniQ"
+protocol = "chat"
+programs = ["miniq"]
+dirs = [".local/share/miniq"]
+
+[files]
+settings = "{env:MINIQ_DATA_DIR|~/.local/share/miniq}/settings.json"
+
+[[set]]
+file = "settings"
+key = ["provider"]
+value = { baseUrl = "{v1}", apiKey = "{key}", model = "{model}", apiProtocol = "chat_completions" }
+
+[base_url]
+file = "settings"
+key = ["provider", "baseUrl"]
+
+[model]
+file = "settings"
+key = ["provider", "model"]
+
+[run]
+unsupported = "miniQ's daemon reads its provider from its settings file alone; connect it instead (pansy miniq <model>)."

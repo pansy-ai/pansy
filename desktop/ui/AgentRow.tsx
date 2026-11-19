@@ -1,12 +1,14 @@
 // One agent's row, as magpie draws it: its logo, which is its handle (a
 // press, or a right click on the row, opens Move up, Move down, Disconnect
 // and Hide; dragged, it moves the row among the others), its name, its
-// version and the update that is out, whether it is connected, Details for a
-// connected one, the model it starts on and its switch. Opened, it says
+// version and the update that is out, whether it is connected, Details,
+// the model it starts on and its switch. Opened, it says
 // where it picks its models, Claude Code's tiers (each its model and its
-// effort, the subagents' and auto mode's), the models it lists, a new
-// session's effort, and what pansy changed in its files, with Disconnect and
-// restore.
+// effort, the subagents' and auto mode's), where Claude's own models come
+// from, the models it lists with Pick, whether its list names their
+// providers, a new session's effort, its own settings (where a long
+// conversation is compacted), and what pansy changed in its files, with
+// Disconnect and restore.
 import { PanResponder, signal, Text, token, View, type JSX } from "nsh";
 import { ContextMenu, Menu, MenuItem, MenuSeparator, Popover, Slider } from "nsh/base";
 import { Agents } from "pansy/native";
@@ -29,14 +31,25 @@ import {
   hasTiers,
   isHidden,
   kindOf,
+  listing,
   loadChanges,
   moveAgent,
+  namesOf,
+  parseSize,
   picking,
   plainFields,
   rowHeight,
   setField,
   setHidden,
+  setNames,
+  settingFields,
+  settingName,
+  settingSaid,
+  shareOf,
   shiftOf,
+  shownTo,
+  sizeName,
+  startSize,
   status,
   switchOn,
   TIERS,
@@ -45,11 +58,11 @@ import {
   viewing,
 } from "./agentState";
 import { tr } from "./i18n";
-import { act, choiceName, choices, go, isBusy, loadAgents, providerOf, providers, type Agent } from "./model";
+import { act, choiceName, choices, go, isBusy, loadAgents, providerOf, providers, settings, toast, type Agent, type AgentField } from "./model";
 import { ChoiceLogo, ModelPicker } from "./Picker";
 import { openPreview } from "./Preview";
 import { adding } from "./Providers";
-import { agentLogo, Dot, EffortBars, effortLit, FieldButton, Hint, Icon, Logo, LogoStack, MOTION, providerLogo, SHADOW, Switch, type IconName } from "./parts";
+import { agentLogo, Dot, Dropdown, EffortBars, effortLit, FieldButton, Hint, Icon, Input, List, Logo, LogoStack, MOTION, OnOff, providerLogo, Segs, SettingRow, SHADOW, Switch, type IconName } from "./parts";
 
 const MENU = "min-w-[200px] rounded-[10px] border border-border bg-popover p-1";
 
@@ -269,7 +282,7 @@ function WithCode(props: { said: string; code: string }) {
 function Kv(props: { label: string; first?: boolean; children?: JSX.Element; testID?: string }) {
   return (
     <View testID={props.testID} class={`flex-row ${props.first ? "" : "border-t border-line-2"}`}>
-      <Text class="w-[128px] shrink-0 pb-[11px] pr-4 pt-[14px] text-[12px] text-muted-foreground line-clamp-1">{props.label}</Text>
+      <Text class="w-[172px] shrink-0 pb-[11px] pr-4 pt-[14px] text-[12px] text-muted-foreground line-clamp-1">{props.label}</Text>
       <View class="min-w-0 flex-1 justify-center gap-1 py-[11px]">{props.children}</View>
     </View>
   );
@@ -324,18 +337,20 @@ function Tiers(props: { agent: Agent }) {
   );
 }
 
-/** Whose pansy's models are, a chip each: the routing groups, then each provider with how many it has. */
-function ModelChips() {
+/** Whose the models in the agent's list are, a chip each: the routing groups, then each provider with how many it has there; how many are hidden, and Pick. */
+function ModelChips(props: { agent: Agent }) {
+  const a = () => props.agent;
   const chips = () => {
     const out: { key: string; name: string; n: number; logos: ReturnType<typeof providerLogo>[] }[] = [];
-    const inGroups = choices().filter((c) => c.group);
+    const inGroups = shownTo(a()).filter((c) => c.group);
     if (inGroups.length > 0) out.push({ key: "groups", name: tr("Routing groups"), n: inGroups.length, logos: [] });
     for (const p of providers()) {
-      const n = choices().filter((c) => !c.group && providerOf(c.id)?.id === p.id).length;
+      const n = shownTo(a()).filter((c) => !c.group && providerOf(c.id)?.id === p.id).length;
       if (n > 0) out.push({ key: p.id, name: p.name, n, logos: [providerLogo(p.preset)] });
     }
     return out;
   };
+  const hidden = () => choices().length - shownTo(a()).length;
   return (
     <View class="min-h-[24px] flex-row flex-wrap items-center gap-x-2 gap-y-[6px]">
       <Each of={chips()} key={(c) => c.key}>
@@ -349,11 +364,166 @@ function ModelChips() {
           </View>
         )}
       </Each>
+      <If when={hidden() > 0}>
+        <Text testID={`hidden-models-${a().id}`} class="text-[12px] text-muted-foreground">
+          {tr("%d hidden", hidden())}
+        </Text>
+      </If>
+      <If when={a().listsModels}>
+        <Quiet label={tr("Pick")} chevron="right" testID={`pick-models-${a().id}`} onPress={() => listing.set(a())} />
+      </If>
     </View>
   );
 }
 
-/** A connected agent's row, opened. */
+/** Whether the agent's list names a model's provider before the model: as Settings has it, or its own way. */
+function NamesPick(props: { agent: Agent }) {
+  const a = () => props.agent;
+  const every = () => tr("As in Settings · %s", settings()?.providerInNames === false ? tr("Off") : tr("On"));
+  const own = () => namesOf(a());
+  return (
+    <View class="flex-row items-center gap-2">
+      <Dropdown
+        testID={`names-${a().id}`}
+        width={176}
+        value={own() === null ? "settings" : own() ? "on" : "off"}
+        onChange={(v) => void setNames(a(), v === "settings" ? "" : v)}
+        options={[
+          { value: "settings", label: every() },
+          { value: "on", label: tr("On") },
+          { value: "off", label: tr("Off") },
+        ]}
+      />
+      <Text class="min-w-0 flex-1 text-[12px] text-muted-foreground line-clamp-1">{(own() ?? settings()?.providerInNames !== false) ? tr("%s's list shows “DeepSeek · DeepSeek V3”", a().name) : tr("%s's list shows “DeepSeek V3”", a().name)}</Text>
+    </View>
+  );
+}
+
+/** Claude's own models, for Claude Code: the providers they go through, or that there is none yet. pansy signs in to no Claude subscription. */
+function ClaudeModels() {
+  const by = () => [...new Set(choices().filter((c) => !c.group && /^claude/i.test(c.id.slice(c.id.indexOf("/") + 1))).map((c) => c.provider))];
+  return (
+    <Kv label={tr("Claude models")} testID="claude-models">
+      <If
+        when={by().length > 0}
+        else={
+          <View class="flex-row items-center gap-2">
+            <Text class="min-w-0 shrink text-[12.5px] leading-[24px] text-fg-2 line-clamp-1">{tr("claude-* models need a provider that has them: pansy serves no Claude subscription")}</Text>
+            <View
+              role="button"
+              testID="claude-add-provider"
+              onPress={() => {
+                adding.set(true);
+                go("providers");
+              }}
+              class="h-6 justify-center rounded-[6px] px-2 hover:bg-pill"
+            >
+              <Text class="text-[12px] font-medium text-primary">{tr("Add a provider")}</Text>
+            </View>
+          </View>
+        }
+      >
+        <Text class="text-[12.5px] leading-[24px] text-fg-2">{tr("claude-* models go through %s, with its key, as any other model does", by().join(", "))}</Text>
+      </If>
+    </Kv>
+  );
+}
+
+/** A size typed into a setting: 272k, 1m. Taken on Enter or when the field is left; one that is none is said. */
+function SizeInput(props: { agent: Agent; field: AgentField; percent?: boolean; placeholder: string }) {
+  const a = () => props.agent;
+  const f = () => props.field;
+  const typed = signal<string | null>(null);
+  const said = () => (!f().value ? "" : props.percent ? `${f().value}%` : sizeName(Number(f().value)).toLowerCase());
+  const commit = () => {
+    const text = typed()?.trim();
+    typed.set(null);
+    if (text === undefined || text === said()) return;
+    if (text === "") return void setField(a(), f().key, "");
+    if (props.percent) {
+      const n = Number(text.replace(/\s*%$/, ""));
+      if (!Number.isInteger(n) || n < 1 || n > 100) return toast(tr("%s is not a percent from 1 to 100", text), "error");
+      return void setField(a(), f().key, String(n));
+    }
+    const n = parseSize(text);
+    if (n === null) return toast(tr("%s is not a number of tokens like 272k", text), "error");
+    void setField(a(), f().key, String(n));
+  };
+  return (
+    <Input
+      class="w-[72px]"
+      value={typed() ?? said()}
+      onChange={(v) => typed.set(v)}
+      onSubmit={commit}
+      onBlur={commit}
+      placeholder={props.placeholder}
+      label={settingName(f().key)}
+      testID={`setting-${a().id}-${f().key}-size`}
+    />
+  );
+}
+
+/** One setting's control: a size is the agent's own or one typed; a switch is Off or On, the share that goes with it beside it. */
+function SettingControl(props: { agent: Agent; field: AgentField }) {
+  const a = () => props.agent;
+  const f = () => props.field;
+  const size = () => (f().value ? Number(f().value) : startSize(f()));
+  const share = () => shareOf(a(), f());
+  return (
+    <View class="flex-row items-center gap-2">
+      <If when={f().kind === "tokens"}>
+        <Segs
+          testID={`setting-${a().id}-${f().key}`}
+          value={f().value ? "at" : "own"}
+          onChange={(v) => {
+            if (v === "own" && f().value) void setField(a(), f().key, "");
+            if (v === "at" && !f().value) void setField(a(), f().key, String(startSize(f())));
+          }}
+          options={[
+            { value: "own", label: tr("%s's own", a().name) },
+            { value: "at", label: f().key === "compact_at" ? tr("Compact at %s", sizeName(size())) : sizeName(size()) },
+          ]}
+        />
+        <If when={f().value}>
+          <SizeInput agent={a()} field={f()} placeholder={sizeName(startSize(f())).toLowerCase()} />
+        </If>
+      </If>
+      <If when={f().kind === "switch"}>
+        <OnOff testID={`setting-${a().id}-${f().key}`} on={f().value === "on"} onChange={(on) => void setField(a(), f().key, on ? "on" : "")} />
+        <If when={f().value === "on" && share()}>
+          <SizeInput agent={a()} field={share()!} percent placeholder="65%" />
+        </If>
+      </If>
+      <If when={f().kind === "percent"}>
+        <SizeInput agent={a()} field={f()} percent placeholder="%" />
+      </If>
+    </View>
+  );
+}
+
+/** The agent's own settings sheet: each a row, as Settings lays its own out. */
+function SettingsSheet(props: { agent: Agent }) {
+  const a = () => props.agent;
+  return (
+    <List testID={`settings-${a().id}`}>
+      <Each of={settingFields(a())} key={(f) => f.key}>
+        {(f, i) => (
+          <SettingRow first={i() === 0} title={settingName(f().key)} description={settingSaid(a(), f().key)} testID={`setting-row-${a().id}-${f().key}`}>
+            <SettingControl agent={a()} field={f()} />
+          </SettingRow>
+        )}
+      </Each>
+    </List>
+  );
+}
+
+/** What takes a connected agent: dimmed and out of reach until it is. */
+function Connected(props: { agent: Agent; children?: JSX.Element }) {
+  const on = () => props.agent.connected;
+  return <View style={{ opacity: on() ? 1 : 0.5, pointerEvents: on() ? "auto" : "none" }}>{props.children}</View>;
+}
+
+/** An agent's row, opened. One not connected yet shows what it will have: its list is picked already, the rest waits. */
 function Details(props: { agent: Agent }) {
   const a = () => props.agent;
   const ch = () => changes()[a().id] ?? [];
@@ -362,17 +532,25 @@ function Details(props: { agent: Agent }) {
   return (
     <View testID={`agent-details-${a().id}`} class="border-t border-line-2 bg-card-2 pb-[14px] pl-[50px] pr-4 pt-1">
       <Kv first label={tr("In %s", a().name)}>
+        <If when={!a().connected}>
+          <Text testID={`not-connected-${a().id}`} class="text-[12.5px] leading-[24px] text-fg-2">
+            {tr("Not connected yet: switch %s on, or pick its model, and the settings below can be set.", a().name)}
+          </Text>
+        </If>
         <If
-          when={a().picksIn}
+          when={a().connected && a().picksIn}
           else={
-            <If when={hasTiers(a())} else={<Text class="text-[12.5px] leading-[24px] text-fg-2">{tr("Reopen %s: it starts on the model picked here.", a().name)}</Text>}>
-              <WithCode said={tr("New sessions take it; switch the tiers in %s.", "\u0001")} code="/model" />
+            <If when={a().connected}>
+              <If when={hasTiers(a())} else={<Text class="text-[12.5px] leading-[24px] text-fg-2">{tr("Reopen %s: it starts on the model picked here.", a().name)}</Text>}>
+                <WithCode said={tr("New sessions take it; switch the tiers in %s.", "\u0001")} code="/model" />
+              </If>
             </If>
           }
         >
           <WithCode said={tr("Pick any model in %s's %s.", a().name, "\u0001")} code={a().picksIn ?? ""} />
         </If>
       </Kv>
+      <Connected agent={a()}>
       <If when={hasTiers(a())}>
         <Tiers agent={a()} />
       </If>
@@ -392,12 +570,24 @@ function Details(props: { agent: Agent }) {
           </View>
         </Kv>
       </If>
-      <If when={a().picksIn}>
+      </Connected>
+      <If when={a().id === "claude-code"}>
+        <ClaudeModels />
+      </If>
+      <If when={a().picksIn || a().listsModels}>
         <Kv label={tr("Model list")} testID={`model-list-${a().id}`}>
-          <ModelChips />
-          <Text class="text-[12px] leading-[18px] text-muted-foreground">{tr("All %d models of pansy, under the Pansy provider", choices().length)}</Text>
+          <ModelChips agent={a()} />
+          <Text class="text-[12px] leading-[18px] text-muted-foreground">
+            {shownTo(a()).length === choices().length ? tr("All %d models of pansy, under the Pansy provider", choices().length) : tr("%d of pansy's %d models, under the Pansy provider", shownTo(a()).length, choices().length)}
+          </Text>
         </Kv>
       </If>
+      <If when={a().listsModels}>
+        <Kv label={tr("Provider in model names")} testID={`names-row-${a().id}`}>
+          <NamesPick agent={a()} />
+        </Kv>
+      </If>
+      <Connected agent={a()}>
       <If when={plainFields(a()).length > 0}>
         <Kv label={tr("New sessions")} testID={`new-sessions-${a().id}`}>
           <View class="flex-row flex-wrap items-center gap-2">
@@ -411,6 +601,12 @@ function Details(props: { agent: Agent }) {
           </View>
         </Kv>
       </If>
+      <If when={settingFields(a()).length > 0}>
+        <Kv label={tr("Settings")} testID={`settings-row-${a().id}`}>
+          <SettingsSheet agent={a()} />
+        </Kv>
+      </If>
+      </Connected>
       <View class="mt-[2px] flex-row items-center gap-2 border-t border-line-2 pt-3">
         <If when={ch().length > 0}>
           <Text class="min-w-0 shrink text-[12px] text-muted-foreground line-clamp-1">
@@ -433,7 +629,9 @@ function Details(props: { agent: Agent }) {
           />
         </If>
         <View class="flex-1" />
-        <Quiet label={tr("Disconnect and restore")} danger testID={`disconnect-${a().id}`} onPress={() => askDisconnect(a())} />
+        <If when={a().connected} else={<Quiet label={tr("What it changes")} testID={`preview-in-${a().id}`} onPress={() => openPreview(a())} />}>
+          <Quiet label={tr("Disconnect and restore")} danger testID={`disconnect-${a().id}`} onPress={() => askDisconnect(a())} />
+        </If>
       </View>
       <If when={shown() && ch().length > 0}>
         <View class="mt-[10px]">
@@ -497,7 +695,7 @@ export function AgentRow(props: { agent: Agent; first: boolean; inFold?: boolean
   const a = () => props.agent;
   const kind = () => kindOf(a());
   const st = () => status(a());
-  const open = () => expanded() === a().id && a().connected;
+  const open = () => expanded() === a().id && kind() === "ok";
   const putAway = () => !!props.inFold && isHidden(a());
   const toggle = () => {
     const next = open() ? null : a().id;
@@ -569,9 +767,7 @@ export function AgentRow(props: { agent: Agent; first: boolean; inFold?: boolean
         <If when={!a().connected}>
           <Quiet label={tr("What it changes")} testID={`preview-${a().id}`} onPress={() => openPreview(a())} />
         </If>
-        <If when={a().connected}>
-          <Quiet label={open() ? tr("Collapse") : tr("Details")} chevron={open() ? undefined : "right"} open={open()} testID={`details-${a().id}`} onPress={toggle} />
-        </If>
+        <Quiet label={open() ? tr("Collapse") : tr("Details")} chevron={open() ? undefined : "right"} open={open()} testID={`details-${a().id}`} onPress={toggle} />
         <View class="ml-2">
           <ModelField agent={a()} />
         </View>

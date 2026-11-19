@@ -1,14 +1,15 @@
 // The Agents page's modals, as magpie's: Disconnect, which shows what goes
 // back before it is done, and Manage agents, which hides or shows many at
 // once by search and selection (only the page's list changes, never an
-// agent's config). And the list of changes both the modal and an opened
-// row show.
+// agent's config), and Pick, which says which of pansy's models an agent
+// lists. And the list of changes both the modal and an opened row show.
 import { keymap, signal, Text, View } from "nsh";
 import { Checkbox } from "nsh/base";
 import { tr, trn } from "./i18n";
-import { arrange, changes, disconnectIn, disconnectNow, disconnecting, hiddenIds, managing, saveArrangement } from "./agentState";
-import { question, type FileChange } from "./model";
-import { agentLogo, Icon, Input, Logo, Modal, PrimaryButton, TextButton } from "./parts";
+import { arrange, changes, disconnectIn, disconnectNow, disconnecting, heldBy, hiddenIds, listedOf, listing, lists, managing, saveArrangement, setListed } from "./agentState";
+import { choices, question, type AgentModels, type Choice, type FileChange } from "./model";
+import { ChoiceLogo } from "./Picker";
+import { agentLogo, Badge, Hint, Icon, Input, Logo, Modal, PrimaryButton, Switch, TextButton } from "./parts";
 
 interface Line {
   op: string;
@@ -204,17 +205,121 @@ function ManageAgents() {
   );
 }
 
+/**
+ * Pick: which of pansy's models the agent lists. A model turned off is left
+ * out of the list pansy writes into its files and of the one the gateway
+ * hands it; one the agent is set to stays. Nothing is saved before Save.
+ */
+/** What is picked so far in Pick; null: as it is saved. */
+const draft = signal<AgentModels | null>(null);
+const pickSearch = signal("");
+function closePick() {
+  listing.set(null);
+  draft.set(null);
+  pickSearch.set("");
+}
+
+function PickModels() {
+  const a = () => listing();
+  const search = pickSearch;
+  const close = closePick;
+  const models = (): AgentModels => draft() ?? (a() ? listedOf(a()!) : {});
+  const held = () => (a() ? heldBy(a()!) : []);
+  const on = (c: Choice) => lists(models(), c.id) || held().includes(c.id);
+  const shown = () => choices().filter(on).length;
+  const matching = () => {
+    const q = search().trim().toLowerCase();
+    return choices().filter((c) => `${c.name} ${c.id} ${c.provider}`.toLowerCase().includes(q));
+  };
+  const only = () => !!models().onlyPicked;
+  /** The list with exactly `ids` on, said the way it is kept now. */
+  const withOn = (ids: string[]): AgentModels => (only() ? { onlyPicked: true, picked: ids } : { hidden: choices().filter((c) => !ids.includes(c.id)).map((c) => c.id) });
+  const onIds = () => choices().filter((c) => lists(models(), c.id)).map((c) => c.id);
+  const toggle = (c: Choice, to: boolean) => draft.set(withOn(to ? [...onIds(), c.id] : onIds().filter((id) => id !== c.id)));
+  const setOnly = (to: boolean) => {
+    const ids = onIds();
+    draft.set(to ? { onlyPicked: true, picked: ids } : { hidden: choices().filter((c) => !ids.includes(c.id)).map((c) => c.id) });
+  };
+  return (
+    <If when={a()}>
+      <Modal
+        testID="pick-models"
+        width={560}
+        icon={<Logo name={agentLogo(a()?.id ?? "")} size={18} />}
+        title={tr("Pick which models %s lists", a()?.name ?? "")}
+        aside={
+          <Text testID="pick-count" class="text-[12px] text-muted-foreground">
+            {shown() === choices().length ? tr("All %d models", choices().length) : tr("Showing %d / %d models", shown(), choices().length)}
+          </Text>
+        }
+        onClose={close}
+        foot={
+          <>
+            <TextButton label={tr("Show all")} testID="pick-all" onPress={() => draft.set(withOn(choices().map((c) => c.id)))} />
+            <TextButton label={tr("Hide all")} testID="pick-none" onPress={() => draft.set(withOn([]))} />
+            <View class="flex-1" />
+            <TextButton label={tr("Cancel")} testID="pick-cancel" onPress={close} />
+            <PrimaryButton
+              label={tr("Save")}
+              testID="pick-save"
+              disabled={draft() === null}
+              onPress={() => {
+                const agent = a();
+                const next = draft();
+                close();
+                if (agent && next) void setListed(agent, next);
+              }}
+            />
+          </>
+        }
+      >
+        <Text class="text-[12.5px] text-fg-2">{tr("Models turned off don't show in %s's model picker; other agents can still use them, and one still answers when %s asks for it by name.", a()?.name ?? "", a()?.name ?? "")}</Text>
+        <View class="flex-row items-center gap-3">
+          <View class="flex-1 gap-[2px]">
+            <Text class="text-[13px] text-foreground">{tr("Only models I pick")}</Text>
+            <Text class="text-[11.5px] text-muted-foreground">{tr("Off: new models are shown. On: only the models ticked here are shown, and a model added later, of any provider, stays off until you tick it")}</Text>
+          </View>
+          <Switch checked={only()} label={tr("Only models I pick")} testID="pick-only" onChange={setOnly} />
+        </View>
+        <Input value={search()} onChange={(v) => search.set(v)} placeholder={tr("Search models")} testID="pick-search" />
+        <View class="overflow-hidden rounded-[10px] border border-border">
+          <Each of={matching()} key={(c) => c.id}>
+            {(c, i) => (
+              <View testID={`pick-row-${c().id}`} class={`h-[38px] flex-row items-center gap-[10px] px-3 hover:bg-card-2 ${i() === 0 ? "" : "border-t border-line-2"}`}>
+                <ChoiceLogo id={c().id} size={16} />
+                <Text class="text-[12.5px] text-foreground line-clamp-1">{c().name}</Text>
+                <Text class="min-w-0 flex-1 font-mono text-[11px] text-muted-foreground line-clamp-1">{c().id}</Text>
+                <If when={held().includes(c().id)}>
+                  <Hint text={tr("%s is set to it, so it stays", a()?.name ?? "")}>
+                    <Badge label={tr("Current")} />
+                  </Hint>
+                </If>
+                <Switch checked={on(c())} label={c().name} testID={`pick-${c().id}`} disabled={held().includes(c().id)} onChange={(to) => toggle(c(), to)} />
+              </View>
+            )}
+          </Each>
+          <If when={matching().length === 0}>
+            <Text class="px-3 py-[10px] text-[12.5px] text-muted-foreground">{choices().length === 0 ? tr("No models") : tr("No model matches “%s”", search().trim())}</Text>
+          </If>
+        </View>
+      </Modal>
+    </If>
+  );
+}
+
 /** Above the window, beside the other modals. */
 export function AgentModals() {
   keymap.bind("escape", () => {
     if (question()) return;
     if (disconnecting()) disconnecting.set(null);
+    else if (listing()) closePick();
     else if (managing()) managing.set(false);
   });
   return (
     <>
       <DisconnectDialog where="main" />
       <ManageAgents />
+      <PickModels />
     </>
   );
 }
