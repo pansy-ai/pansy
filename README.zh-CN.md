@@ -18,10 +18,7 @@ pansy 是一个本地网关和桌面应用，支持 Linux、macOS 和 Windows，
 [Native Shell](https://nsh.dev)（NSH）构建。就像标志的三片花瓣汇聚于一点，
 你的智能体和供应商也汇聚在同一个网关。一切都在你的电脑上运行：Key、提示词和回复只发给你选择的供应商。
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/agents-dark.png">
-  <img src="assets/agents-light.png" width="900" alt="pansy 的智能体页面：Claude Code 使用 DeepSeek，Codex 使用路由组 Daily，都从同一个列表中选择">
-</picture>
+<img src="assets/agents.png" width="900" alt="pansy 的智能体页面：Claude Code 使用 DeepSeek，Codex 使用路由组 Daily，都从同一个列表中选择">
 
 ## 功能
 

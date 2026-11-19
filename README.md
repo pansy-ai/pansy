@@ -20,10 +20,7 @@ the three petals of its logo meet at one point, your agents and your providers
 meet in one gateway. Everything runs on your computer: your keys, prompts and
 replies go only to the providers you chose.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/agents-dark.png">
-  <img src="assets/agents-light.png" width="900" alt="pansy's Agents page: Claude Code on DeepSeek, Codex on the Daily routing group, each picked from one list">
-</picture>
+<img src="assets/agents.png" width="900" alt="pansy's Agents page: Claude Code on DeepSeek, Codex on the Daily routing group, each picked from one list">
 
 ## What it does
 
