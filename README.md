@@ -182,14 +182,23 @@ updates, go to Cloudflare R2, where pansy looks for them
 | `desktop/` | The NSH app: `App.tsx` and `ui/` (TSX), `native/` (`pansy/native`, the Rust the TSX calls), `runner/` (the program) |
 | `assets/brand` | The pansy logo: the app icon (SVG, PNG, ICO) and the one-color glyph |
 
-## What is not here yet
+## If you don't like something, fork it.
 
-Claude's, Antigravity's and Grok's subscriptions, masking with a local
-model, costs, routing by intent and by what an allowance has left, a library
-of instructions, MCP servers and skills, search and image tools, backup and
-sync, a remote pansy and a LAN key for each client, a TUI, and the agents
-that are set through their own apps, databases or key stores rather than a
-config file. [docs/parity.md](docs/parity.md) has the whole list.
+```sh
+gh repo fork pansy-ai/pansy --clone && cd pansy/desktop
+cargo build -p pansy-desktop && nsh build App.tsx --out target/debug/nsh
+./target/debug/pansy                       # your window, with the gateway beside it
+```
+
+- **Change the UI.** The window is TSX: `desktop/App.tsx` and `desktop/ui/`,
+  every string in `ui/i18n.ts`. Restyle every page to your taste.
+- **Add an agent.** An agent is a manifest: a TOML in `~/.config/pansy/agents/`
+  needs no build, and one in `crates/pansy-agents/agents/` is built in. A
+  provider is a preset in `crates/pansy-core/src/presets.rs`. Wire in your
+  own tools, models and flows.
+- **Ship your own build.** `packaging/build.sh` makes the archives; put your
+  own keys in `desktop/keys/` and your own feed in `nsh.json`'s `"updater"`
+  ([docs/release.md](docs/release.md)), and distribute it as your own.
 
 ## License
 
