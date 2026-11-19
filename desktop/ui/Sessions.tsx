@@ -13,6 +13,7 @@
 import { Clipboard, Scroll, signal, Text, untracked, View, type JSX, type ScrollRef, type ViewRef } from "nsh";
 import { Collapsible, TextView, type TextViewClasses } from "nsh/base";
 import { Sessions } from "pansy/native";
+import { Loading } from "./Brand";
 import { locale, tr, trn } from "./i18n";
 import { act, agents, ask, compact, isBusy, loadSessions, reason, sessionOpen, sessions, toast, type Session, type SessionTokens, type Subagent, type Trashed, type Turn } from "./model";
 import { agentLogo, Badge, CopyButton, Empty, Icon, IconButton, Input, List, Logo, Page, Row, RowHead, SHADOW, TextButton } from "./parts";
@@ -844,7 +845,7 @@ export function SessionsPage() {
           <Trash />
         </If>
         <If when={!trashOn()}>
-          <If when={loaded()} else={<Text class="px-1 text-[12px] text-muted-foreground">{tr("Reading the agents' sessions…")}</Text>}>
+          <If when={loaded()} else={<Loading label={tr("Reading the agents' sessions…")} testID="sessions-loading" />}>
             <If
               when={!none()}
               else={<Empty testID="sessions-empty" title={tr("No sessions yet")} description={tr("Claude Code's, Codex's and OpenCode's sessions on this computer show up here, by the folder they ran in.")} />}

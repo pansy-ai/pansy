@@ -5,7 +5,9 @@
 // the pointer comes over it, not again while it moves, and not at all for
 // less motion. Each petal is drawn alone in the mark's box (ui/icons'
 // pansy-left, -bottom and -right), so at rest they are the mark whole.
-import { createMotion, reduceMotion, Text, View, type MotionSpec } from "nsh";
+// Waiting on something read the first time, the mark flutters over and over
+// (Loading).
+import { cleanup, createMotion, reduceMotion, Text, View, type MotionSpec } from "nsh";
 import { Icon, type IconName } from "./parts";
 
 /** Where the petals meet, in the mark's box: what they and the flower turn about. */
@@ -52,6 +54,35 @@ export function Brand() {
         ))}
       </View>
       <Text class="text-[13.5px] font-semibold text-foreground">pansy</Text>
+    </View>
+  );
+}
+
+/** One wag and a rest about half as long, again and again: the same keyframes, then at rest. */
+function again(spec: MotionSpec): MotionSpec {
+  const keyframes = Object.fromEntries(Object.entries(spec.keyframes).map(([k, v]) => [k, [...(v as number[]), ...Array<number>(Math.ceil((v as number[]).length / 2)).fill(k === "scale" ? 1 : 0)]]));
+  return { ...spec, keyframes, duration: WAG.duration * 1.5, iterations: "infinite" };
+}
+
+/** The mark, large and fluttering until it goes, over what is being read: for something read the first time. */
+export function Loading(props: { label: string; testID?: string }) {
+  const flower = createMotion();
+  const petals = PETALS.map(() => createMotion());
+  if (!reduceMotion()) {
+    void flower.play(again(NOD));
+    petals.forEach((m, i) => void m.play(again(PETALS[i].flutter), { delay: PETALS[i].delay }));
+  }
+  cleanup(() => [flower, ...petals].forEach((m) => m.reset()));
+  return (
+    <View testID={props.testID} class="items-center gap-3 py-16">
+      <View style={{ width: 40, height: 40, transformOrigin: HEART, ...flower.style }}>
+        {PETALS.map((p, i) => (
+          <View class="absolute left-0 top-0" style={{ transformOrigin: HEART, ...petals[i].style }}>
+            <Icon name={p.name} color="muted-foreground" size={40} />
+          </View>
+        ))}
+      </View>
+      <Text class="text-[12px] text-muted-foreground">{props.label}</Text>
     </View>
   );
 }
