@@ -1,7 +1,4 @@
-## pansy 0.1.1
+## pansy 0.1.2
 
-- 新增 49 个智能体：Pi、Goose、Copilot CLI、VS Code、Droid、Kimi Code、Qoder、Hermes、OpenClaw 等，都是原地接入，断开后恢复原样。
-- 智能体页：显示智能体的版本并可更新，拖动调整顺序，Claude Code 的模型档位与推理强度，Codex 的推理强度，以及智能体列出哪些模型。
-- 故障切换：被某个模型拒绝的请求会交给路由组里的下一个模型；限流只让 Key 在触发它的模型上暂停，不影响它的其他模型；连接中断时先重试一次。
-- 导入：提供 CC Switch、Claude Code、Codex 和 OpenCode 里已有的供应商。
-- 首次读取智能体的会话时，会话页显示 pansy 的标志。
+- 余额：在订阅额度旁边显示各 API Key 还剩多少。DeepSeek、Kimi、OpenRouter、StepFun 和 AiHubMix 的 Key 向厂商查询；自己添加的中转站按 sub2api 和 new-api 告知 Key 余额的接口查询，sub2api 的 Key 还会显示 5 小时、每日和每周的限额。
+- 额度页和用量页：同一厂商的账号归在它的名下，每个额度窗口一个圆环，点一下在“已用”和“剩余”之间切换，并显示各自何时重置；余额以数字显示，每行两个。
