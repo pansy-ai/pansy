@@ -233,18 +233,12 @@ function Chip(props: { label: string; tone?: "soft" | "bad" | "up" }) {
   );
 }
 
-/** Who a plugin is from, under its name: magpie's community, or its publisher. */
+/** Who a plugin is from, under its name: magpie's community, or its publisher, alike in plain words. */
 function Byline(props: { m: MarketEntry }) {
   return (
-    <If
-      when={props.m.community}
-      else={<Text class="text-[11px] text-muted-foreground line-clamp-1">{props.m.publisher || props.m.package}</Text>}
-    >
-      <View class="flex-row items-center gap-[3px]">
-        <Icon name="pm-shield" color="success" size={11} />
-        <Text class="text-[11px] font-medium text-success">{tr("magpie community")}</Text>
-      </View>
-    </If>
+    <Text class="text-[11px] text-muted-foreground line-clamp-1">
+      {props.m.community ? tr("magpie community") : props.m.publisher || props.m.package}
+    </Text>
   );
 }
 
