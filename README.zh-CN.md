@@ -18,10 +18,7 @@ pansy 是一个本地网关和桌面应用，支持 Linux、macOS 和 Windows，
 [Native Shell](https://nsh.dev)（NSH）构建。就像标志的三片花瓣汇聚于一点，
 你的智能体和供应商也汇聚在同一个网关。一切都在你的电脑上运行：Key、提示词和回复只发给你选择的供应商。
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/agents-dark.png">
-  <img src="assets/agents-light.png" width="900" alt="pansy 的智能体页面：Claude Code 使用 DeepSeek，Codex 使用路由组 Daily，都从同一个列表中选择">
-</picture>
+<img src="assets/agents.png" width="900" alt="pansy 的智能体页面：Claude Code 使用 DeepSeek，Codex 使用路由组 Daily，都从同一个列表中选择">
 
 ## 功能
 
@@ -69,18 +66,17 @@ pansy 是一个本地网关和桌面应用，支持 Linux、macOS 和 Windows，
 
 ## 安装
 
-从 [releases.pansyai.dev](https://releases.pansyai.dev/index.html) 下载适合你系统的版本：
+从 [releases.pansyai.dev](https://releases.pansyai.dev/index.html) 或
+[GitHub Releases](https://github.com/pansy-ai/pansy/releases) 下载适合你系统的版本：
 
-```sh
-# Linux
-tar -xzf pansy-<版本>-linux-x86_64.tar.gz && ./pansy/install.sh
-
-# macOS（应用尚未公证，需要清除隔离标记）
-tar -xzf pansy-<版本>-macos-aarch64.tar.gz
-xattr -dr com.apple.quarantine Pansy.app && mv Pansy.app /Applications/
-
-# Windows：解压后运行 pansy\pansy.exe
-```
+- **macOS**：`pansy-<版本>-macos-aarch64.dmg`（Intel 用 `x86_64`），把 Pansy
+  拖进“应用程序”。应用尚未公证，第一次打开前先清除隔离标记：
+  `xattr -dr com.apple.quarantine /Applications/Pansy.app`。
+- **Windows**：`pansy-<版本>-windows-x86_64-setup.exe`，只为当前用户安装，
+  不需要管理员权限，可以把 `pansy` 加入 PATH。
+- **Linux**：`sudo apt install ./pansy-<版本>-linux-x86_64.deb`，或者
+  `.AppImage`（`chmod +x` 后直接运行），或者压缩包：
+  `tar -xzf pansy-<版本>-linux-x86_64.tar.gz && ./pansy/install.sh`。
 
 之后 pansy 会自行更新：设置 › 关于里有更新渠道和更新内容。
 
@@ -129,10 +125,12 @@ nsh check && ./test.sh                     # 在临时 HOME 中运行 Rust 测�
 cargo build -p pansy-desktop && nsh build App.tsx --out target/debug/nsh
 ./target/debug/pansy                       # 打开窗口，网关同时运行
 packaging/build.sh                         # 生成 dist/pansy-<版本>-<系统>-<架构>.tar.gz（Windows 为 .zip）
+packaging/installers.sh                    # 以及安装包：.dmg、-setup.exe、.deb 和 .AppImage
 ```
 
-发布由一个 tag 触发：各系统的安装包和窗口的热更新包上传到 Cloudflare R2，
-pansy 从那里检查更新（[docs/release.md](docs/release.md)）。
+发布由一个 tag 触发：各系统的压缩包、安装包和窗口的热更新包上传到 Cloudflare R2，
+pansy 从那里检查更新；安装包同时附在这个 tag 的 GitHub Release 上
+（[docs/release.md](docs/release.md)）。
 
 ## 目录
 
