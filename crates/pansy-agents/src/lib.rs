@@ -146,7 +146,7 @@ pub fn view(agent: &Agent, state: &State) -> AgentView {
         name: agent.name,
         protocol: agent.protocol,
         installed: agent.installed(),
-        cli_missing: agent.has_settings() && !agent.on_path(),
+        cli_missing: agent.cli_missing(),
         install: agent.install(),
         picks_in: agent.picks_in(),
         connected,

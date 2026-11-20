@@ -511,6 +511,13 @@ impl Agent {
         self.on_path() || self.has_settings()
     }
 
+    /// Its settings are here and its program isn't: uninstalled, its folder
+    /// left behind. Never for an agent that has no program to look for (a
+    /// desktop app such as Claude Desktop), which its folder alone finds.
+    pub fn cli_missing(&self) -> bool {
+        !self.programs.is_empty() && self.has_settings() && !self.on_path()
+    }
+
     /// Whether its program is on `PATH` (a version manager's shim of it
     /// counts).
     pub fn on_path(&self) -> bool {
