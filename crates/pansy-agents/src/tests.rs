@@ -1345,6 +1345,8 @@ fn claude_desktop_is_found_and_wired_in_this_systems_folders() {
     assert!(!desktop.has_settings());
     fs::create_dir_all(local.join("Claude-3p")).unwrap();
     assert!(desktop.has_settings());
+    // A desktop app has no command-line program to miss.
+    assert!(!view(desktop, &State::load().unwrap()).cli_missing);
     // It lists the gateway's models itself: the user picks which.
     assert!(desktop.lists_models());
     connect("claude-desktop", "deepseek/deepseek-chat").unwrap();
