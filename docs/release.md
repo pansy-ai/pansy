@@ -17,8 +17,10 @@ v0.2.0/pansy-0.2.0-linux-x86_64.deb             install
 v0.2.0/pansy-0.2.0-linux-x86_64.AppImage
 v0.2.0/dev.pansy.app-7.nshpkg         the window alone, build 7
 v0.2.0/notes.zh-Hans.md               what changed, in Chinese
-beta/latest.json, beta/…              the same feed, for those on beta
-index.html, downloads.json            the download page, and the installers it offers
+downloads.json                        the installers the download pages offer
+                                      (installers alone: the archives are the updater's)
+beta/latest.json, beta/…              the same feed, and its downloads.json, for those on beta
+index.html                            the download page (pansyai.dev/download is the other)
 ```
 
 ## Installers
