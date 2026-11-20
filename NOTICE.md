@@ -7,7 +7,7 @@ repository's git history (the `main` branch).
 
 The window draws [Lucide](https://lucide.dev) icons (ISC,
 `desktop/ui/icons/LICENSE`) and runs on [Native Shell](https://nsh.dev)
-0.6.0 (Apache-2.0).
+0.6.1 (Apache-2.0).
 
 The provider and agent logos in `desktop/ui/logos/` are
 [LobeHub's icons](https://github.com/lobehub/lobe-icons) (MIT), as magpie

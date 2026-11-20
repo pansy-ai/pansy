@@ -1,7 +1,7 @@
 # Notes for coding agents
 
 pansy is a Rust rewrite of magpie: a local gateway that lets every coding
-agent use every provider's models, with a desktop window on NSH 0.6.0. Read
+agent use every provider's models, with a desktop window on NSH 0.6.1. Read
 `README.md`, then `docs/parity.md` for what is ported and what is not.
 
 ## Layout
@@ -81,4 +81,4 @@ cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --worksp
 cd desktop && cargo fmt --all && cargo clippy --workspace && nsh check && ./test.sh
 ```
 
-NSH 0.6.0 exactly (`nsh --version`): the crates are pinned to `=0.6.0`.
+NSH 0.6.1 exactly (`nsh --version`): the crates are pinned to `=0.6.1`.

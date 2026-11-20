@@ -119,7 +119,7 @@ export GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:7267 GEMINI_API_KEY=pansy
 # 核心、网关和无窗口的 pansy 命令
 cargo test --workspace && cargo build --release -p pansy-cli
 
-# 桌面应用（NSH 0.6.0）
+# 桌面应用（NSH 0.6.1）
 cd desktop
 nsh check && ./test.sh                     # 在临时 HOME 中运行 Rust 测试和无头 UI 测试
 cargo build -p pansy-desktop && nsh build App.tsx --out target/debug/nsh
