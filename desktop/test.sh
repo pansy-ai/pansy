@@ -62,7 +62,7 @@ printf '{"claude":{"providers":{"a":{"name":"Switch Relay","settingsConfig":{"en
 env PATH="$scratch/bin:$PATH" HOME="$scratch/home" PANSY_HOME="$scratch/home/.config/pansy" \
   XDG_CONFIG_HOME="$scratch/home/.config" XDG_DATA_HOME="$scratch/home/.local/share" \
   XDG_STATE_HOME="$scratch/home/.local/state" XDG_CACHE_HOME="$scratch/home/.cache" \
-  CODEX_HOME= OPENCODE_DB= ANTHROPIC_BASE_URL= ANTHROPIC_API_KEY= OPENAI_BASE_URL= OPENAI_API_KEY= \
+  CODEX_HOME= OPENCODE_DB= APPDATA= LOCALAPPDATA= ANTHROPIC_BASE_URL= ANTHROPIC_API_KEY= OPENAI_BASE_URL= OPENAI_API_KEY= \
   LANG=en_US.UTF-8 LC_ALL= LC_MESSAGES= LANGUAGE= PANSY_LANGUAGE= \
   PANSY_NPM_REGISTRY="http://127.0.0.1:$registry_port" \
   nsh test "$@"

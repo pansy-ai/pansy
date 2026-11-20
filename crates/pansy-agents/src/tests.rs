@@ -21,6 +21,9 @@ pub(crate) fn scratch() -> (tempfile::TempDir, std::sync::MutexGuard<'static, ()
         std::env::remove_var("XDG_CONFIG_HOME");
         std::env::remove_var("XDG_DATA_HOME");
         std::env::remove_var("OPENCODE_DB");
+        // Windows' app folders ({config}, {local}) are then under HOME too
+        std::env::remove_var("APPDATA");
+        std::env::remove_var("LOCALAPPDATA");
     }
     (dir, guard)
 }
@@ -1326,4 +1329,35 @@ fn says_an_agent_is_signed_in_by_the_key_alone() {
         .unwrap();
     assert!(!view(claude, &State::load().unwrap()).signed_in);
     assert!(!view(agent::find("opencode").unwrap(), &state).signed_in);
+}
+
+#[test]
+fn claude_desktop_is_found_and_wired_in_this_systems_folders() {
+    let (home, _lock) = scratch();
+    let local = if cfg!(target_os = "macos") {
+        home.path().join("Library/Application Support")
+    } else if cfg!(windows) {
+        home.path().join("AppData/Local")
+    } else {
+        home.path().join(".config")
+    };
+    let desktop = agent::find("claude-desktop").unwrap();
+    assert!(!desktop.has_settings());
+    fs::create_dir_all(local.join("Claude-3p")).unwrap();
+    assert!(desktop.has_settings());
+    // It lists the gateway's models itself: the user picks which.
+    assert!(desktop.lists_models());
+    connect("claude-desktop", "deepseek/deepseek-chat").unwrap();
+    let meta: Value = serde_json::from_str(
+        &fs::read_to_string(local.join("Claude-3p/configLibrary/_meta.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(meta["appliedId"], "00000000-0000-4000-8000-0070616e7379");
+    let mode: Value = serde_json::from_str(
+        &fs::read_to_string(local.join("Claude/claude_desktop_config.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(mode["deploymentMode"], "3p");
+    disconnect("claude-desktop").unwrap();
+    assert!(!local.join("Claude-3p/configLibrary/_meta.json").exists());
 }

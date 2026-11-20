@@ -729,8 +729,69 @@ async fn agents_reach_a_chat_vendor_through_the_gateway() {
     assert_eq!(status, StatusCode::OK, "{text}");
     assert_eq!(picky_hits.load(Ordering::SeqCst), 3);
 
+    claude_desktop_through_its_aliases().await;
     chatgpt_through_codexs_sign_in(home.path()).await;
     gemini_through_code_assist(home.path()).await;
+}
+
+/// Claude Desktop sees every model by an id it keeps, asks by it, and its
+/// Code tab's own calls go to the model its session is on.
+async fn claude_desktop_through_its_aliases() {
+    const DESKTOP: &str = "Mozilla/5.0 (Macintosh) Claude/2.7032.0 Chrome/138.0";
+    let gateway = Gateway::new();
+    let request = Request::get("/v1/models")
+        .header("user-agent", DESKTOP)
+        .body(Body::empty())
+        .unwrap();
+    let response = gateway.router().oneshot(request).await.unwrap();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let list: Value = serde_json::from_slice(&bytes).unwrap();
+    let rows = list["data"].as_array().unwrap();
+    assert!(!rows.is_empty());
+    for row in rows {
+        let id = row["id"].as_str().unwrap();
+        assert!(pansy_gateway::desktop::accepts(id), "{id}");
+    }
+    let fake = rows
+        .iter()
+        .find(|r| r["display_name"].as_str().unwrap().ends_with("fake-chat"))
+        .unwrap();
+    let alias = fake["id"].as_str().unwrap().to_owned();
+    assert!(alias.starts_with("anthropic/pansy-"), "{alias}");
+
+    // A turn by the alias goes to the model it stands for.
+    let (status, text) = call(
+        &gateway,
+        "/v1/messages",
+        DESKTOP,
+        json!({"model": alias, "max_tokens": 1000,
+               "messages": [{"role": "user", "content": "hi"}],
+               "tools": [{"name": "Bash", "input_schema": {"type": "object"}}]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let routes = gateway.trace().routes();
+    let route = routes.last().unwrap();
+    assert_eq!(
+        (route.agent.as_str(), route.requested.as_str()),
+        ("claude-desktop", "fake/fake-chat")
+    );
+
+    // Claude Code in the Code tab asks for its own haiku, which no
+    // provider serves: it goes to the session's model.
+    let (status, text) = call(
+        &gateway,
+        "/v1/messages",
+        "claude-cli/2.1.0 (external, claude-desktop)",
+        json!({"model": "claude-haiku-4-5-20251001", "max_tokens": 512,
+               "messages": [{"role": "user", "content": "summarize"}]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{text}");
+    let routes = gateway.trace().routes();
+    assert_eq!(routes.last().unwrap().requested, "fake/fake-chat");
 }
 
 /// A fake Code Assist: the account's project, and an answer streamed in

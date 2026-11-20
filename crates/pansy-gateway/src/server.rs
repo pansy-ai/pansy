@@ -21,6 +21,7 @@ use pansy_core::subscription;
 use pansy_core::usage;
 use serde_json::{Value, json};
 
+use crate::desktop::{self, Desktop};
 use crate::ir::{self, Event, Usage};
 use crate::mask;
 use crate::plugins;
@@ -43,6 +44,7 @@ pub struct Gateway {
     health: Health,
     clients: Clients,
     trace: Arc<Trace>,
+    desktop: Desktop,
 }
 
 /// A Gemini call: its model and method are in the URL.
@@ -242,11 +244,17 @@ pub fn agent_of(headers: &HeaderMap) -> String {
     let ua = headers
         .get(header::USER_AGENT)
         .and_then(|v| v.to_str().ok())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
+        .unwrap_or_default();
+    if desktop::is_desktop(ua) {
+        return desktop::AGENT.to_owned();
+    }
+    let ua = ua.to_ascii_lowercase();
     // The first that is in the user agent: one that holds another's name
-    // (workbuddy-ai, github-copilot in VS Code's) comes before it.
+    // (workbuddy-ai, github-copilot in VS Code's) comes before it. Claude
+    // Desktop's Code tab runs Claude Code as `claude-cli/… (external,
+    // claude-desktop)`.
     const KNOWN: &[(&str, &str)] = &[
+        ("claude-desktop", desktop::AGENT),
         ("claude-cli", "claude-code"),
         ("claude-code", "claude-code"),
         ("codex", "codex"),
@@ -665,9 +673,40 @@ impl Gateway {
         if requested.trim().is_empty() {
             return error(client, 400, "the request names no model");
         }
+        let (mut requested, mut body) = (requested, body);
+        // Claude Desktop names a model by the alias it was listed by, and
+        // asks on models of its own choosing (desktop.rs).
+        if agent == desktop::AGENT && gemini.is_none() {
+            let ids = model_ids(&config, None);
+            let mut to = desktop::resolve(&ids, &requested);
+            let shown = model_ids(&config, Some(desktop::AGENT));
+            let by_claude_code = headers
+                .get(header::USER_AGENT)
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|ua| ua.starts_with("claude-cli/"));
+            if let Some((moved, why)) = self.desktop.turn(
+                &config,
+                to.as_deref().unwrap_or(&requested),
+                &value,
+                by_claude_code,
+                subagent_of(&headers),
+                shown.first().map(|(id, _)| id.as_str()),
+            ) {
+                tracing::debug!(%agent, asked = %requested, to = %moved, "{why}");
+                to = Some(moved);
+            }
+            if desktop::probe(&value) {
+                value["max_tokens"] = json!(desktop::PROBE_TOKENS);
+                body = Bytes::from(serde_json::to_vec(&value).unwrap_or_default());
+            }
+            if let Some(to) = to {
+                value["model"] = json!(to);
+                body = Bytes::from(serde_json::to_vec(&value).unwrap_or_default());
+                requested = to;
+            }
+        }
         // The agents' middleware and request hooks see the request first,
         // in its own protocol, before it is masked and routed.
-        let (mut requested, mut body) = (requested, body);
         let hooked = match plugins::before(
             &mut value, client, &requested, stream, &path, &agent, &headers, local,
         )
@@ -1700,7 +1739,15 @@ async fn models(State(gateway): State<Arc<Gateway>>, request: Request) -> Respon
         );
     }
     let headers = request.headers();
-    let ids = model_ids(&config, Some(&agent_of(headers)));
+    let agent = agent_of(headers);
+    let ids = model_ids(&config, Some(&agent));
+    if agent == desktop::AGENT {
+        let ua = headers
+            .get(header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default();
+        return json_response(&desktop::models(&config, &ids, ua));
+    }
     if headers.contains_key("anthropic-version") {
         let data: Vec<Value> = ids
             .iter()
@@ -1739,7 +1786,9 @@ async fn model(State(gateway): State<Arc<Gateway>>, request: Request) -> Respons
             .map(|(_, id)| id)
             .unwrap_or_default(),
     );
-    match model_ids(&config, None).into_iter().find(|(m, _)| *m == id) {
+    let ids = model_ids(&config, None);
+    let id = desktop::resolve(&ids, &id).unwrap_or(id);
+    match ids.into_iter().find(|(m, _)| *m == id) {
         Some((id, _)) => {
             let owner = id.split_once('/').map_or("pansy", |(owner, _)| owner);
             json_response(&json!({"id": id, "object": "model", "created": 0, "owned_by": owner}))
@@ -1899,6 +1948,17 @@ mod tests {
             HeaderValue::from_static("claude-cli/2.1.0 (external, cli)"),
         );
         assert_eq!(agent_of(&headers), "claude-code");
+        // Claude Desktop, and the Claude Code its Code tab runs
+        headers.insert(
+            header::USER_AGENT,
+            HeaderValue::from_static("Mozilla/5.0 (Macintosh) Claude/2.7032.0 Chrome/138.0"),
+        );
+        assert_eq!(agent_of(&headers), "claude-desktop");
+        headers.insert(
+            header::USER_AGENT,
+            HeaderValue::from_static("claude-cli/2.1.0 (external, claude-desktop)"),
+        );
+        assert_eq!(agent_of(&headers), "claude-desktop");
         headers.insert(
             header::USER_AGENT,
             HeaderValue::from_static("codex_cli_rs/0.50.0"),
