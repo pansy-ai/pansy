@@ -11,9 +11,11 @@
 #                                    feed does not name
 #   v<version>/dev.pansy.app-<build>.nshpkg              the window alone
 #   v<version>/notes.<language>.md   what changed, in the window's other languages
+#   downloads.json                   the installers of the feed's version,
+#                                    which the download pages offer (never
+#                                    an archive)
 #   beta/latest.json, …              the same feed for those who chose beta
-#   index.html, downloads.json       the download page (site/) and the
-#                                    installers it offers
+#   index.html                       the download page (site/)
 #
 #   publish.sh       a release of pansy: ../dist's archives of nsh.json's
 #                    version, from build.sh on each system, and the
@@ -145,11 +147,18 @@ if [[ $kind == app ]]; then
   for file in "${archives[@]}" "${installers[@]}"; do uploads+=("v$version/$(basename "$file")"); done
   shipped=()
   for archive in "${archives[@]}"; do shipped+=("$out/v$version/$(basename "$archive")"); done
-  # the download page offers what everyone gets: the installers it reads
-  # from downloads.json, the archives from the feed
-  if [[ ${feeds[0]} != beta ]]; then
-    cp packaging/site/index.html "$out/index.html"
-    python3 - "$version" "$base/v$version/" "${installers[@]}" > "$out/downloads.json" <<'PY'
+  # the download pages offer installers alone (the archives are the
+  # updater's): every system released has one, listed in each feed's
+  # downloads.json
+  names=" ${installers[*]##*/} "
+  for archive in "${archives[@]}"; do
+    system=${archive##*/pansy-"$version"-}
+    system=${system%.tar.gz}
+    system=${system%.zip}
+    [[ $names == *" pansy-$version-$system"[.-]* ]] \
+      || fail "no installer for $system in ../dist, and the download page offers installers alone (packaging/installers.sh)"
+  done
+  python3 - "$version" "$base/v$version/" "${installers[@]}" > "$scratch/downloads.json" <<'PY'
 import hashlib, json, os, re, sys
 version, base, files = sys.argv[1], sys.argv[2], sys.argv[3:]
 installers = []
@@ -161,7 +170,10 @@ for path in files:
     installers.append({"system": system, "kind": kind, "url": base + name, "size": os.path.getsize(path), "sha256": sha})
 json.dump({"version": version, "installers": installers}, sys.stdout, indent=2)
 PY
-    uploads+=(downloads.json index.html)
+  # the bucket's own page is for what everyone gets
+  if [[ ${feeds[0]} != beta ]]; then
+    cp packaging/site/index.html "$out/index.html"
+    uploads+=(index.html)
   fi
   for feed in "${feeds[@]}"; do
     live "$feed"
@@ -171,6 +183,8 @@ PY
       fail "$live_version is out${feed:+ on $feed}: a release needs a newer version than $version (packaging/bump.sh)"
     fi
     nsh update-manifest "${shipped[@]}" "${manifest[@]}" --out "$out/$feed"
+    cp -- "$scratch/downloads.json" "$out/${feed:+$feed/}downloads.json"
+    uploads+=("${feed:+$feed/}downloads.json")
     feed_files "$feed"
   done
 else
