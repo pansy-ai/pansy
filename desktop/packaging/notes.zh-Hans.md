@@ -1,3 +1,3 @@
-## pansy 0.1.5
+## pansy 0.1.6
 
-- Claude Desktop、Grok Build 等按文件夹识别的应用不再显示“未找到 CLI”：它们本来就没有命令行程序。
+- 第一次打开窗口时显示初始化引导：本机找到的智能体，其他应用（Claude Code、Codex、OpenCode、CC Switch）里已配置的供应商（默认勾选，连同 Key 一起导入），以及智能体工作过的项目文件夹。
