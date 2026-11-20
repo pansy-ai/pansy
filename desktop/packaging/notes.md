@@ -1,3 +1,5 @@
-## pansy 0.1.3
+## pansy 0.1.4
 
-- Installers: a .dmg for macOS, a setup .exe for Windows (for you alone, with no administrator, and `pansy` on PATH if you like), and a .deb and an AppImage for Linux, on the download page and on GitHub.
+- Claude Desktop on macOS and Windows: connecting it writes its gateway profile where Desktop keeps it on each system, not only on Linux. Quit and reopen Desktop after connecting.
+- Claude Desktop's model menu now lists all your models, not only Claude ones, and offers its effort picker for models that reason. Agents › Model list › Pick chooses which ones it lists.
+- Desktop's connection check, session titles and its Code tab's background calls go to the model your session is on.
