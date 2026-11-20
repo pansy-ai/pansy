@@ -383,7 +383,12 @@ pub fn find(id: &str) -> Option<&'static Agent> {
     all().into_iter().find(|a| a.id == id)
 }
 
+/// A folder of `dirs`: under the home directory, or a manifest's path
+/// (`{config}/Claude`).
 fn home(rel: &str) -> PathBuf {
+    if rel.starts_with('{') || rel.starts_with('~') {
+        return crate::manifest::expand(rel);
+    }
     let mut path = user_home();
     for part in rel.split('/') {
         path.push(part);
@@ -410,7 +415,8 @@ impl Agent {
     }
 
     /// Whether it lists the gateway's models itself: its manifest spreads
-    /// them (`$each_model`) into its config.
+    /// them (`$each_model`) into its config, or it reads `/v1/models`
+    /// (`lists_models`).
     pub fn lists_models(&self) -> bool {
         fn spreads(value: &Value) -> bool {
             match value {
@@ -420,7 +426,9 @@ impl Agent {
             }
         }
         match self.kind {
-            Kind::Listed(m) => m.set.iter().any(|s| s.each_model || spreads(&s.value)),
+            Kind::Listed(m) => {
+                m.lists_models || m.set.iter().any(|s| s.each_model || spreads(&s.value))
+            }
             Kind::Plugin(p) => p.connect,
         }
     }

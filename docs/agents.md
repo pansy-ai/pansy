@@ -43,7 +43,9 @@ args = ["-c", "model={model:q}"]
   gateway offers the agent, by its id (`{id}`) and the name it is listed by
   (`{name}`); alone in a list, one item each. The user picks which models an
   agent lists and whether a name leads with its provider (`pansy <agent>
-  list`, `pansy <agent> names`).
+  list`, `pansy <agent> names`). An agent that reads the gateway's
+  `/v1/models` itself says `lists_models = true` (Claude Desktop): the same
+  pick applies to that list.
 - **A key** is the steps down to it. A step in brackets picks an item of a
   list: `[id=pansy]` the item whose `id` is `pansy`, `[=pansy/{model}]` the
   item that is that text. Setting it replaces that item or adds it after the
@@ -67,8 +69,12 @@ args = ["-c", "model={model:q}"]
   leaves them out: pansy then goes by what it wrote.
 - **A file's format** is its ending's: `.toml`, `.yaml`, `.env`, else JSON
   with comments. In a path, `~/` is the home folder and `{env:NAME|else}` a
-  variable's value or what follows the bar; several paths are the first that
-  is there, else the last.
+  variable's value or what follows the bar; `{config}` is the folder the
+  system keeps a desktop app's settings in (`~/.config` or
+  `$XDG_CONFIG_HOME`, `~/Library/Application Support`, `%APPDATA%`) and
+  `{local}` the same but `%LOCALAPPDATA%` on Windows. Several paths are the
+  first that is there, else the last. A folder of `dirs` may be such a path
+  (`{config}/Claude`).
 - **`[[field]]`** is a setting of the agent's own beside its model: a `key`
   (small letters, digits, `_`), a `kind` (`model` or `effort`) and, for an
   effort, its `levels`. A value names it as `{key}`; a `[[set]]` that names a

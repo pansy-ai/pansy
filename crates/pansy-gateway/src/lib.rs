@@ -5,6 +5,7 @@
 //! when one cannot answer.
 
 pub mod count;
+pub mod desktop;
 pub mod ir;
 pub mod mask;
 pub mod plugins;

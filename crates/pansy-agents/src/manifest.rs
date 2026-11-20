@@ -75,7 +75,15 @@
 //! A file's format is its ending's: `.toml`, `.yaml`, `.env`, else JSON
 //! (with comments). A path's `~/` is the home directory, and
 //! `{env:NAME|else}` a variable's value or, without one, what follows the
-//! bar; several paths are the first that is there, else the last.
+//! bar; `{config}` is where the system keeps a desktop app's settings
+//! (`~/.config`, `~/Library/Application Support`, `%APPDATA%`) and
+//! `{local}` the same but `%LOCALAPPDATA%` on Windows. Several paths are the
+//! first that is there, else the last. `dirs` are under the home directory,
+//! or such a path.
+//!
+//! `lists_models = true` says the agent lists the gateway's `/v1/models`
+//! itself rather than models written into its files: the user picks which
+//! it lists all the same.
 
 use std::path::PathBuf;
 use std::sync::LazyLock;
@@ -107,8 +115,14 @@ impl FilePath {
 }
 
 /// `~/` is the home directory; `{env:NAME|else}` the variable's value, or
-/// what follows the bar when it has none.
-fn expand(path: &str) -> PathBuf {
+/// what follows the bar when it has none; `{config}` and `{local}` the
+/// folders this system keeps a desktop app's settings in.
+pub(crate) fn expand(path: &str) -> PathBuf {
+    for (name, local) in [("{config}", false), ("{local}", true)] {
+        if let Some(rest) = path.strip_prefix(name) {
+            return join(app_folder(local), rest.trim_start_matches('/'));
+        }
+    }
     if let Some(rest) = path.strip_prefix("{env:")
         && let Some((inside, after)) = rest.split_once('}')
     {
@@ -123,6 +137,24 @@ fn expand(path: &str) -> PathBuf {
         Some(rest) => join(user_home(), rest),
         None if path == "~" => user_home(),
         None => PathBuf::from(path),
+    }
+}
+
+/// Where a desktop app keeps its settings: `$XDG_CONFIG_HOME` (`~/.config`)
+/// on Linux, `~/Library/Application Support` on macOS, `%APPDATA%` on
+/// Windows, or `%LOCALAPPDATA%` there for what stays on this computer
+/// (`local`).
+fn app_folder(local: bool) -> PathBuf {
+    if cfg!(target_os = "macos") {
+        expand("~/Library/Application Support")
+    } else if cfg!(windows) {
+        if local {
+            expand("{env:LOCALAPPDATA|~/AppData/Local}")
+        } else {
+            expand("{env:APPDATA|~/AppData/Roaming}")
+        }
+    } else {
+        expand("{env:XDG_CONFIG_HOME|~/.config}")
     }
 }
 
@@ -336,6 +368,8 @@ pub struct Manifest {
     /// The gateway puts every subagent of it on that model, whatever one
     /// its lead names.
     pub subagent_every: bool,
+    /// It lists the gateway's `/v1/models` itself.
+    pub lists_models: bool,
     pub note: Option<&'static str>,
     pub picks_in: Option<&'static str>,
     /// Its npm package: where the version that is out is asked.
@@ -377,6 +411,8 @@ struct Raw {
     subagent_model: bool,
     #[serde(default)]
     subagent_every: bool,
+    #[serde(default)]
+    lists_models: bool,
     note: Option<String>,
     picks_in: Option<String>,
     npm: Option<String>,
@@ -717,6 +753,7 @@ pub fn parse(text: &str) -> Result<Manifest> {
         small_model: raw.small_model,
         subagent_model: raw.subagent_model,
         subagent_every: raw.subagent_every,
+        lists_models: raw.lists_models,
         note: raw.note.as_deref().map(leak),
         picks_in: raw.picks_in.as_deref().map(leak),
         npm: raw.npm.as_deref().map(leak),

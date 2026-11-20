@@ -2908,6 +2908,7 @@ dependencies = [
  "pansy-core",
  "pansy-mask",
  "pansy-plugins",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",
