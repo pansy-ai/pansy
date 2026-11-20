@@ -21,7 +21,7 @@ set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 export PATH="$HOME/.cargo/bin:$HOME/.nsh/bin:$PATH"
 
-nsh_version=0.6.0
+nsh_version=0.6.1
 if ! nsh --version 2>/dev/null | grep -q "^nsh $nsh_version "; then
   echo "NSH $nsh_version is required: NSH_VERSION=v$nsh_version sh <(curl -fsSL https://nsh.dev/install.sh)" >&2
   exit 1

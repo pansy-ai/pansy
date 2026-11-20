@@ -1,7 +1,7 @@
 # Parity with magpie
 
 pansy rewrites [magpie](https://github.com/yetone/magpie) (Go, a Wails web
-view) in Rust with an NSH 0.6.0 window. This page tracks what is ported. A
+view) in Rust with an NSH 0.6.1 window. This page tracks what is ported. A
 feature is ported when the gateway, the command line and the window all have
 it, with tests.
 
