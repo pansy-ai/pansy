@@ -40,7 +40,7 @@ const trashed = signal<Trashed[] | null>(null);
 
 const keyOf = (s: { agent: string; id: string }) => `${s.agent}/${s.id}`;
 const NAMES: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex", opencode: "OpenCode" };
-const agentName = (id: string) => agents().find((a) => a.id === id)?.name ?? NAMES[id] ?? id;
+export const agentName = (id: string) => agents().find((a) => a.id === id)?.name ?? NAMES[id] ?? id;
 const totalOf = (t: SessionTokens) => t.input + t.output + t.cacheRead + t.cacheWrite;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

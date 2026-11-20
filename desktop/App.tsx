@@ -3,6 +3,7 @@
 // open — and the gateway's state at its foot, a title bar with where the
 // page is, the page, and what sits above them (modals, toasts). The title
 // bar's button hides the sidebar, and its pages become tabs in the title bar.
+// On a computer pansy is new to, the welcome (ui/Welcome.tsx) comes first.
 // State lives in ui/model.ts; providers, agents and the gateway themselves
 // in pansy/native (native/).
 import { effect, keymap, LayoutAnimation, mount, platform, reduceMotion, Scroll, setColorScheme, signal, Text, token, UrlScheme, View } from "nsh";
@@ -28,6 +29,7 @@ import { sessionCrumb, SessionsPage } from "./ui/Sessions";
 import { SETTINGS_TABS, SettingsPage } from "./ui/Settings";
 import { startUpdates, UpdatePill } from "./ui/Update";
 import { UsagePage } from "./ui/Usage";
+import { startWelcome, WelcomePage, welcoming } from "./ui/Welcome";
 import { WhatsNewDialog } from "./ui/WhatsNew";
 
 /** Each page's place: the group it is under in the sidebar, and its name. */
@@ -531,13 +533,19 @@ function App() {
   effect(() => {
     setColorScheme(settings()?.theme ?? "system");
   });
+  void startWelcome();
   return (
     <View class={`flex-1 flex-row bg-background ${fontClass()}`}>
-      <Sidebar />
-      <View class="flex-1">
-        <Header />
-        <Content />
-      </View>
+      <If when={welcoming() === false}>
+        <Sidebar />
+        <View class="flex-1">
+          <Header />
+          <Content />
+        </View>
+      </If>
+      <If when={welcoming()}>
+        <WelcomePage />
+      </If>
       <ProviderModals />
       <AgentModals />
       <PreviewDialog />

@@ -1332,7 +1332,7 @@ impl Settings {
 // --- Language -----------------------------------------------------------------
 
 /// The window's own choices, read before its first paint: its language,
-/// and whether the sidebar shows.
+/// whether the sidebar shows, and whether it welcomes first.
 #[module]
 pub struct Prefs;
 
@@ -1366,6 +1366,20 @@ impl Prefs {
         .map_err(err)
     }
 
+    /// Whether pansy has no provider yet: the welcome is shown to a pansy
+    /// new to this computer, never to one already in use.
+    pub fn fresh() -> bool {
+        config::load_providers()
+            .map(|p| p.is_empty())
+            .unwrap_or(false)
+    }
+
+    /// This computer's name as its owner gave it (`tsui's MacBook Air`),
+    /// else its host name; empty when neither is known.
+    pub fn computer_name() -> String {
+        computer_name().unwrap_or_default()
+    }
+
     /// The locale the window uses now: `en` or `zh-Hans`.
     pub fn locale() -> String {
         let choice = Prefs::language();
@@ -1389,6 +1403,40 @@ impl Prefs {
             "en".to_owned()
         }
     }
+}
+
+/// The Mac's Sharing name, systemd's pretty host name, Windows' computer
+/// name; else the host name.
+fn computer_name() -> Option<String> {
+    let given = |s: String| Some(s.trim().trim_matches('"').to_owned()).filter(|s| !s.is_empty());
+    #[cfg(target_os = "macos")]
+    if let Some(name) = std::process::Command::new("scutil")
+        .args(["--get", "ComputerName"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| given(String::from_utf8_lossy(&o.stdout).into_owned()))
+    {
+        return Some(name);
+    }
+    #[cfg(windows)]
+    if let Some(name) = std::env::var("COMPUTERNAME").ok().and_then(given) {
+        return Some(name);
+    }
+    if let Some(name) = std::fs::read_to_string("/etc/machine-info")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find_map(|l| l.strip_prefix("PRETTY_HOSTNAME=").map(str::to_owned))
+        })
+        .and_then(given)
+    {
+        return Some(name);
+    }
+    ["/proc/sys/kernel/hostname", "/etc/hostname"]
+        .iter()
+        .find_map(|p| std::fs::read_to_string(p).ok().and_then(given))
+        .or_else(|| std::env::var("HOSTNAME").ok().and_then(given))
 }
 
 // --- The quick panel ------------------------------------------------------------

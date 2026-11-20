@@ -3,8 +3,32 @@
 // agent is connected to it with its switch and the model picker.
 import { expect, open, test } from "nsh/test";
 
-/** The window at its launch size, on a desktop. */
-const launch = () => open("./App.tsx", { platform: "linux", width: 1100, height: 720 });
+/** The window at its launch size, on a desktop, the welcome gone through. */
+const DONE = { "welcome.done": "1" };
+const launch = () => open("./App.tsx", { platform: "linux", width: 1100, height: 720, storage: DONE });
+
+test("welcomes first: the agents here, the providers to bring over and the projects, then the window", async () => {
+  const app = await open("./App.tsx", { platform: "linux", width: 1100, height: 720 });
+  await app.waitFor("id:welcome");
+  expect(app.texts()).toContain("Welcome to pansy");
+  expect(app.texts().some((t) => t.startsWith("Setting up"))).toBe(true);
+  // test.sh's Claude Code is installed; CC Switch has a provider; Claude Code and OpenCode worked in two folders
+  await app.waitFor("id:welcome-agent-claude-code");
+  await app.waitFor("text:Import 1 provider and its keys");
+  await app.waitFor("text:2 projects on this computer");
+  await app.press("id:welcome-projects-review");
+  await app.waitFor("id:welcome-project-app");
+  expect(app.texts()).toContain("/work/api");
+  await app.press("id:welcome-providers-review");
+  await app.waitFor("text:Switch Relay");
+  expect(app.texts()).toContain("Import 1 provider and start");
+  // left behind, nothing is imported (the CC Switch test below brings it over)
+  await app.press("id:welcome-providers-all");
+  await app.waitFor("text:Start");
+  await app.press("id:welcome-start");
+  await app.waitFor("id:page-agents");
+  expect(app.storage()["welcome.done"]).toBe("1");
+});
 
 test("starts on the agents page and asks for a provider first", async () => {
   const app = await launch();
@@ -458,7 +482,7 @@ test("shows What's new once after an update, and again from About", async () => 
   const version = first.texts().find((text) => text.startsWith("Version "))!.slice("Version ".length);
   // the notes the update before the restart kept
   const notes = { version, text: "## Fixed\n- The gateway **keeps** a stream open\nThanks for the reports." };
-  const app = await open("./App.tsx", { platform: "linux", width: 1100, height: 720, storage: { "update.notes": JSON.stringify(notes) } });
+  const app = await open("./App.tsx", { platform: "linux", width: 1100, height: 720, storage: { ...DONE, "update.notes": JSON.stringify(notes) } });
   await app.waitFor("id:whats-new");
   await app.waitFor(`text:What's new in ${version}`);
   expect(app.texts()).toContain("Fixed");
@@ -474,7 +498,7 @@ test("shows What's new once after an update, and again from About", async () => 
   await app.press("id:whats-new-open");
   await app.waitFor("id:whats-new");
   // notes of another version are not this one's
-  const other = await open("./App.tsx", { platform: "linux", width: 1100, height: 720, storage: { "update.notes": JSON.stringify({ ...notes, version: "0.0.1" }) } });
+  const other = await open("./App.tsx", { platform: "linux", width: 1100, height: 720, storage: { ...DONE, "update.notes": JSON.stringify({ ...notes, version: "0.0.1" }) } });
   await other.waitFor("id:page-agents");
   await other.waitFor("id:whats-new", { state: "gone" });
 });
