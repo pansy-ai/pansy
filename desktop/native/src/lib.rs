@@ -1332,7 +1332,7 @@ impl Settings {
 // --- Language -----------------------------------------------------------------
 
 /// The window's own choices, read before its first paint: its language,
-/// whether the sidebar shows, and whether it welcomes first.
+/// whether the sidebar shows, and the computer's name the welcome says.
 #[module]
 pub struct Prefs;
 
@@ -1364,14 +1364,6 @@ impl Prefs {
             Ok(())
         })
         .map_err(err)
-    }
-
-    /// Whether pansy has no provider yet: the welcome is shown to a pansy
-    /// new to this computer, never to one already in use.
-    pub fn fresh() -> bool {
-        config::load_providers()
-            .map(|p| p.is_empty())
-            .unwrap_or(false)
     }
 
     /// This computer's name as its owner gave it (`tsui's MacBook Air`),

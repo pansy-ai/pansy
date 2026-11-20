@@ -1,3 +1,3 @@
-## pansy 0.1.5
+## pansy 0.1.6
 
-- Claude Desktop, Grok Build and the other apps pansy finds by their folder are no longer shown as "CLI not found": they have no command-line program to miss.
+- A welcome the first time the window opens: the agents found on this computer, the providers your other apps (Claude Code, Codex, OpenCode, CC Switch) have set up, ticked to bring over with their keys, and the folders your agents worked in.
