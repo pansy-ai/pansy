@@ -40,7 +40,7 @@ function matches(choice: Choice, query: string): boolean {
 function Heading(props: { text: string }) {
   return (
     <View class="h-6 justify-end px-2">
-      <Text class="text-[10.5px] font-semibold uppercase tracking-[0.06em] text-faint">{props.text}</Text>
+      <Text class="text-[11px] font-medium uppercase tracking-[0.06em] text-faint">{props.text}</Text>
     </View>
   );
 }
@@ -65,11 +65,11 @@ function Option(props: { choice: Choice; current: boolean; onPick: () => void })
       class={`h-[34px] flex-row items-center gap-[9px] rounded-[7px] px-2 ${props.current ? "bg-sel" : "hover:bg-pill"}`}
     >
       <ChoiceLogo id={c().id} size={16} />
-      <Text class="text-[12.5px] text-foreground line-clamp-1">{c().name}</Text>
+      <Text class="text-[13px] text-foreground line-clamp-1">{c().name}</Text>
       <If when={contextOf(c().id)}>
         <Badge label={contextOf(c().id) ?? ""} />
       </If>
-      <Text class="flex-1 text-[10.5px] text-muted-foreground line-clamp-1">{c().group ? tr("routing group") : c().provider}</Text>
+      <Text class="flex-1 text-[11px] text-muted-foreground line-clamp-1">{c().group ? tr("routing group") : c().provider}</Text>
       <If when={props.current}>
         <Icon name="tick" color="primary" size={12} />
       </If>
@@ -173,14 +173,14 @@ function Content(outer: { of: PickerProps }) {
             <If when={props.reset}>
               <View role="button" testID="pick-reset" onPress={() => pick("")} class={`h-[34px] flex-row items-center gap-[9px] rounded-[7px] px-2 ${props.current ? "hover:bg-pill" : "bg-sel"}`}>
                 <Icon name="close" color="muted-foreground" size={14} />
-                <Text class="text-[12.5px] text-foreground">{props.reset?.label ?? ""}</Text>
-                <Text class="flex-1 text-[10.5px] text-muted-foreground line-clamp-1">{props.reset?.note ?? ""}</Text>
+                <Text class="text-[13px] text-foreground">{props.reset?.label ?? ""}</Text>
+                <Text class="flex-1 text-[11px] text-muted-foreground line-clamp-1">{props.reset?.note ?? ""}</Text>
               </View>
             </If>
             <If when={typed()}>
               <View role="button" testID="pick-typed" onPress={() => pick(typed()!)} class="h-[34px] flex-row items-center gap-[9px] rounded-[7px] px-2 hover:bg-pill">
                 <Icon name="add" color="primary" size={14} />
-                <Text class="flex-1 text-[12.5px] text-foreground">{tr("Use %s", typed() ?? "")}</Text>
+                <Text class="flex-1 text-[13px] text-foreground">{tr("Use %s", typed() ?? "")}</Text>
               </View>
             </If>
             <Each of={sections()} key={(s) => s.title}>
@@ -195,8 +195,8 @@ function Content(outer: { of: PickerProps }) {
             </Each>
             <If when={listed().length === 0 && !typed()}>
               <View class="items-center gap-1 px-4 py-8">
-                <Text class="text-[12.5px] text-foreground">{tr("No models match")}</Text>
-                <Text class="text-center text-[11.5px] text-muted-foreground">{tr("Add a provider, or refresh a provider's models.")}</Text>
+                <Text class="text-[13px] text-foreground">{tr("No models match")}</Text>
+                <Text class="text-center text-[12px] text-muted-foreground">{tr("Add a provider, or refresh a provider's models.")}</Text>
               </View>
             </If>
           </View>

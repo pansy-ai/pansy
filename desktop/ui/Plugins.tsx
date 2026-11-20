@@ -228,7 +228,7 @@ function Chip(props: { label: string; tone?: "soft" | "bad" | "up" }) {
     ({ soft: "border border-border bg-transparent text-muted-foreground", bad: "bg-destructive-soft text-destructive", up: "bg-success-soft text-success" })[props.tone ?? "soft"] ?? "";
   return (
     <View class={`h-[17px] justify-center rounded-[5px] px-[6px] ${tone().split(" ").filter((c) => !c.startsWith("text-")).join(" ")}`}>
-      <Text class={`text-[10.5px] font-medium ${tone().split(" ").find((c) => c.startsWith("text-")) ?? "text-fg-2"}`}>{props.label}</Text>
+      <Text class={`text-[11px] font-medium ${tone().split(" ").find((c) => c.startsWith("text-")) ?? "text-fg-2"}`}>{props.label}</Text>
     </View>
   );
 }
@@ -276,7 +276,7 @@ function Ready(props: { m: MarketEntry; base: string }) {
     <>
       <If when={!e() && !m().runs}>
         <View class={`${base} bg-pill opacity-60`}>
-          <Text class="text-[12px] font-semibold text-fg-2">{tr("Not yet in pansy")}</Text>
+          <Text class="text-[12px] font-medium text-fg-2">{tr("Not yet in pansy")}</Text>
         </View>
       </If>
       <If when={!e() && m().runs}>
@@ -287,17 +287,17 @@ function Ready(props: { m: MarketEntry; base: string }) {
           class={`${base} border border-border ${installing() ? "opacity-55" : "hover:bg-pill"}`}
         >
           <Icon name="pm-down" color="foreground" size={12} />
-          <Text class="text-[12px] font-semibold text-foreground">{tr("Install")}</Text>
+          <Text class="text-[12px] font-medium text-foreground">{tr("Install")}</Text>
         </View>
       </If>
       <If when={e()?.off}>
         <View role="button" onPress={() => void busyWith(e()!.spec, tr("Switching on…"), () => Plugins.setOn(e()!.spec, true))} class={`${base} bg-pill hover:bg-pill-hover`}>
-          <Text class="text-[12px] font-semibold text-fg-2">{tr("Switch on")}</Text>
+          <Text class="text-[12px] font-medium text-fg-2">{tr("Switch on")}</Text>
         </View>
       </If>
       <If when={e() && !e()!.off && providers().length > 0 && !signedIn()}>
         <View role="button" testID={`market-sign-in-${m().name}`} onPress={() => beginSignIn(providers()[0]!)} class={`${base} border border-border hover:bg-pill`}>
-          <Text class="text-[12px] font-semibold text-foreground">{tr("Sign in")}</Text>
+          <Text class="text-[12px] font-medium text-foreground">{tr("Sign in")}</Text>
         </View>
       </If>
       <If when={e() && !e()!.off && (signedIn() || providers().length === 0)}>
@@ -307,7 +307,7 @@ function Ready(props: { m: MarketEntry; base: string }) {
           class={`h-[26px] flex-row items-center gap-1 rounded-[13px] px-2 ${signedIn() ? "hover:bg-success-soft" : ""}`}
         >
           <Icon name="pm-check" color="success" size={11} />
-          <Text class="text-[12px] font-semibold text-success">{signedIn() ? tr("Signed in") : tr("Installed")}</Text>
+          <Text class="text-[12px] font-medium text-success">{signedIn() ? tr("Signed in") : tr("Installed")}</Text>
         </View>
       </If>
     </>
@@ -359,7 +359,7 @@ function Card(props: { m: MarketEntry; width: number }) {
       <View class="flex-row items-center gap-[10px]">
         <Logo kind={kindOf(m())} icon={iconOf(m())} busy={!!doingOf(m())} />
         <View class="min-w-0 flex-1 gap-[2px]">
-          <Text class="text-[13px] font-semibold text-foreground line-clamp-1">{m().name}</Text>
+          <Text class="text-[13px] font-medium text-foreground line-clamp-1">{m().name}</Text>
           <Byline m={m()} />
         </View>
         <Action m={m()} />
@@ -374,7 +374,7 @@ function Card(props: { m: MarketEntry; width: number }) {
           </View>
         </If>
         <If when={e()?.version || m().version}>
-          <Text class="font-mono text-[10.5px] text-muted-foreground">{`v${e()?.version || m().version}`}</Text>
+          <Text class="font-mono text-[11px] text-muted-foreground">{`v${e()?.version || m().version}`}</Text>
         </If>
         <If when={e()?.error && !e()?.off}>
           <Chip label={tr("Didn't load")} tone="bad" />
@@ -414,22 +414,22 @@ function ThisWeek(props: { all: MarketEntry[] }) {
       <View class="gap-[10px]" testID="market-week">
         <View class="flex-row items-baseline gap-2 px-[2px]">
           <Text class="text-[15px] font-semibold text-foreground">{tr("This week")}</Text>
-          <Text class="text-[11.5px] text-muted-foreground">{date()}</Text>
+          <Text class="text-[12px] text-muted-foreground">{date()}</Text>
         </View>
         <View class="flex-row gap-[10px]">
           <Hero m={day()!} />
           <View class="flex-1 rounded-[14px] border border-border bg-card px-2 pb-2 pt-3">
             <View class="flex-row items-baseline gap-2 px-2 pb-1">
-              <Text class="text-[12.5px] font-semibold text-foreground">{tr("Most downloaded")}</Text>
+              <Text class="text-[13px] font-medium text-foreground">{tr("Most downloaded")}</Text>
               <Text class="text-[11px] text-muted-foreground">{tr("last week, on npm")}</Text>
             </View>
             <Each of={listed().slice(0, 5)} key={(m) => m.package}>
               {(m, i) => (
                 <View role="button" onPress={() => details(m().package)} class="flex-row items-center gap-[9px] rounded-[9px] px-2 py-[6px] hover:bg-pill">
-                  <Text class="w-[14px] text-center text-[11.5px] font-semibold text-faint">{String(i() + 1)}</Text>
+                  <Text class="w-[14px] text-center text-[12px] font-medium text-faint">{String(i() + 1)}</Text>
                   <Logo kind={kindOf(m())} icon={iconOf(m())} size={28} busy={!!doingOf(m())} />
                   <View class="min-w-0 flex-1">
-                    <Text class="text-[12.5px] font-semibold text-foreground line-clamp-1">{m().name}</Text>
+                    <Text class="text-[13px] font-medium text-foreground line-clamp-1">{m().name}</Text>
                     <Text class="text-[11px] text-muted-foreground line-clamp-1">{`${KINDS()[kindOf(m())]?.word ?? ""} · ↓${tr("%s/week", compact(m().weekly))}`}</Text>
                   </View>
                   <Action m={m()} />
@@ -454,7 +454,7 @@ function Hero(props: { m: MarketEntry }) {
   );
   return (
     <View role="button" onPress={() => details(m().package)} class="flex-[1.3] gap-[10px] rounded-[14px] border border-border bg-card px-[18px] py-4 hover:border-ring">
-      <Text class="text-[11px] font-semibold text-primary">{tr("Today's pick")}</Text>
+      <Text class="text-[11px] font-medium text-primary">{tr("Today's pick")}</Text>
       <View class="flex-row items-center gap-[10px]">
         <Logo kind={kindOf(m())} icon={iconOf(m())} size={52} busy={!!doingOf(m())} />
         <View class="min-w-0 flex-1 gap-[2px]">
@@ -462,7 +462,7 @@ function Hero(props: { m: MarketEntry }) {
           <Byline m={m()} />
         </View>
       </View>
-      <Text class="text-[12.5px] leading-[18px] text-fg-2 line-clamp-3">{summaryOf(m())}</Text>
+      <Text class="text-[13px] leading-[18px] text-fg-2 line-clamp-3">{summaryOf(m())}</Text>
       <View class="flex-1" />
       <View class="flex-row gap-[22px]">
         {stat(compact(m().weekly), tr("Downloads last week"))}
@@ -472,7 +472,7 @@ function Hero(props: { m: MarketEntry }) {
       <View class="flex-row items-center gap-2">
         <Action m={m()} />
         <View role="button" onPress={() => details(m().package)} class="h-[26px] flex-row items-center gap-1 rounded-[13px] border border-border px-3 hover:bg-pill">
-          <Text class="text-[12px] font-semibold text-fg-2">{tr("Details")}</Text>
+          <Text class="text-[12px] font-medium text-fg-2">{tr("Details")}</Text>
           <Icon name="pm-out" color="fg-2" size={11} />
         </View>
       </View>
@@ -491,7 +491,7 @@ function ShelfView(props: { id: Shelf; list: MarketEntry[] }) {
   return (
     <View class="gap-[10px]" testID={`shelf-${props.id}`}>
       <View class="flex-row items-baseline gap-2 px-[2px]">
-        <Text class="text-[12.5px] font-semibold text-foreground">{shelf().name}</Text>
+        <Text class="text-[13px] font-medium text-foreground">{shelf().name}</Text>
         <Text class="text-[11px] text-faint">{String(props.list.length)}</Text>
         <View class="flex-1" />
         <If when={!picked() && props.list.length > limit()}>
@@ -578,7 +578,7 @@ function Footer() {
     <View class="flex-row flex-wrap items-center gap-x-[14px] gap-y-[6px] px-[2px]">
       <View class="flex-1 flex-row items-center gap-[6px]">
         <Icon name="pm-shield" color="success" size={12} />
-        <Text class="text-[11.5px] text-muted-foreground">
+        <Text class="text-[12px] text-muted-foreground">
           {tr("A plugin is someone else's code with your sign-in or your requests: install the ones you trust.")}
         </Text>
       </View>
@@ -652,14 +652,14 @@ function Discover() {
       >
         <If when={all().length}>
           <View class="gap-[10px]">
-            <Text class="px-[2px] text-[12.5px] font-semibold text-foreground">{tr("Plugins")}</Text>
+            <Text class="px-[2px] text-[13px] font-medium text-foreground">{tr("Plugins")}</Text>
             <Grid list={ranked(all(), "hot").slice(0, 60)} />
           </View>
         </If>
         <View class="gap-[10px]">
           <View class="flex-row flex-wrap items-baseline gap-2 px-[2px]">
-            <Text class="text-[12.5px] font-semibold text-foreground">{tr("On npm")}</Text>
-            <Text class="text-[11.5px] text-muted-foreground">{tr("OpenCode plugins and pi packages anyone published — read what one does before you install it")}</Text>
+            <Text class="text-[13px] font-medium text-foreground">{tr("On npm")}</Text>
+            <Text class="text-[12px] text-muted-foreground">{tr("OpenCode plugins and pi packages anyone published — read what one does before you install it")}</Text>
           </View>
           <If when={q().length < 2}>
             <Text class="px-[2px] text-[12px] text-muted-foreground">{tr("Type two letters or more to search npm")}</Text>
@@ -712,7 +712,7 @@ function ProviderLine(props: { provider: PluginProvider }) {
     <View class="gap-[2px]">
       <View class="flex-row items-center gap-[6px]">
         <View class={`h-[6px] w-[6px] rounded-full ${p().accounts.length ? "bg-success" : "bg-faint"}`} />
-        <Text class="text-[11.5px] text-muted-foreground">
+        <Text class="text-[12px] text-muted-foreground">
           {p().accounts.length ? tr("%s: signed in", p().name) : tr("%s: not signed in", p().name)}
           {` · ${tr("%d models", p().models)}`}
         </Text>
@@ -723,7 +723,7 @@ function ProviderLine(props: { provider: PluginProvider }) {
       <Each of={p().accounts} key={(a) => a.key}>
         {(a) => (
           <View class="flex-row items-center gap-2 pl-3">
-            <Text class="text-[11.5px] text-fg-2 line-clamp-1">{a().user || a().key}</Text>
+            <Text class="text-[12px] text-fg-2 line-clamp-1">{a().user || a().key}</Text>
             <If when={working()[`${p().id}:${a().key}`]}>
               <Doing label={working()[`${p().id}:${a().key}`]!} />
             </If>
@@ -775,7 +775,7 @@ function InstalledRow(props: { plugin: PluginRow; first: boolean }) {
         <View class="flex-row flex-wrap items-center gap-[7px]">
           <Text class="text-[13px] font-medium text-foreground">{listed()?.name ?? (p().path ? p().name : p().package)}</Text>
           <If when={p().version}>
-            <Text class="font-mono text-[10.5px] text-muted-foreground">{`v${p().version}`}</Text>
+            <Text class="font-mono text-[11px] text-muted-foreground">{`v${p().version}`}</Text>
           </If>
           <Each of={kinds()} key={(k) => k}>
             {(k) => <KindChip kind={k()} />}
@@ -783,22 +783,22 @@ function InstalledRow(props: { plugin: PluginRow; first: boolean }) {
           <If when={serves().length && !p().off}>
             <View class="h-[17px] flex-row items-center gap-1 rounded-[5px] bg-primary/15 px-[6px]">
               <View class="h-[5px] w-[5px] rounded-full bg-primary" />
-              <Text class="text-[10.5px] font-medium text-primary">{tr("Serves %s", serves().join(", "))}</Text>
+              <Text class="text-[11px] font-medium text-primary">{tr("Serves %s", serves().join(", "))}</Text>
             </View>
           </If>
         </View>
         <If when={p().off}>
-          <Text class="text-[11.5px] text-muted-foreground">{tr("Off")}</Text>
+          <Text class="text-[12px] text-muted-foreground">{tr("Off")}</Text>
         </If>
         <If when={!p().off && p().error}>
-          <Text class="text-[11.5px] text-destructive">{tr("Didn't load: %s", p().error ?? "")}</Text>
+          <Text class="text-[12px] text-destructive">{tr("Didn't load: %s", p().error ?? "")}</Text>
         </If>
         <If when={!p().off && !p().error}>
           <Each of={p().providers} key={(x) => x.id}>
             {(x) => <ProviderLine provider={x()} />}
           </Each>
           <If when={stats()}>
-            <Text class="text-[11.5px] text-muted-foreground">
+            <Text class="text-[12px] text-muted-foreground">
               {tr("Gateway middleware: %s", stats()!.hooks.join(", "))}
               {stats()!.calls ? ` · ${tr("%d calls", stats()!.calls)}` : ""}
               {stats()!.failures ? ` · ${tr("%d failed", stats()!.failures)}` : ""}
@@ -811,7 +811,7 @@ function InstalledRow(props: { plugin: PluginRow; first: boolean }) {
             <Text class="text-[11px] text-faint">{tr("Sees what agents send before it is masked, and runs with your permissions.")}</Text>
           </If>
           <Each of={p().agents} key={(a) => a.id}>
-            {(a) => <Text class="text-[11.5px] text-muted-foreground">{tr("Adds the agent %s: connect it on the Agents page", a().name)}</Text>}
+            {(a) => <Text class="text-[12px] text-muted-foreground">{tr("Adds the agent %s: connect it on the Agents page", a().name)}</Text>}
           </Each>
         </If>
         <If when={open()}>
@@ -895,7 +895,7 @@ function Installed() {
           <Row first>
             <View class="min-w-0 flex-1 gap-[1px]">
               <Text class="text-[13px] font-medium text-foreground">{tr("Bring magpie's plugins over")}</Text>
-              <Text class="text-[11.5px] text-muted-foreground line-clamp-1">{tr("In %s: %d plugins and %d sign-ins", found()!.dir, found()!.plugins.length, found()!.accounts)}</Text>
+              <Text class="text-[12px] text-muted-foreground line-clamp-1">{tr("In %s: %d plugins and %d sign-ins", found()!.dir, found()!.plugins.length, found()!.accounts)}</Text>
             </View>
             <PrimaryButton
               label={tr("Bring over")}
@@ -917,7 +917,7 @@ function Installed() {
         else={
           <View class="items-center gap-[10px] py-10">
             <Logo kind="provider" size={44} />
-            <Text class="text-[13px] font-semibold text-foreground">{tr("No plugins yet")}</Text>
+            <Text class="text-[13px] font-medium text-foreground">{tr("No plugins yet")}</Text>
             <Text class="text-[12px] text-muted-foreground">{tr("Install a subscription or a middleware from Discover; a subscription signs in from here.")}</Text>
             <PrimaryButton label={tr("Discover plugins")} onPress={() => pluginTab.set("discover")} testID="plugins-to-discover" />
           </View>
@@ -941,7 +941,7 @@ function Installed() {
 function InstalledFoot() {
   return (
     <View class="flex-row items-center gap-2 px-[2px]">
-      <Text class="flex-1 text-[11.5px] text-muted-foreground">{tr("Plugins run on Bun %s", "1.4.2")}</Text>
+      <Text class="flex-1 text-[12px] text-muted-foreground">{tr("Plugins run on Bun %s", "1.4.2")}</Text>
       <If
         when={isBusy("plugin-refresh")}
         else={<TextButton label={tr("List their providers again")} disabled={isBusy("plugin-update")} onPress={() => void act("plugin-refresh", () => Plugins.refresh()).then(reload)} />}
@@ -1027,8 +1027,8 @@ function Choice(props: { label: string; onPress: () => void; hint?: string; test
 }
 
 /** The sign-in strip's lines: its title, and what is said under it. */
-const N = (props: { text: string }) => <Text class="text-[12.5px] font-medium leading-[17px] text-foreground">{props.text}</Text>;
-const S = (props: { text: string; bad?: boolean }) => <Text class={`text-[11.5px] leading-[16px] ${props.bad ? "text-destructive" : "text-muted-foreground"}`}>{props.text}</Text>;
+const N = (props: { text: string }) => <Text class="text-[13px] font-medium leading-[17px] text-foreground">{props.text}</Text>;
+const S = (props: { text: string; bad?: boolean }) => <Text class={`text-[12px] leading-[16px] ${props.bad ? "text-destructive" : "text-muted-foreground"}`}>{props.text}</Text>;
 
 /** magpie's sign-in strip (`.signing`), under its plugin's row: a spinner and what to do in the browser with its link, the way to sign in, the plugin's questions, or why it didn't finish. */
 function SigningStrip(props: { provider: PluginProvider; spec: string; framed?: boolean }) {

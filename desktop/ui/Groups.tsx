@@ -101,8 +101,8 @@ function RouteMenu(props: { group: Group }) {
               </If>
             </View>
             <View class="flex-1 gap-[2px]">
-              <Text class="text-[12.5px] text-foreground">{r().label}</Text>
-              <Text class="text-[11.5px] text-muted-foreground">{r().description}</Text>
+              <Text class="text-[13px] text-foreground">{r().label}</Text>
+              <Text class="text-[12px] text-muted-foreground">{r().description}</Text>
             </View>
           </MenuItem>
         )}
@@ -120,10 +120,10 @@ function GroupRow(props: { group: Group; first: boolean }) {
       </View>
       <View class="min-w-0 flex-1 gap-[3px]">
         <View class="flex-row items-center gap-2">
-          <Text class="text-[13px] font-semibold text-foreground">{g().name}</Text>
+          <Text class="text-[13px] font-medium text-foreground">{g().name}</Text>
           <Code text={`group/${g().id}`} />
         </View>
-        <Text class="text-[11.5px] text-muted-foreground line-clamp-1">{g().members.map(memberLine).join(" → ")}</Text>
+        <Text class="text-[12px] text-muted-foreground line-clamp-1">{g().members.map(memberLine).join(" → ")}</Text>
       </View>
       <RouteMenu group={g()} />
       <Tag label={trn(g().members.length, "%d model", "%d models", g().members.length)} />
@@ -156,7 +156,7 @@ function Editor() {
   return (
     <View testID="group-editor" class="overflow-hidden rounded-[12px] border border-primary bg-card">
       <View class="h-[44px] flex-row items-center border-b border-line-2 px-[14px]">
-        <Text class="text-[13.5px] font-semibold text-foreground">{d().id ? d().name : tr("New routing group")}</Text>
+        <Text class="text-[14px] font-semibold text-foreground">{d().id ? d().name : tr("New routing group")}</Text>
       </View>
       <View class="gap-[14px] px-[14px] py-[14px]">
         <FormRow label={tr("Name")}>
@@ -174,8 +174,8 @@ function Editor() {
               <View class="h-[30px] flex-row items-center gap-[9px]">
                 <Text class="w-4 text-right text-[12px] text-muted-foreground">{String(i() + 1)}</Text>
                 <Logo name={providerLogo(providerOf(m())?.preset)} size={16} />
-                <Text class="text-[12.5px] font-medium text-foreground line-clamp-1">{choiceName(m())}</Text>
-                <Text class="flex-1 text-[11.5px] text-muted-foreground line-clamp-1">{providerOf(m())?.name ?? ""}</Text>
+                <Text class="text-[13px] font-medium text-foreground line-clamp-1">{choiceName(m())}</Text>
+                <Text class="flex-1 text-[12px] text-muted-foreground line-clamp-1">{providerOf(m())?.name ?? ""}</Text>
                 <TextButton label={tr("Up")} disabled={i() === 0} onPress={() => move(i(), -1)} />
                 <TextButton label={tr("Down")} disabled={i() === d().members.length - 1} onPress={() => move(i(), 1)} />
                 <TextButton label={tr("Remove")} onPress={() => change((x) => ({ ...x, members: x.members.filter((y) => y !== m()) }))} />

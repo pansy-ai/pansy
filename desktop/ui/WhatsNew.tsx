@@ -58,11 +58,11 @@ export function WhatsNewDialog() {
             {(b) => (
               <If when={b().kind !== "bullet"} else={
                 <View class="flex-row gap-[7px] pl-[2px]">
-                  <Text class="text-[12.5px] leading-[19px] text-muted-foreground">•</Text>
-                  <Text class="flex-1 text-[12.5px] leading-[19px] text-fg-2">{b().text}</Text>
+                  <Text class="text-[13px] leading-[19px] text-muted-foreground">•</Text>
+                  <Text class="flex-1 text-[13px] leading-[19px] text-fg-2">{b().text}</Text>
                 </View>
               }>
-                <Text class={b().kind === "heading" ? "pt-[5px] text-[12.5px] font-semibold text-foreground" : "text-[12.5px] leading-[19px] text-fg-2"}>{b().text}</Text>
+                <Text class={b().kind === "heading" ? "pt-[5px] text-[13px] font-medium text-foreground" : "text-[13px] leading-[19px] text-fg-2"}>{b().text}</Text>
               </If>
             )}
           </Each>

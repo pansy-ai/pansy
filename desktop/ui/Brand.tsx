@@ -53,7 +53,7 @@ export function Brand() {
           </View>
         ))}
       </View>
-      <Text class="text-[13.5px] font-semibold text-foreground">pansy</Text>
+      <Text class="text-[14px] font-semibold text-foreground">pansy</Text>
     </View>
   );
 }

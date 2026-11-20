@@ -75,7 +75,7 @@ function Item(props: { icon: IconName; label: string; onSelect: () => void; disa
       class="h-[28px] flex-row items-center gap-[9px] rounded-[7px] px-2 hover:bg-pill focus:bg-pill disabled:opacity-40"
     >
       <Icon name={props.icon} color="fg-2" size={13} />
-      <Text class="text-[12.5px] text-foreground">{props.label}</Text>
+      <Text class="text-[13px] text-foreground">{props.label}</Text>
     </MenuItem>
   );
 }
@@ -192,7 +192,7 @@ function EffortField(props: { agent: Agent; name: string; label?: boolean; needs
         <Text class="mr-[1px] text-[11px] text-faint">{fieldName(props.name)}</Text>
       </If>
       <EffortBars lit={effortLit(levels(), value(), 4)} color={value() ? "foreground" : "muted-foreground"} />
-      <Text class={`text-[12.5px] font-medium ${value() ? "text-foreground" : "text-muted-foreground"}`}>{effortName(value())}</Text>
+      <Text class={`text-[13px] font-medium ${value() ? "text-foreground" : "text-muted-foreground"}`}>{effortName(value())}</Text>
       <Icon name="chev-down" color="faint" size={11} />
     </View>
   );
@@ -215,7 +215,7 @@ function EffortField(props: { agent: Agent; name: string; label?: boolean; needs
         <View testID="effort-picker" class="w-[232px] px-4 pb-[11px] pt-[13px]">
           <View class="flex-row items-center">
             <Text class="flex-1 text-[12px] text-muted-foreground">{fieldName(props.name)}</Text>
-            <Text testID="effort-value" class="text-[12.5px] font-semibold text-foreground">
+            <Text testID="effort-value" class="text-[13px] font-medium text-foreground">
               {effortName(stops()[at()] ?? null)}
             </Text>
           </View>
@@ -271,9 +271,9 @@ function Quiet(props: { label: string; onPress: () => void; chevron?: "right" | 
 function WithCode(props: { said: string; code: string }) {
   const parts = () => props.said.split("\u0001");
   return (
-    <Text class="text-[12.5px] leading-[24px] text-fg-2">
+    <Text class="text-[13px] leading-[24px] text-fg-2">
       {parts()[0]}
-      <Text class="font-mono text-[11.5px] text-foreground">{props.code}</Text>
+      <Text class="font-mono text-[12px] text-foreground">{props.code}</Text>
       {parts()[1] ?? ""}
     </Text>
   );
@@ -408,7 +408,7 @@ function ClaudeModels() {
         when={by().length > 0}
         else={
           <View class="flex-row items-center gap-2">
-            <Text class="min-w-0 shrink text-[12.5px] leading-[24px] text-fg-2 line-clamp-1">{tr("claude-* models need a provider that has them: pansy serves no Claude subscription")}</Text>
+            <Text class="min-w-0 shrink text-[13px] leading-[24px] text-fg-2 line-clamp-1">{tr("claude-* models need a provider that has them: pansy serves no Claude subscription")}</Text>
             <View
               role="button"
               testID="claude-add-provider"
@@ -423,7 +423,7 @@ function ClaudeModels() {
           </View>
         }
       >
-        <Text class="text-[12.5px] leading-[24px] text-fg-2">{tr("claude-* models go through %s, with its key, as any other model does", by().join(", "))}</Text>
+        <Text class="text-[13px] leading-[24px] text-fg-2">{tr("claude-* models go through %s, with its key, as any other model does", by().join(", "))}</Text>
       </If>
     </Kv>
   );
@@ -533,7 +533,7 @@ function Details(props: { agent: Agent }) {
     <View testID={`agent-details-${a().id}`} class="border-t border-line-2 bg-card-2 pb-[14px] pl-[50px] pr-4 pt-1">
       <Kv first label={tr("In %s", a().name)}>
         <If when={!a().connected}>
-          <Text testID={`not-connected-${a().id}`} class="text-[12.5px] leading-[24px] text-fg-2">
+          <Text testID={`not-connected-${a().id}`} class="text-[13px] leading-[24px] text-fg-2">
             {tr("Not connected yet: switch %s on, or pick its model, and the settings below can be set.", a().name)}
           </Text>
         </If>
@@ -541,7 +541,7 @@ function Details(props: { agent: Agent }) {
           when={a().connected && a().picksIn}
           else={
             <If when={a().connected}>
-              <If when={hasTiers(a())} else={<Text class="text-[12.5px] leading-[24px] text-fg-2">{tr("Reopen %s: it starts on the model picked here.", a().name)}</Text>}>
+              <If when={hasTiers(a())} else={<Text class="text-[13px] leading-[24px] text-fg-2">{tr("Reopen %s: it starts on the model picked here.", a().name)}</Text>}>
                 <WithCode said={tr("New sessions take it; switch the tiers in %s.", "\u0001")} code="/model" />
               </If>
             </If>
@@ -615,7 +615,7 @@ function Details(props: { agent: Agent }) {
               {(f, i) => (
                 <>
                   {i() === 0 ? "" : " · "}
-                  <Text class="font-mono text-[11.5px] text-fg-2">{f()}</Text>
+                  <Text class="font-mono text-[12px] text-fg-2">{f()}</Text>
                 </>
               )}
             </Each>
@@ -657,14 +657,14 @@ function CliTag(props: { agent: Agent }) {
     <>
       <If when={a().cliMissing}>
         <Hint text={tr("%s's settings are still here (%s), but its command-line program isn't found: it may have been uninstalled. Install another agent, below the list, has its install command.", a().name, a().configFiles[0] ?? "")}>
-          <Text testID={`cli-missing-${a().id}`} class="text-[11.5px] text-muted-foreground">
+          <Text testID={`cli-missing-${a().id}`} class="text-[12px] text-muted-foreground">
             {tr("CLI not found")}
           </Text>
         </Hint>
       </If>
       <If when={!a().cliMissing && cli()?.version}>
         <Hint text={said()}>
-          <Text testID={`version-${a().id}`} class="text-[11.5px] text-muted-foreground">
+          <Text testID={`version-${a().id}`} class="text-[12px] text-muted-foreground">
             {cli()?.version ?? ""}
           </Text>
         </Hint>
@@ -680,7 +680,7 @@ function CliTag(props: { agent: Agent }) {
             class={`group h-5 flex-row items-center gap-1 rounded-full border border-border bg-card pl-[6px] pr-2 hover:bg-pill active:scale-96 ${MOTION}`}
           >
             <Icon name={busy() ? "sync" : "bottom"} color="muted-foreground" size={11} />
-            <Text class={`text-[11.5px] font-medium ${busy() ? "text-muted-foreground" : "text-fg-2 group-hover:text-foreground"} ${MOTION}`}>
+            <Text class={`text-[12px] font-medium ${busy() ? "text-muted-foreground" : "text-fg-2 group-hover:text-foreground"} ${MOTION}`}>
               {busy() ? tr("Updating…") : tr("Update to %s", cli()?.latest ?? "")}
             </Text>
           </View>
@@ -749,7 +749,7 @@ export function AgentRow(props: { agent: Agent; first: boolean; inFold?: boolean
                 class={`group h-[22px] flex-row items-center gap-1 rounded-full border border-border bg-card px-2 hover:bg-pill ${MOTION}`}
               >
                 <Icon name="eye-s" color="muted-foreground" hover="foreground" size={12} />
-                <Text class={`text-[11.5px] text-fg-2 group-hover:text-foreground ${MOTION}`}>{tr("Show")}</Text>
+                <Text class={`text-[12px] text-fg-2 group-hover:text-foreground ${MOTION}`}>{tr("Show")}</Text>
               </View>
             </Hint>
           </If>

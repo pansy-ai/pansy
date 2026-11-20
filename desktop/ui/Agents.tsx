@@ -23,7 +23,7 @@ function Lead() {
       else={
         <View testID="agents-welcome" class="mb-[2px] rounded-[12px] border border-border bg-card px-[18px] py-4">
           <Text class="mb-1 text-[14px] font-semibold text-foreground">{tr("Let your agents use the models you set up in pansy")}</Text>
-          <Text class="text-[12.5px] leading-[19px] text-muted-foreground">
+          <Text class="text-[13px] leading-[19px] text-muted-foreground">
             {tr("Switch an agent on and your models show up as the pansy provider in its own model list, to change in the agent. Or pick a model right here: the agent is connected and starts on it. Switch it off and it goes back to how it was.")}
           </Text>
           <If when={providers().length === 0}>
@@ -41,9 +41,9 @@ function Lead() {
         </View>
       }
     >
-      <Text testID="agents-lead" class="mx-[2px] mb-[2px] text-[12.5px] text-fg-2">
+      <Text testID="agents-lead" class="mx-[2px] mb-[2px] text-[13px] text-fg-2">
         {said()[0]}
-        <Text class="font-semibold text-foreground">pansy</Text>
+        <Text class="font-medium text-foreground">pansy</Text>
         {said()[1] ?? ""}
       </Text>
     </If>
@@ -82,7 +82,7 @@ function Updates() {
       <View testID="agents-updates" class="mx-[2px] min-h-[22px] flex-row items-center gap-[10px]">
         <View class="min-w-0 flex-1">
           <Hint text={whole()}>
-            <Text testID="agents-updates-said" class={`text-[12.5px] line-clamp-1 ${failed() ? "text-destructive" : "text-fg-2"}`}>
+            <Text testID="agents-updates-said" class={`text-[13px] line-clamp-1 ${failed() ? "text-destructive" : "text-fg-2"}`}>
               {said()}
             </Text>
           </Hint>
@@ -105,7 +105,7 @@ function Updates() {
               class={`group h-5 flex-row items-center gap-1 rounded-full border border-border bg-card pl-[6px] pr-2 hover:bg-pill active:scale-96 ${MOTION}`}
             >
               <Icon name={running() ? "sync" : "bottom"} color="muted-foreground" size={11} />
-              <Text class={`text-[11.5px] font-medium ${running() ? "text-muted-foreground" : "text-fg-2 group-hover:text-foreground"} ${MOTION}`}>{running() ? tr("Updating…") : tr("Update all")}</Text>
+              <Text class={`text-[12px] font-medium ${running() ? "text-muted-foreground" : "text-fg-2 group-hover:text-foreground"} ${MOTION}`}>{running() ? tr("Updating…") : tr("Update all")}</Text>
             </View>
           </Hint>
         </If>
@@ -208,7 +208,7 @@ function Installs() {
     <If when={items().length > 0}>
       <View testID="agents-install" class="mt-[2px]">
         <View role="button" testID="agents-install-head" onPress={() => installsOpen.set(!open())} class="flex-row items-center gap-[5px] self-start px-[2px] py-1">
-          <Text class="text-[12.5px] text-muted-foreground hover:text-foreground">{tr("Install another agent (%d)", items().length)}</Text>
+          <Text class="text-[13px] text-muted-foreground hover:text-foreground">{tr("Install another agent (%d)", items().length)}</Text>
           <Icon name={open() ? "chev-up" : "chev-down"} color="muted-foreground" size={10} />
         </View>
         <If when={open()}>
@@ -231,9 +231,9 @@ function Installs() {
                   <Each of={a().install} key={(c) => c.command}>
                     {(c) => (
                       <View class="h-[22px] flex-row items-center gap-2">
-                        <Text class="w-[84px] text-[11.5px] text-muted-foreground">{via(c().via)}</Text>
+                        <Text class="w-[84px] text-[12px] text-muted-foreground">{via(c().via)}</Text>
                         <View class="min-w-0 flex-1 rounded-[5px] bg-pill px-[6px] py-[2px]">
-                          <Text class="font-mono text-[11.5px] text-fg-2 line-clamp-1">{c().command}</Text>
+                          <Text class="font-mono text-[12px] text-fg-2 line-clamp-1">{c().command}</Text>
                         </View>
                         <CopyButton label={tr("%s's install command", a().name)} onCopy={() => Clipboard.writeText(c().command).then(() => toast(tr("Copied")))} />
                       </View>
@@ -270,7 +270,7 @@ export function AgentsPage() {
           <If when={here().length === 0}>
             <View class="items-center gap-1 px-5 py-9">
               <Text class="text-[13px] font-medium text-foreground">{tr("No agents found")}</Text>
-              <Text class="text-center text-[12.5px] text-muted-foreground">{tr("Install Claude Code, Codex, Gemini CLI, OpenCode… and pansy will list them here.")}</Text>
+              <Text class="text-center text-[13px] text-muted-foreground">{tr("Install Claude Code, Codex, Gemini CLI, OpenCode… and pansy will list them here.")}</Text>
             </View>
           </If>
           <If when={here().length > 0}>

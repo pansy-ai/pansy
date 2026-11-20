@@ -117,7 +117,7 @@ export function RoutingRequests() {
           when={list().length > 0}
           else={
             <View class="gap-1 px-3 pb-[18px] pt-[14px]">
-              <Text class="text-[13px] font-semibold text-foreground">{tr("No request yet")}</Text>
+              <Text class="text-[13px] font-medium text-foreground">{tr("No request yet")}</Text>
               <Text class="text-[12px] leading-[19px] text-muted-foreground">
                 {routeDay() === null ? tr("Requests through pansy show here as they happen, the last 60 of them.") : tr("Nothing went through pansy this day.")}
               </Text>
@@ -215,7 +215,7 @@ function ProviderFared(props: { provider: Provider; rows: Fared[] }) {
     <View testID={`routing-acts-${props.provider.id}`}>
       <View class="flex-row items-center gap-[7px] px-3 pb-1 pt-2">
         <Logo name={providerLogo(props.provider.preset)} size={14} />
-        <Text class="shrink text-[12px] font-semibold text-foreground line-clamp-1">{props.provider.name}</Text>
+        <Text class="shrink text-[12px] font-medium text-foreground line-clamp-1">{props.provider.name}</Text>
       </View>
       <Each of={props.rows} key={(r) => r.key}>
         {(r) => <FaredRow row={r()} />}

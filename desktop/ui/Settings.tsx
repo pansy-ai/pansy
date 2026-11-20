@@ -153,8 +153,8 @@ function RuleList() {
             {(r, i) => (
               <View class={`h-[30px] flex-row items-center gap-2 pl-[9px] pr-[4px] ${i() === 0 ? "" : "border-t border-line-2"}`}>
                 <Badge label={r().kind === "prefix" ? tr("Prefix") : tr("Regex")} />
-                <Mono text={r().value} class="flex-1 text-[11.5px] line-clamp-1" />
-                <Text class="font-mono text-[10.5px] text-faint">{`{{${r().name || "CUSTOM"}_…}}`}</Text>
+                <Mono text={r().value} class="flex-1 text-[12px] line-clamp-1" />
+                <Text class="font-mono text-[11px] text-faint">{`{{${r().name || "CUSTOM"}_…}}`}</Text>
                 <IconButton icon="x" size={11} label={tr("Remove")} onPress={() => void setMasking({ rules: rules().filter((_, j) => j !== i()) })} />
               </View>
             )}
@@ -188,7 +188,7 @@ function TryIt() {
       <Input multiline value={text()} onChange={run} mono placeholder={tr("My key is sk-proj-… and my email is ada@example.com")} testID="mask-try" />
       <If when={out()}>
         <View class="gap-[6px] rounded-[8px] bg-card-2 px-[10px] py-2" style={{ boxShadow: `inset 0 0 0 1px ${token("line-2")}` }}>
-          <Text testID="mask-try-out" class="font-mono text-[11.5px] text-foreground">
+          <Text testID="mask-try-out" class="font-mono text-[12px] text-foreground">
             {out()?.text ?? ""}
           </Text>
           <Text class="text-[11px] text-muted-foreground">
@@ -247,7 +247,7 @@ function SidebarPages() {
                 <Icon name="tick" color="primary" size={12} />
               </If>
             </View>
-            <Text class="text-[12.5px] text-foreground">{NAMES()[p()]}</Text>
+            <Text class="text-[13px] text-foreground">{NAMES()[p()]}</Text>
           </MenuItem>
         )}
       </Each>
@@ -828,13 +828,13 @@ export function SettingsPage() {
       </Each>
       <If when={cards().length === 0}>
         <View class="items-center py-10">
-          <Text testID="settings-none" class="text-[12.5px] text-muted-foreground">
+          <Text testID="settings-none" class="text-[13px] text-muted-foreground">
             {tr("No setting has “%s”", settingsQuery().trim())}
           </Text>
         </View>
       </If>
       <If when={!settingsQuery().trim() && settingsTab() === "privacy" && !maskingOn()}>
-        <Text class="px-1 text-[11.5px] text-faint">{tr("Masking is off: requests go to vendors as they are.")}</Text>
+        <Text class="px-1 text-[12px] text-faint">{tr("Masking is off: requests go to vendors as they are.")}</Text>
       </If>
     </PageView>
   );

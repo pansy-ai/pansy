@@ -23,7 +23,7 @@ export function QuestionDialog() {
           </>
         }
       >
-        <Text class="text-[12.5px] text-fg-2">{question()?.description ?? ""}</Text>
+        <Text class="text-[13px] text-fg-2">{question()?.description ?? ""}</Text>
       </Modal>
     </If>
   );
@@ -39,7 +39,7 @@ export function Toasts() {
             style={{ boxShadow: SHADOW.pop() }}
             class={`max-w-[520px] rounded-[10px] border px-[14px] py-[8px] ${t().tone === "error" ? "border-destructive/40 bg-destructive-soft" : "border-border bg-popover"}`}
           >
-            <Text testID="toast" class={`text-[12.5px] ${t().tone === "error" ? "text-destructive" : "text-foreground"}`}>
+            <Text testID="toast" class={`text-[13px] ${t().tone === "error" ? "text-destructive" : "text-foreground"}`}>
               {t().message}
             </Text>
           </View>

@@ -145,8 +145,8 @@ function Dot(props: { kind: PromptKind | "free" }) {
 function TipRow(props: { name: string; value: string; on?: boolean }) {
   return (
     <View class="flex-row gap-3">
-      <Text class={`max-w-[240px] flex-1 text-[11.5px] line-clamp-1 ${props.on ? "font-semibold text-foreground" : "text-fg-2"}`}>{props.name}</Text>
-      <Text class="text-[11.5px] text-muted-foreground">{props.value}</Text>
+      <Text class={`max-w-[240px] flex-1 text-[12px] line-clamp-1 ${props.on ? "font-medium text-foreground" : "text-fg-2"}`}>{props.name}</Text>
+      <Text class="text-[12px] text-muted-foreground">{props.value}</Text>
     </View>
   );
 }
@@ -159,15 +159,15 @@ function TileTip(props: { tile: Tile; p: Drawn }) {
     <Tooltip class="min-w-[180px] max-w-[320px] gap-1 rounded-[8px] bg-popover px-[10px] py-[8px]" style={{ boxShadow: SHADOW.pop() }}>
       <View class="flex-row items-center gap-[6px]">
         <Dot kind={t().kind} />
-        <Text class="flex-1 text-[12px] font-semibold text-foreground line-clamp-1">
+        <Text class="flex-1 text-[12px] font-medium text-foreground line-clamp-1">
           {t().kind === "free" ? tr("Free space") : t().it ? itemName(t().kind as PromptKind, t().it!) : partName(t().kind as PromptKind)}
         </Text>
         <If when={!t().it}>
-          <Text class="text-[11.5px] text-muted-foreground">{t().kind === "free" ? fmtK(t().tokens) : `${fmtK(t().tokens)} · ${share(t().tokens)}`}</Text>
+          <Text class="text-[12px] text-muted-foreground">{t().kind === "free" ? fmtK(t().tokens) : `${fmtK(t().tokens)} · ${share(t().tokens)}`}</Text>
         </If>
       </View>
       <If when={t().it}>
-        <Text class="text-[11.5px] text-muted-foreground">{`${partName(t().kind as PromptKind)} · ${tr("%s tokens", fmtK(t().it!.tokens))} · ${share(t().it!.tokens)}`}</Text>
+        <Text class="text-[12px] text-muted-foreground">{`${partName(t().kind as PromptKind)} · ${tr("%s tokens", fmtK(t().it!.tokens))} · ${share(t().it!.tokens)}`}</Text>
       </If>
       <If when={!t().it && t().kind !== "free"}>
         <Each of={t().its.slice(0, 5)} key={(it) => `${it.tag ?? ""}${it.name}`}>
@@ -252,11 +252,11 @@ function TileView(props: { tile: Tile; p: Drawn; focus: Focus; onFocus: (f: Focu
         <Hatch />
       </If>
       <If when={!bare()}>
-        <Text class={`text-[11.5px] line-clamp-1 ${free() ? "font-medium text-muted-foreground" : "font-semibold"}`} style={free() ? undefined : { color: mix(ink(), token("foreground"), 0.72) }}>
+        <Text class={`text-[12px] line-clamp-1 ${free() ? "font-medium text-muted-foreground" : "font-medium"}`} style={free() ? undefined : { color: mix(ink(), token("foreground"), 0.72) }}>
           {name()}
         </Text>
         <If when={!low()}>
-          <Text class="text-[10.5px] line-clamp-1" style={{ color: free() ? token("muted-foreground") : mix(ink(), token("muted-foreground"), 0.42) }}>
+          <Text class="text-[11px] line-clamp-1" style={{ color: free() ? token("muted-foreground") : mix(ink(), token("muted-foreground"), 0.42) }}>
             {value()}
           </Text>
         </If>
@@ -371,7 +371,7 @@ function LookSwitch(props: { onFocus: (f: Focus) => void }) {
               style={on() ? { boxShadow: SHADOW.thumb() } : undefined}
               tooltip={
                 <Tooltip class="rounded-[7px] bg-popover px-[9px] py-[6px]" style={{ boxShadow: SHADOW.pop() }}>
-                  <Text class="text-[11.5px] text-foreground">{l().name()}</Text>
+                  <Text class="text-[12px] text-foreground">{l().name()}</Text>
                 </Tooltip>
               }
             >
@@ -459,7 +459,7 @@ function Stat(props: { label: string; badge?: JSX.Element; big: string; unit: st
   return (
     <View class={`min-w-0 flex-1 gap-[3px] ${props.dim ? "opacity-60" : ""}`}>
       <View class="flex-row items-center gap-[6px]">
-        <Text class="text-[11.5px] text-muted-foreground">{props.label}</Text>
+        <Text class="text-[12px] text-muted-foreground">{props.label}</Text>
         {props.badge}
       </View>
       <View class="flex-row items-baseline gap-[5px]">
@@ -473,7 +473,7 @@ function Stat(props: { label: string; badge?: JSX.Element; big: string; unit: st
           <View class="h-full bg-success" style={{ width: `${(props.bar ?? 0) * 100}%` }} />
         </View>
       </If>
-      <Text class="text-[11.5px] text-fg-2 line-clamp-1">{props.sub}</Text>
+      <Text class="text-[12px] text-fg-2 line-clamp-1">{props.sub}</Text>
     </View>
   );
 }
@@ -503,7 +503,7 @@ function Top(props: { r: Route; p: Drawn; series: Point[] }) {
         badge={
           <If when={w()}>
             <View testID="context-health" class={`rounded-full px-[6px] ${HEALTH[health(full())].bg}`}>
-              <Text class={`text-[10.5px] font-semibold ${HEALTH[health(full())].ink}`}>{HEALTH[health(full())].word()}</Text>
+              <Text class={`text-[11px] font-medium ${HEALTH[health(full())].ink}`}>{HEALTH[health(full())].word()}</Text>
             </View>
           </If>
         }
@@ -538,7 +538,7 @@ function Legend(props: { p: Drawn; onFocus: (f: Focus) => void }) {
               onMouseLeave={() => props.onFocus(null)}
               tooltip={
                 <Tooltip class="max-w-[280px] rounded-[7px] bg-popover px-[9px] py-[6px]" style={{ boxShadow: SHADOW.pop() }}>
-                  <Text class="text-[11.5px] text-foreground">{PART_NOTES[k()]()}</Text>
+                  <Text class="text-[12px] text-foreground">{PART_NOTES[k()]()}</Text>
                 </Tooltip>
               }
             >
@@ -590,7 +590,7 @@ function Contents(props: { p: Drawn; onFocus: (f: Focus) => void }) {
   const listedRows = () => (more() ? rows() : rows().slice(0, 8));
   return (
     <View class="gap-[6px]">
-      <Text class="text-[11.5px] text-muted-foreground">{tr("Contents")}</Text>
+      <Text class="text-[12px] text-muted-foreground">{tr("Contents")}</Text>
       <Scroll horizontal class="flex-row">
         <Segs
           small
@@ -618,7 +618,7 @@ function Contents(props: { p: Drawn; onFocus: (f: Focus) => void }) {
               </If>
               <If when={tagOf(x().it)}>
                 <View class="rounded-[4px] bg-card-2 px-[4px]">
-                  <Text class="font-mono text-[10.5px] text-fg-2">{tagOf(x().it)}</Text>
+                  <Text class="font-mono text-[11px] text-fg-2">{tagOf(x().it)}</Text>
                 </View>
               </If>
               <View class="flex-1" />
@@ -659,7 +659,7 @@ function Head(props: { r: Route; p: Drawn }) {
     <View class="min-h-[24px] flex-row items-center gap-[10px]">
       <View role="button" testID="context-fold" onPress={() => contextShut.set(!contextShut())} class="flex-row items-center gap-[5px]">
         <Icon name={contextShut() ? "chevron-right" : "chevron-down"} color="muted-foreground" size={12} />
-        <Text class="text-[12px] font-semibold text-foreground">{tr("Context window")}</Text>
+        <Text class="text-[12px] font-medium text-foreground">{tr("Context window")}</Text>
       </View>
       <If when={contextShut()}>
         <Text testID="context-short" class="text-[12px] text-fg-2">
@@ -681,7 +681,7 @@ function Head(props: { r: Route; p: Drawn }) {
         class="flex-row items-center gap-[5px] rounded-full bg-pill px-[7px] py-px"
         tooltip={
           <Tooltip class="max-w-[300px] rounded-[7px] bg-popover px-[9px] py-[6px]" style={{ boxShadow: SHADOW.pop() }}>
-            <Text class="text-[11.5px] text-foreground">{state().tip()}</Text>
+            <Text class="text-[12px] text-foreground">{state().tip()}</Text>
           </Tooltip>
         }
       >
@@ -717,9 +717,9 @@ export function ContextCard(props: { route?: Route }) {
             <View class="flex-1" />
             <If when={series().length > 1}>
               <View class="min-w-0 max-w-[360px] flex-1 flex-row items-center gap-[8px]">
-                <Text class="text-[11.5px] text-muted-foreground">{tr("This session")}</Text>
+                <Text class="text-[12px] text-muted-foreground">{tr("This session")}</Text>
                 <Spark series={series()} at={r()!.id} window={p()!.window} ink={inkOf("chat")} />
-                <Text class="text-[11.5px] text-muted-foreground">{trn(series().length, "1 request", "%d requests", series().length)}</Text>
+                <Text class="text-[12px] text-muted-foreground">{trn(series().length, "1 request", "%d requests", series().length)}</Text>
               </View>
             </If>
           </View>

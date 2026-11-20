@@ -114,7 +114,7 @@ function Section(props: { label: string; testID: string; children?: JSX.Element 
 function Unroll(props: { label: string; open: boolean; onPress: () => void; testID: string }) {
   return (
     <View role="button" testID={props.testID} onPress={props.onPress} class={`group h-[26px] flex-row items-center gap-[5px] rounded-[6px] px-[7px] hover:bg-pill ${MOTION}`}>
-      <Text class={`text-[12.5px] text-muted-foreground group-hover:text-foreground ${MOTION}`}>{props.open ? tr("Hide") : props.label}</Text>
+      <Text class={`text-[13px] text-muted-foreground group-hover:text-foreground ${MOTION}`}>{props.open ? tr("Hide") : props.label}</Text>
       <Icon name={props.open ? "chev-up" : "chev-down"} color="muted-foreground" hover="foreground" size={10} />
     </View>
   );
@@ -130,7 +130,7 @@ function Head(props: { lead: JSX.Element; title: string; sub?: string; end?: JSX
           {props.title}
         </Text>
         <If when={props.sub}>
-          <Text class="text-[12.5px] text-muted-foreground line-clamp-1">{props.sub}</Text>
+          <Text class="text-[13px] text-muted-foreground line-clamp-1">{props.sub}</Text>
         </If>
       </View>
       {props.end}
@@ -154,7 +154,7 @@ function AgentsLine() {
               end={
                 <View class="flex-row items-center gap-[5px]">
                   <Icon name="tick" color="success" size={12} />
-                  <Text class="text-[12.5px] font-medium text-success">{tr("Ready")}</Text>
+                  <Text class="text-[13px] font-medium text-success">{tr("Ready")}</Text>
                 </View>
               }
             />
@@ -189,7 +189,7 @@ function AgentsLine() {
                       <Logo name={agentLogo(a().id)} size={16} />
                       <Text class="w-[120px] text-[13px] text-foreground line-clamp-1">{a().name}</Text>
                       <View class="min-w-0 flex-1 rounded-[5px] bg-pill px-[6px] py-[2px]">
-                        <Text class="font-mono text-[11.5px] text-fg-2 line-clamp-1">{a().install[0].command}</Text>
+                        <Text class="font-mono text-[12px] text-fg-2 line-clamp-1">{a().install[0].command}</Text>
                       </View>
                       <CopyButton label={tr("%s's install command", a().name)} onCopy={() => Clipboard.writeText(a().install[0].command).then(() => toast(tr("Copied")))} />
                     </Row>
@@ -234,9 +234,9 @@ function ProvidersLine() {
                       <Logo name={logoNamed(o().item.icon)} size={16} />
                       <View class="min-w-0 flex-1">
                         <Text class="text-[13px] text-foreground line-clamp-1">{o().item.name}</Text>
-                        <Text class="text-[11.5px] text-muted-foreground line-clamp-1">{[o().item.host, `${o().source.name} · ${o().item.from}`].filter(Boolean).join(" · ")}</Text>
+                        <Text class="text-[12px] text-muted-foreground line-clamp-1">{[o().item.host, `${o().source.name} · ${o().item.from}`].filter(Boolean).join(" · ")}</Text>
                       </View>
-                      <Text class="font-mono text-[11.5px] text-muted-foreground">{o().item.key}</Text>
+                      <Text class="font-mono text-[12px] text-muted-foreground">{o().item.key}</Text>
                     </Row>
                   )}
                 </Each>
@@ -274,7 +274,7 @@ function ProjectsLine() {
                     <Row first={i() === 0} testID={`welcome-project-${baseName(p().path)}`}>
                       <View class="min-w-0 flex-1">
                         <Text class="text-[13px] text-foreground line-clamp-1">{baseName(p().path)}</Text>
-                        <Text class="text-[11.5px] text-muted-foreground line-clamp-1">{tilde(p().path)}</Text>
+                        <Text class="text-[12px] text-muted-foreground line-clamp-1">{tilde(p().path)}</Text>
                       </View>
                       <Text class="text-[12px] text-muted-foreground">{trn(p().sessions, "%d session", "%d sessions", p().sessions)}</Text>
                     </Row>
@@ -316,10 +316,10 @@ export function WelcomePage() {
             testID="welcome-start"
             class={`h-[34px] flex-row items-center rounded-[8px] bg-primary px-4 hover:brightness-108 active:scale-96 disabled:opacity-40 ${MOTION}`}
           >
-            <Text class="text-[13.5px] font-medium text-primary-foreground">{n() ? trn(n(), "Import %d provider and start", "Import %d providers and start", n()) : tr("Start")}</Text>
+            <Text class="text-[14px] font-medium text-primary-foreground">{n() ? trn(n(), "Import %d provider and start", "Import %d providers and start", n()) : tr("Start")}</Text>
           </BaseButton>
         </View>
-        <Text class="mt-10 text-[11.5px] text-muted-foreground">{tr("Everything runs on this computer: your keys, prompts and replies go only to the providers you pick.")}</Text>
+        <Text class="mt-10 text-[12px] text-muted-foreground">{tr("Everything runs on this computer: your keys, prompts and replies go only to the providers you pick.")}</Text>
       </View>
     </Scroll>
   );

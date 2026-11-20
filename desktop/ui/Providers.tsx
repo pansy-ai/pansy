@@ -231,7 +231,7 @@ function EndpointList(props: { endpoints: Endpoints }) {
     <Each of={props.endpoints} key={(e) => e.protocol}>
       {(e) => (
         <View class="h-[22px] flex-row items-center gap-3">
-          <Text class="w-[64px] text-[11.5px] text-muted-foreground">{PROTOCOL_NAMES[e().protocol]}</Text>
+          <Text class="w-[68px] text-[12px] text-muted-foreground">{PROTOCOL_NAMES[e().protocol]}</Text>
           <Mono text={e().baseUrl} class="flex-1 line-clamp-1" />
         </View>
       )}
@@ -260,7 +260,7 @@ function KeyState(props: { provider: Provider }) {
       >
         <Dot tone={p().enabled ? "on" : "off"} />
         <If when={on().length === 1} else={<Text class="text-[12px] text-muted-foreground">{tr("%d keys", on().length)}</Text>}>
-          <Mono text={on()[0]?.masked ?? ""} class="text-[11.5px] text-muted-foreground" />
+          <Mono text={on()[0]?.masked ?? ""} class="text-[12px] text-muted-foreground" />
         </If>
       </If>
     </View>
@@ -291,7 +291,7 @@ function Item(props: { icon: IconName; label: string; onSelect: () => void; disa
       class="h-[28px] flex-row items-center gap-[9px] rounded-[7px] px-2 hover:bg-pill focus:bg-pill disabled:opacity-40"
     >
       <Icon name={props.icon} color="fg-2" size={13} />
-      <Text class="text-[12.5px] text-foreground">{props.label}</Text>
+      <Text class="text-[13px] text-foreground">{props.label}</Text>
     </MenuItem>
   );
 }
@@ -360,7 +360,7 @@ function ProviderRow(props: { provider: Provider; first: boolean }) {
           </If>
         </Who>
         <If when={hits().length > 0}>
-          <Text class="text-[11.5px] text-primary line-clamp-1">{tr("Serves %s", hits().join(", "))}</Text>
+          <Text class="text-[12px] text-primary line-clamp-1">{tr("Serves %s", hits().join(", "))}</Text>
         </If>
       </View>
       <View class="flex-row items-center gap-1">
@@ -497,8 +497,8 @@ function AddSection() {
       <If when={subs().length > 0}>
         <View testID="add-subscriptions" class="gap-1 pb-2">
           <View class="flex-row items-baseline gap-2 px-[6px] pb-1 pt-2">
-            <Text class="text-[13px] font-semibold text-foreground">{tr("Subscriptions")}</Text>
-            <Text class="text-[11.5px] text-faint">{tr("sign in, no key")}</Text>
+            <Text class="text-[13px] font-medium text-foreground">{tr("Subscriptions")}</Text>
+            <Text class="text-[12px] text-faint">{tr("sign in, no key")}</Text>
           </View>
           <View class="flex-row flex-wrap">
             <Each of={subs()} key={(x) => x.kind}>
@@ -511,8 +511,8 @@ function AddSection() {
         {(k) => (
           <View class="gap-1 pb-2">
             <View class="flex-row items-baseline gap-2 px-[6px] pb-1 pt-2">
-              <Text class="text-[13px] font-semibold text-foreground">{k().title}</Text>
-              <Text class="text-[11.5px] text-faint">{k().note}</Text>
+              <Text class="text-[13px] font-medium text-foreground">{k().title}</Text>
+              <Text class="text-[12px] text-faint">{k().note}</Text>
             </View>
             <View class="flex-row flex-wrap">
               <Each of={rows(k().kind)} key={(r) => r.preset.id}>
@@ -524,7 +524,7 @@ function AddSection() {
       </Each>
       <If when={subs().length === 0 && kinds().every((k) => rows(k.kind).length === 0)}>
         <View testID="preset-none" class="flex-row flex-wrap items-center px-[6px] py-2">
-          <Text class="text-[12.5px] text-muted-foreground">{tr("Nothing called “%s”.", query().trim())} </Text>
+          <Text class="text-[13px] text-muted-foreground">{tr("Nothing called “%s”.", query().trim())} </Text>
           <TextButton label={tr("Add it as a custom provider")} tone="link" onPress={() => chosen.set("custom")} />
         </View>
       </If>
@@ -592,7 +592,7 @@ function AddPreset(props: { preset: Preset }) {
       aside={
         <View class="flex-row items-center gap-2">
           <If when={p().note}>
-            <Text class="text-[11.5px] text-muted-foreground line-clamp-1">{trCore(p().note)}</Text>
+            <Text class="text-[12px] text-muted-foreground line-clamp-1">{trCore(p().note)}</Text>
           </If>
           <If when={website()}>
             <TextButton label={`${hostOf(website())} ↗`} tone="link" onPress={() => void openUrl(website())} />
@@ -778,7 +778,7 @@ function Keys(props: { provider: Provider }) {
         {(a, i) => (
           <Row first={i() === 0} testID={`key-${p().id}-${a().id}`} class="min-h-[36px] py-[4px] pl-[10px] pr-[6px]">
             <Mono text={a().masked} class={a().enabled ? "" : "text-faint"} />
-            <Text class="flex-1 text-[11.5px] text-muted-foreground line-clamp-1">{a().display}</Text>
+            <Text class="flex-1 text-[12px] text-muted-foreground line-clamp-1">{a().display}</Text>
             <IconButton
               icon="globe"
               label={a().proxy ? tr("This key's proxy: %s", a().proxy) : tr("A proxy for this key")}
@@ -808,7 +808,7 @@ function Keys(props: { provider: Provider }) {
       </Each>
       <If when={p().accounts.some((a) => a.id === proxyOf())}>
         <View class="gap-1 border-t border-line-2 px-[10px] py-2">
-          <Text class="text-[11.5px] text-muted-foreground">
+          <Text class="text-[12px] text-muted-foreground">
             {tr("A proxy for %s alone, over the provider's: an HTTP or SOCKS address, direct for none, empty for the provider's.", p().accounts.find((a) => a.id === proxyOf())?.masked ?? "")}
           </Text>
           <SavedInput
@@ -849,7 +849,7 @@ function SignIns(props: { provider: Provider }) {
         {(a, i) => (
           <Row first={i() === 0} testID={`account-${p().id}-${a().id}`} class="min-h-[40px] py-[4px] pl-[10px] pr-[6px]">
             <View class="min-w-0 flex-1 gap-[1px]">
-              <Text class={`text-[12.5px] line-clamp-1 ${a().enabled ? "text-foreground" : "text-faint"}`}>{a().display}</Text>
+              <Text class={`text-[13px] line-clamp-1 ${a().enabled ? "text-foreground" : "text-faint"}`}>{a().display}</Text>
               <Text class="text-[11px] text-muted-foreground line-clamp-1">{[a().signIn?.plan, where(a())].filter(Boolean).join(" · ")}</Text>
             </View>
             <If when={kind() === "gemini-cli"}>
@@ -939,7 +939,7 @@ function SignInModal(props: { kind: SubscriptionKind }) {
       testID="sign-in-modal"
       title={tr("Sign in to %s", sub().name)}
       icon={<Logo name={logoNamed(sub().icon)} size={18} />}
-      aside={<Text class="text-[11.5px] text-muted-foreground line-clamp-1">{sub().note}</Text>}
+      aside={<Text class="text-[12px] text-muted-foreground line-clamp-1">{sub().note}</Text>}
       onClose={close}
       foot={
         <>
@@ -1162,7 +1162,7 @@ function Editor(props: { provider: Provider }) {
       aside={
         <View class="flex-row items-center gap-2">
           <If when={p().note}>
-            <Text class="text-[11.5px] text-muted-foreground line-clamp-1">{trCore(p().note)}</Text>
+            <Text class="text-[12px] text-muted-foreground line-clamp-1">{trCore(p().note)}</Text>
           </If>
           <If when={site()}>
             <TextButton label={`${hostOf(site())} ↗`} tone="link" onPress={() => void openUrl(site())} />
@@ -1274,7 +1274,7 @@ function Editor(props: { provider: Provider }) {
           <Each of={["chat", "responses", "anthropic", "gemini"] as Protocol[]} key={(x) => x}>
             {(protocol) => (
               <View class="flex-row items-center gap-3">
-                <Text class="w-[64px] text-[11.5px] text-muted-foreground">{PROTOCOL_NAMES[protocol()]}</Text>
+                <Text class="w-[68px] text-[12px] text-muted-foreground">{PROTOCOL_NAMES[protocol()]}</Text>
                 <View class="flex-1">
                   <SavedInput
                     value={p().endpoints.find((e) => e.protocol === protocol())?.baseUrl ?? ""}
@@ -1388,7 +1388,7 @@ function ImportModal(props: { only?: string[] }) {
         </>
       }
     >
-      <If when={sources()} else={<Text class="text-[12.5px] text-muted-foreground">{failed() || tr("Reading other apps…")}</Text>}>
+      <If when={sources()} else={<Text class="text-[13px] text-muted-foreground">{failed() || tr("Reading other apps…")}</Text>}>
         <Text class="text-[12px] text-muted-foreground">{tr("pansy reads these apps' settings and changes nothing in them. Pick the providers to bring over.")}</Text>
         <View class="flex-row flex-wrap gap-[6px]">
           <Each of={sources()!} key={(s) => s.id}>
@@ -1405,8 +1405,8 @@ function ImportModal(props: { only?: string[] }) {
                     style={{ opacity: there() ? 1 : 0.55 }}
                   >
                     <Logo name={logoNamed(APP_LOGOS[s().id])} size={14} />
-                    <Text class="text-[12.5px] text-foreground">{s().name}</Text>
-                    <Text class="text-[11.5px] text-faint">{there() ? String(n()) : "–"}</Text>
+                    <Text class="text-[13px] text-foreground">{s().name}</Text>
+                    <Text class="text-[12px] text-faint">{there() ? String(n()) : "–"}</Text>
                   </View>
                 </Hint>
               );
@@ -1435,7 +1435,7 @@ function ImportSourceView(props: {
     <View testID={`import-source-${s().id}`} class="gap-2">
       <View class="flex-row items-center gap-2">
         <Logo name={logoNamed(APP_LOGOS[s().id])} size={16} />
-        <Text class="text-[13px] font-semibold text-foreground">{s().name}</Text>
+        <Text class="text-[13px] font-medium text-foreground">{s().name}</Text>
         <Code text={s().path} class="min-w-0 shrink" />
         <View class="flex-1" />
         <If when={mine().length > 0}>
@@ -1452,13 +1452,13 @@ function ImportSourceView(props: {
         </If>
       </View>
       <If when={!s().found}>
-        <Text class="text-[12.5px] text-muted-foreground">{tr("Not found on this computer")}</Text>
+        <Text class="text-[13px] text-muted-foreground">{tr("Not found on this computer")}</Text>
       </If>
       <If when={s().found && s().error}>
-        <Text class="text-[12.5px] text-destructive">{s().error ?? ""}</Text>
+        <Text class="text-[13px] text-destructive">{s().error ?? ""}</Text>
       </If>
       <If when={s().found && !s().error && s().items.length === 0}>
-        <Text class="text-[12.5px] text-muted-foreground">{tr("No providers in it")}</Text>
+        <Text class="text-[13px] text-muted-foreground">{tr("No providers in it")}</Text>
       </If>
       <If when={s().items.length > 0}>
         <List>
@@ -1503,7 +1503,7 @@ function ImportRow(props: { source: ImportSource; item: ImportItem; first: boole
         <View class="flex-row items-center gap-2">
           <Text class="min-w-0 shrink text-[13px] font-medium text-foreground line-clamp-1">{it().name || it().ref}</Text>
           <If when={it().from}>
-            <Text class="text-[11.5px] text-faint line-clamp-1">{it().from}</Text>
+            <Text class="text-[12px] text-faint line-clamp-1">{it().from}</Text>
           </If>
         </View>
         <Text class="text-[12px] text-muted-foreground line-clamp-1">{sub()}</Text>
@@ -1623,7 +1623,7 @@ function LinkModal(props: { link: string }) {
         </>
       }
     >
-      <If when={v()} else={<Text class="text-[12.5px] text-muted-foreground">{tr("Reading the link…")}</Text>}>
+      <If when={v()} else={<Text class="text-[13px] text-muted-foreground">{tr("Reading the link…")}</Text>}>
         <If
           when={!v()!.error}
           else={
@@ -1657,7 +1657,7 @@ function LinkModal(props: { link: string }) {
             <Each of={v()!.endpoints} key={(e) => e.protocol}>
               {(e) => (
                 <View class="flex-row items-center gap-3">
-                  <Text class="w-[64px] text-[11.5px] text-muted-foreground">{PROTOCOL_NAMES[e().protocol]}</Text>
+                  <Text class="w-[68px] text-[12px] text-muted-foreground">{PROTOCOL_NAMES[e().protocol]}</Text>
                   <Mono text={e().url} class="flex-1" />
                 </View>
               )}
@@ -1819,7 +1819,7 @@ export function ProvidersPage() {
           </If>
         </If>
         <If when={words().length > 0 && listed(true).length + listed(false).length === 0}>
-          <Text testID="provider-none" class="px-[6px] text-[12.5px] text-muted-foreground">
+          <Text testID="provider-none" class="px-[6px] text-[13px] text-muted-foreground">
             {tr("No provider matches “%s”", finding().trim())}
           </Text>
         </If>

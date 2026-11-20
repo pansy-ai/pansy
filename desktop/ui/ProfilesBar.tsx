@@ -59,7 +59,7 @@ function ChipAct(props: { profile: string; action: "save" | "delete"; shown: boo
       class={`${on() ? "h-5 items-center justify-center rounded-[10px] bg-destructive-soft px-[7px]" : "h-5 w-5 items-center justify-center rounded-full hover:bg-[#7f7f7f]/20 hover:opacity-100"} ${MOTION}`}
       style={{ opacity: on() ? 1 : props.shown ? 0.6 : 0 }}
     >
-      <Text class={on() ? "text-[11.5px] text-destructive" : "text-[13px] leading-[14px] text-primary"}>
+      <Text class={on() ? "text-[12px] text-destructive" : "text-[13px] leading-[14px] text-primary"}>
         {on() ? (props.action === "save" ? tr("Overwrite?") : tr("Delete?")) : props.action === "save" ? "↻" : "×"}
       </Text>
     </View>
@@ -80,7 +80,7 @@ function Chip(props: { profile: Profile }) {
     >
       <View role="button" testID={`profile-use-${name()}`} onPress={() => openProfile.set(open() ? null : name())} class="h-full flex-row items-center pl-[13px] pr-[2px]">
         <If when={props.profile.active}>
-          <Text class="-ml-[2px] mr-1 text-[11px] font-semibold text-primary">✓</Text>
+          <Text class="-ml-[2px] mr-1 text-[11px] font-medium text-primary">✓</Text>
         </If>
         <Text class={`text-[13px] ${lit() ? "text-primary" : "text-foreground"}`}>{name()}</Text>
       </View>
@@ -116,9 +116,9 @@ function Detail(props: { profile: Profile }) {
           when={renaming()}
           else={
             <>
-              <Text class="min-w-0 shrink text-[12px] font-semibold text-foreground line-clamp-1">{p().name}</Text>
+              <Text class="min-w-0 shrink text-[12px] font-medium text-foreground line-clamp-1">{p().name}</Text>
               <If when={p().active}>
-                <Text class="text-[11.5px] text-primary">{tr("In use")}</Text>
+                <Text class="text-[12px] text-primary">{tr("In use")}</Text>
               </If>
               <View class="flex-1" />
             </>
@@ -143,7 +143,7 @@ function Detail(props: { profile: Profile }) {
         </View>
       </View>
       <If when={held().length === 0}>
-        <Text class="mt-2 text-[11.5px] text-muted-foreground">{tr("No agent settings saved")}</Text>
+        <Text class="mt-2 text-[12px] text-muted-foreground">{tr("No agent settings saved")}</Text>
       </If>
       <Each of={held()} key={([id]) => id}>
         {(entry) => (
@@ -205,7 +205,7 @@ export function ProfilesBar(props: { stacked?: boolean }) {
           {(p) => <Chip profile={p()} />}
         </Each>
         <If when={profiles().length === 0 && !naming()}>
-          <Text class="text-[11.5px] leading-[30px] text-muted-foreground line-clamp-1">{tr("none yet · save the setup to switch back in one click")}</Text>
+          <Text class="text-[12px] leading-[30px] text-muted-foreground line-clamp-1">{tr("none yet · save the setup to switch back in one click")}</Text>
         </If>
         <If when={open()}>
           <Detail profile={open()!} />
