@@ -36,7 +36,7 @@ export function ChangesList(props: { changes: FileChange[]; back?: boolean }) {
         {(f) => (
           <View class="overflow-hidden rounded-[8px] border border-border bg-card">
             <View class="flex-row items-center gap-2 border-b border-line-2 px-[10px] py-[6px]">
-              <Text class="min-w-0 flex-1 font-mono text-[11.5px] text-foreground line-clamp-1">{f().path}</Text>
+              <Text class="min-w-0 flex-1 font-mono text-[12px] text-foreground line-clamp-1">{f().path}</Text>
               <If when={f().created}>
                 <Text class="text-[11px] text-muted-foreground">{props.back ? tr("removed") : tr("new file")}</Text>
               </If>
@@ -45,8 +45,8 @@ export function ChangesList(props: { changes: FileChange[]; back?: boolean }) {
               <Each of={lines(f(), !!props.back)} key={(l, i) => `${i}${l.text}`}>
                 {(l) => (
                   <View class="flex-row items-start gap-2 px-[10px] py-[1px]">
-                    <Text class={`w-[10px] text-center font-mono text-[11.5px] leading-[18px] ${l().tone === "del" ? "text-destructive" : "text-success"}`}>{l().op}</Text>
-                    <Text class={`min-w-0 flex-1 font-mono text-[11.5px] leading-[18px] ${l().tone === "del" ? "text-destructive" : "text-success"}`}>{l().text}</Text>
+                    <Text class={`w-[10px] text-center font-mono text-[12px] leading-[18px] ${l().tone === "del" ? "text-destructive" : "text-success"}`}>{l().op}</Text>
+                    <Text class={`min-w-0 flex-1 font-mono text-[12px] leading-[18px] ${l().tone === "del" ? "text-destructive" : "text-success"}`}>{l().text}</Text>
                   </View>
                 )}
               </Each>
@@ -88,12 +88,12 @@ export function DisconnectDialog(props: { where: "main" | "panel"; width?: numbe
           </>
         }
       >
-        <Text class="text-[12.5px] text-fg-2">{tr("%s goes back to how it was before it was connected; these are the places put back.", a()?.name ?? "")}</Text>
+        <Text class="text-[13px] text-fg-2">{tr("%s goes back to how it was before it was connected; these are the places put back.", a()?.name ?? "")}</Text>
         <If when={ch() !== undefined} else={<Text class="py-[14px] text-[12px] text-muted-foreground">{tr("Reading what changes…")}</Text>}>
           <If
             when={(ch() ?? []).length > 0}
             else={
-              <Text class="text-[12.5px] text-fg-2">
+              <Text class="text-[13px] text-fg-2">
                 {tr("pansy takes out everything it wrote into %s's config — its endpoint, key and models — and puts back the settings %s had before. pansy's providers stay as they are.", a()?.name ?? "", a()?.name ?? "")}
               </Text>
             }
@@ -158,7 +158,7 @@ function ManageAgents() {
           </>
         }
       >
-        <Text class="text-[12.5px] text-fg-2">{tr("Hiding only changes this list, not an agent's connection or settings. Unhidden agents may stay under Not set up.")}</Text>
+        <Text class="text-[13px] text-fg-2">{tr("Hiding only changes this list, not an agent's connection or settings. Unhidden agents may stay under Not set up.")}</Text>
         <Input value={search()} onChange={(v) => search.set(v)} placeholder={tr("Search agents…")} testID="manage-search" />
         <View class="-mx-[7px] flex-row flex-wrap">
           <TextButton label={tr("Select search results")} onPress={() => set([...selected(), ...matching().map((a) => a.id)])} />
@@ -172,7 +172,7 @@ function ManageAgents() {
           <TextButton label={tr("Select unconnected agents")} onPress={() => set(matching().filter((a) => !a.connected).map((a) => a.id))} />
           <TextButton label={tr("Clear selection")} onPress={() => selected.set([])} />
         </View>
-        <Text class="text-[11.5px] text-muted-foreground">{trn(selected().length, "%d agent selected", "%d agents selected", selected().length)}</Text>
+        <Text class="text-[12px] text-muted-foreground">{trn(selected().length, "%d agent selected", "%d agents selected", selected().length)}</Text>
         <View class="overflow-hidden rounded-[10px] border border-border">
           <Each of={matching()} key={(a) => a.id}>
             {(a, i) => (
@@ -186,13 +186,13 @@ function ManageAgents() {
                 indicator={has(a().id) ? <Icon name="tick" color="primary-foreground" size={10} /> : undefined}
               >
                 <Logo name={agentLogo(a().id)} size={16} />
-                <Text class="flex-1 text-[12.5px] text-foreground">{a().name}</Text>
-                <Text class="text-[11.5px] text-muted-foreground">{hiddenIds().includes(a().id) ? tr("Hidden") : tr("Not hidden")}</Text>
+                <Text class="flex-1 text-[13px] text-foreground">{a().name}</Text>
+                <Text class="text-[12px] text-muted-foreground">{hiddenIds().includes(a().id) ? tr("Hidden") : tr("Not hidden")}</Text>
               </Checkbox>
             )}
           </Each>
           <If when={matching().length === 0}>
-            <Text class="px-3 py-[10px] text-[12.5px] text-muted-foreground">{tr("No matching agents")}</Text>
+            <Text class="px-3 py-[10px] text-[13px] text-muted-foreground">{tr("No matching agents")}</Text>
           </If>
         </View>
         <If when={result()}>
@@ -273,11 +273,11 @@ function PickModels() {
           </>
         }
       >
-        <Text class="text-[12.5px] text-fg-2">{tr("Models turned off don't show in %s's model picker; other agents can still use them, and one still answers when %s asks for it by name.", a()?.name ?? "", a()?.name ?? "")}</Text>
+        <Text class="text-[13px] text-fg-2">{tr("Models turned off don't show in %s's model picker; other agents can still use them, and one still answers when %s asks for it by name.", a()?.name ?? "", a()?.name ?? "")}</Text>
         <View class="flex-row items-center gap-3">
           <View class="flex-1 gap-[2px]">
             <Text class="text-[13px] text-foreground">{tr("Only models I pick")}</Text>
-            <Text class="text-[11.5px] text-muted-foreground">{tr("Off: new models are shown. On: only the models ticked here are shown, and a model added later, of any provider, stays off until you tick it")}</Text>
+            <Text class="text-[12px] text-muted-foreground">{tr("Off: new models are shown. On: only the models ticked here are shown, and a model added later, of any provider, stays off until you tick it")}</Text>
           </View>
           <Switch checked={only()} label={tr("Only models I pick")} testID="pick-only" onChange={setOnly} />
         </View>
@@ -287,7 +287,7 @@ function PickModels() {
             {(c, i) => (
               <View testID={`pick-row-${c().id}`} class={`h-[38px] flex-row items-center gap-[10px] px-3 hover:bg-card-2 ${i() === 0 ? "" : "border-t border-line-2"}`}>
                 <ChoiceLogo id={c().id} size={16} />
-                <Text class="text-[12.5px] text-foreground line-clamp-1">{c().name}</Text>
+                <Text class="text-[13px] text-foreground line-clamp-1">{c().name}</Text>
                 <Text class="min-w-0 flex-1 font-mono text-[11px] text-muted-foreground line-clamp-1">{c().id}</Text>
                 <If when={held().includes(c().id)}>
                   <Hint text={tr("%s is set to it, so it stays", a()?.name ?? "")}>
@@ -299,7 +299,7 @@ function PickModels() {
             )}
           </Each>
           <If when={matching().length === 0}>
-            <Text class="px-3 py-[10px] text-[12.5px] text-muted-foreground">{choices().length === 0 ? tr("No models") : tr("No model matches “%s”", search().trim())}</Text>
+            <Text class="px-3 py-[10px] text-[13px] text-muted-foreground">{choices().length === 0 ? tr("No models") : tr("No model matches “%s”", search().trim())}</Text>
           </If>
         </View>
       </Modal>

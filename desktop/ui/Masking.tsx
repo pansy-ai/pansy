@@ -98,8 +98,8 @@ function Summary() {
     <List testID="masking-summary">
       <View class="flex-row items-start gap-3 px-[16px] pt-[14px]">
         <View class="flex-1 gap-[2px]">
-          <Text class="text-[13.5px] font-semibold text-foreground">{tr("Kept from vendors")}</Text>
-          <Text class="text-[11.5px] text-muted-foreground">{tr("Masked on this computer before each request left it, and put back in each answer")}</Text>
+          <Text class="text-[14px] font-semibold text-foreground">{tr("Kept from vendors")}</Text>
+          <Text class="text-[12px] text-muted-foreground">{tr("Masked on this computer before each request left it, and put back in each answer")}</Text>
         </View>
         <TextButton
           label={tr("Settings › Privacy")}
@@ -128,17 +128,17 @@ function Summary() {
           <Text testID="masking-values" class="text-[30px] font-semibold text-foreground">
             {compact(sum()?.values ?? 0)}
           </Text>
-          <Text class="text-[11.5px] text-muted-foreground">{trn(sum()?.values ?? 0, "value masked", "values masked")}</Text>
+          <Text class="text-[12px] text-muted-foreground">{trn(sum()?.values ?? 0, "value masked", "values masked")}</Text>
         </View>
         <View class="gap-[2px] pb-[2px]">
           <Text class="text-[15px] font-semibold text-foreground">{compact(sum()?.distinct ?? 0)}</Text>
-          <Text class="text-[11.5px] text-muted-foreground">{tr("Different values")}</Text>
+          <Text class="text-[12px] text-muted-foreground">{tr("Different values")}</Text>
         </View>
         <View class="gap-[2px] pb-[2px]">
           <Text testID="masking-requests" class="text-[15px] font-semibold text-foreground">
             {compact(sum()?.requests ?? 0)}
           </Text>
-          <Text class="text-[11.5px] text-muted-foreground">{tr("Requests")}</Text>
+          <Text class="text-[12px] text-muted-foreground">{tr("Requests")}</Text>
         </View>
         <View class="flex-1 gap-1">
           <View class="h-[44px] flex-row items-end gap-[3px]">
@@ -147,8 +147,8 @@ function Summary() {
             </Each>
           </View>
           <View class="flex-row">
-            <Text class="flex-1 text-[10.5px] text-muted-foreground">{days()[0] ? dayLabel(days()[0]![0]) : ""}</Text>
-            <Text class="text-[10.5px] text-muted-foreground">{tr("Today")}</Text>
+            <Text class="flex-1 text-[11px] text-muted-foreground">{days()[0] ? dayLabel(days()[0]![0]) : ""}</Text>
+            <Text class="text-[11px] text-muted-foreground">{tr("Today")}</Text>
           </View>
         </View>
       </View>
@@ -173,7 +173,7 @@ function Summary() {
               </View>
               <View class="h-px w-[38px] bg-border" />
             </View>
-            <Text class="text-[10.5px] text-muted-foreground">{tr("pansy masked these on this computer")}</Text>
+            <Text class="text-[11px] text-muted-foreground">{tr("pansy masked these on this computer")}</Text>
           </View>
           <View class="flex-1 items-end gap-[5px]">
             <Each of={vendorRows()} key={(p) => p[0]}>
@@ -232,7 +232,7 @@ function RecordRow(props: { record: MaskRecord; first: boolean }) {
   const r = () => props.record;
   return (
     <Row first={props.first} testID={`masking-record-${r().key}`} onPress={() => maskOpen.set(r().key)} class="min-h-[40px] py-[6px] hover:bg-pill/60">
-      <Text class="w-[58px] text-[11.5px] text-muted-foreground">{timeOf(r().t)}</Text>
+      <Text class="w-[58px] text-[12px] text-muted-foreground">{timeOf(r().t)}</Text>
       <Logo name={agentLogo(r().agent ?? "")} size={14} />
       <Text class="text-[12px] text-fg-2">{agentName(r().agent ?? "other")}</Text>
       <Icon name="arrow-right" color="faint" size={11} />
@@ -300,10 +300,10 @@ function ByValue(props: { records: MaskRecord[] }) {
             <View class="w-[150px]">
               <Text class="text-[12px] text-foreground line-clamp-1">{kindLabel(x().v.k)}</Text>
             </View>
-            <Mono text={shapeOf(x().v)} class="w-[130px] text-[11.5px] text-fg-2" />
+            <Mono text={shapeOf(x().v)} class="w-[130px] text-[12px] text-fg-2" />
             <Icon name="arrow-right" color="faint" size={11} />
-            <Mono text={x().v.p} class="min-w-0 flex-1 text-[11.5px] text-muted-foreground line-clamp-1" />
-            <Text class="text-[11.5px] text-muted-foreground">{trn(x().requests, "%d request", "%d requests", x().requests)}</Text>
+            <Mono text={x().v.p} class="min-w-0 flex-1 text-[12px] text-muted-foreground line-clamp-1" />
+            <Text class="text-[12px] text-muted-foreground">{trn(x().requests, "%d request", "%d requests", x().requests)}</Text>
             <Text class="w-[36px] text-right text-[12px] font-medium text-foreground">{String(x().n)}</Text>
           </Row>
         )}
@@ -358,7 +358,7 @@ function Records() {
         />
         <View class="flex-row items-center gap-[5px] pl-1">
           <View class="h-[6px] w-[6px] rounded-full bg-success" />
-          <Text class="text-[11.5px] text-muted-foreground">{tr("Live")}</Text>
+          <Text class="text-[12px] text-muted-foreground">{tr("Live")}</Text>
         </View>
         <View class="flex-1" />
         <Each of={FILTERS().filter((f) => f.value === "all" || count(f.value) > 0)} key={(f) => f.value}>
@@ -369,7 +369,7 @@ function Records() {
               onPress={() => filter.set(f().value)}
               class={`h-[22px] flex-row items-center justify-center gap-[5px] rounded-full px-[9px] ${filter() === f().value ? "bg-accent" : "border border-border hover:bg-pill"}`}
             >
-              <Text class={`text-[11.5px] ${filter() === f().value ? "font-medium text-primary" : "text-fg-2"}`}>{f().label}</Text>
+              <Text class={`text-[12px] ${filter() === f().value ? "font-medium text-primary" : "text-fg-2"}`}>{f().label}</Text>
               <Text class="text-[11px] text-muted-foreground">{String(count(f().value))}</Text>
             </View>
           )}
@@ -379,7 +379,7 @@ function Records() {
         when={records().length > 0}
         else={
           <View class="items-center rounded-[12px] border border-dashed border-border px-6 py-8">
-            <Text testID="masking-none" class="text-[12.5px] text-muted-foreground">
+            <Text testID="masking-none" class="text-[13px] text-muted-foreground">
               {maskingOn() ? tr("Nothing masked in these days yet: requests with nothing to mask go as they are.") : tr("Nothing masked in these days.")}
             </Text>
           </View>
@@ -390,7 +390,7 @@ function Records() {
         </If>
       </If>
       <View class="flex-row items-center gap-2 px-1 pt-1">
-        <Text class="flex-1 text-[11.5px] text-faint">{tr("Kept on this computer for 30 days, without the values themselves")}</Text>
+        <Text class="flex-1 text-[12px] text-faint">{tr("Kept on this computer for 30 days, without the values themselves")}</Text>
         <If when={(masking()?.records.length ?? 0) > 0}>
           <TextButton label={tr("Clear records…")} tone="danger" testID="masking-clear" onPress={() => void clear()} />
         </If>
@@ -412,16 +412,16 @@ function Step(props: { n: number; title: string; detail?: string; tone?: "on" | 
     <View class="flex-row gap-[10px]">
       <View class="w-[20px] items-center">
         <View class={`h-[20px] w-[20px] items-center justify-center rounded-full ${look().box}`}>
-          <Text class={`text-[10.5px] font-semibold ${look().text}`}>{String(props.n)}</Text>
+          <Text class={`text-[11px] font-medium ${look().text}`}>{String(props.n)}</Text>
         </View>
         <If when={!props.last}>
           <View class="w-px flex-1 bg-border" />
         </If>
       </View>
       <View class="flex-1 gap-[1px] pb-[12px] pt-[1px]">
-        <Text class="text-[12.5px] font-medium text-foreground">{props.title}</Text>
+        <Text class="text-[13px] font-medium text-foreground">{props.title}</Text>
         <If when={props.detail}>
-          <Text class="text-[11.5px] text-muted-foreground">{props.detail ?? ""}</Text>
+          <Text class="text-[12px] text-muted-foreground">{props.detail ?? ""}</Text>
         </If>
       </View>
     </View>
@@ -468,11 +468,11 @@ function Detail() {
       <List class="px-[16px] pb-[4px] pt-[14px]">
         <View class="flex-row items-center gap-2 pb-3">
           <Logo name={agentLogo(rec().agent ?? "")} size={16} />
-          <Text class="text-[13px] font-semibold text-foreground">{agentName(rec().agent ?? "other")}</Text>
+          <Text class="text-[13px] font-medium text-foreground">{agentName(rec().agent ?? "other")}</Text>
           <Icon name="arrow-right" color="faint" size={11} />
           <Logo name={providerLogoOf(rec().provider ?? "")} size={16} />
-          <Text class="text-[13px] font-semibold text-foreground">{providerName(rec().provider ?? "")}</Text>
-          <Mono text={rec().model ?? ""} class="flex-1 text-[11.5px] text-muted-foreground line-clamp-1" />
+          <Text class="text-[13px] font-medium text-foreground">{providerName(rec().provider ?? "")}</Text>
+          <Mono text={rec().model ?? ""} class="flex-1 text-[12px] text-muted-foreground line-clamp-1" />
           <IconButton icon="chev-up" label={tr("Newer request")} disabled={at() <= 0} onPress={() => maskOpen.set(all()[at() - 1]!.key)} testID="masking-newer" />
           <IconButton icon="chev-down" label={tr("Older request")} disabled={at() >= all().length - 1} onPress={() => maskOpen.set(all()[at() + 1]!.key)} testID="masking-older" />
         </View>
@@ -529,18 +529,18 @@ function Detail() {
             {(c, i) => (
               <View class={`gap-[6px] px-[14px] py-[10px] ${i() === 0 ? "" : "border-t border-line-2"}`}>
                 <View class="flex-row items-center gap-2">
-                  <Mono text={c().path} class="flex-1 text-[10.5px] text-faint" />
-                  <Text class="text-[10.5px] text-muted-foreground">{trn(valuesIn(c()), "%d value", "%d values", valuesIn(c()))}</Text>
+                  <Mono text={c().path} class="flex-1 text-[11px] text-faint" />
+                  <Text class="text-[11px] text-muted-foreground">{trn(valuesIn(c()), "%d value", "%d values", valuesIn(c()))}</Text>
                 </View>
                 <View class="flex-row gap-3">
                   <If when={show() !== "after"}>
-                    <Text class="flex-1 font-mono text-[11.5px] text-fg-2">{c().before}</Text>
+                    <Text class="flex-1 font-mono text-[12px] text-fg-2">{c().before}</Text>
                   </If>
                   <If when={show() === "both"}>
                     <View class="w-px bg-line-2" />
                   </If>
                   <If when={show() !== "before"}>
-                    <Text class="flex-1 font-mono text-[11.5px] text-foreground">{c().after}</Text>
+                    <Text class="flex-1 font-mono text-[12px] text-foreground">{c().after}</Text>
                   </If>
                 </View>
               </View>
@@ -559,12 +559,12 @@ function Detail() {
             <View class={`gap-[6px] px-[14px] py-[10px] ${i() === 0 ? "" : "border-t border-line-2"}`}>
               <View class="flex-row items-center gap-[10px]">
                 <View class="w-[150px] flex-row items-center gap-[6px]">
-                  <Text class="text-[12.5px] font-medium text-foreground">{kindLabel(v().k)}</Text>
+                  <Text class="text-[13px] font-medium text-foreground">{kindLabel(v().k)}</Text>
                   <Text class="text-[11px] text-muted-foreground">{`×${v().n}`}</Text>
                 </View>
-                <Mono text={shapeOf(v())} class="w-[120px] text-[11.5px] text-fg-2" />
+                <Mono text={shapeOf(v())} class="w-[120px] text-[12px] text-fg-2" />
                 <Icon name="arrow-right" color="faint" size={11} />
-                <Mono text={v().a === "warn" ? tr("sent as written") : v().p} class="min-w-0 flex-1 text-[11.5px] line-clamp-1" />
+                <Mono text={v().a === "warn" ? tr("sent as written") : v().p} class="min-w-0 flex-1 text-[12px] line-clamp-1" />
                 <If when={v().a}>
                   <Badge label={v().a === "block" ? tr("Block") : tr("Warn")} tone={v().a === "block" ? "danger" : "warning"} />
                 </If>
@@ -578,7 +578,7 @@ function Detail() {
           )}
         </Each>
       </List>
-      <Text class="px-1 text-[11.5px] text-faint">
+      <Text class="px-1 text-[12px] text-faint">
         {tr("A value itself is in this computer's memory only, and gone once pansy restarts. The record on disk keeps its kind, length and first characters.")}
       </Text>
       </>
@@ -590,8 +590,8 @@ function Detail() {
 function Fact(props: { label: string; value: string; mono?: boolean }) {
   return (
     <View class="gap-[1px]">
-      <Text class="text-[10.5px] text-faint">{props.label}</Text>
-      <Text class={`text-[11.5px] text-fg-2 ${props.mono ? "font-mono" : ""}`}>{props.value}</Text>
+      <Text class="text-[11px] text-faint">{props.label}</Text>
+      <Text class={`text-[12px] text-fg-2 ${props.mono ? "font-mono" : ""}`}>{props.value}</Text>
     </View>
   );
 }

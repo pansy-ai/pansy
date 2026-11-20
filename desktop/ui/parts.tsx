@@ -189,7 +189,7 @@ export function Hint(props: { text: string; children: JSX.Element }) {
     <View
       tooltip={
         <Tooltip class="max-w-[320px] rounded-[7px] bg-popover px-[9px] py-[6px]" style={{ boxShadow: SHADOW.pop() }}>
-          <Text class="text-[11.5px] text-foreground">{props.text}</Text>
+          <Text class="text-[12px] text-foreground">{props.text}</Text>
         </Tooltip>
       }
     >
@@ -448,7 +448,7 @@ export function Dropdown<T extends string>(props: { options: { value: T; label: 
                 <Icon name="tick" color="primary" size={12} />
               </If>
             </View>
-            <Text class="text-[12.5px] text-foreground">{o().label}</Text>
+            <Text class="text-[13px] text-foreground">{o().label}</Text>
           </MenuItem>
         )}
       </Each>
@@ -468,7 +468,7 @@ export function Badge(props: { label: string; tone?: "default" | "accent" | "suc
     })[props.tone ?? "default"];
   return (
     <View class={`h-[14px] flex-row items-center rounded-[4px] px-[4px] ${look().box}`}>
-      <Text testID={props.testID} class={`text-[9px] font-semibold ${look().text}`}>
+      <Text testID={props.testID} class={`text-[9px] font-medium ${look().text}`}>
         {props.label}
       </Text>
     </View>
@@ -555,7 +555,7 @@ export function SettingRow(props: { title: string; description?: string; childre
             {props.badge}
           </View>
           <If when={props.description}>
-            <Text class="text-[11.5px] text-muted-foreground">{props.description ?? ""}</Text>
+            <Text class="text-[12px] text-muted-foreground">{props.description ?? ""}</Text>
           </If>
         </View>
         {props.children}
@@ -582,7 +582,7 @@ export function RowHead(props: { label?: string; note?: string; children?: JSX.E
 }
 
 export function Label(props: { text: string }) {
-  return <Text class="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">{props.text}</Text>;
+  return <Text class="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{props.text}</Text>;
 }
 
 /** A row's name and the muted line under it. */
@@ -596,7 +596,7 @@ export function Who(props: { name: string; sub?: string; children?: JSX.Element;
         {props.children}
       </View>
       <If when={props.sub}>
-        <Text testID={props.subTestID} class="text-[11.5px] text-muted-foreground line-clamp-1">
+        <Text testID={props.subTestID} class="text-[12px] text-muted-foreground line-clamp-1">
           {props.sub ?? ""}
         </Text>
       </If>
@@ -638,7 +638,7 @@ export function Input(props: {
         focused.set(false);
         props.onBlur?.();
       }}
-      class={`${props.multiline ? "min-h-[84px] py-[6px]" : "h-[26px]"} rounded-[7px] border bg-card px-[9px] text-[12.5px] text-foreground placeholder:text-faint ${props.mono ? "font-mono" : ""} ${focused() ? "border-primary" : "border-border"} ${props.class ?? ""}`}
+      class={`${props.multiline ? "min-h-[84px] py-[6px]" : "h-[26px]"} rounded-[7px] border bg-card px-[9px] text-[13px] text-foreground placeholder:text-faint ${props.mono ? "font-mono" : ""} ${focused() ? "border-primary" : "border-border"} ${props.class ?? ""}`}
       style={focused() ? { boxShadow: `0 0 0 3px ${token("accent")}` } : undefined}
     />
   );
@@ -656,7 +656,7 @@ export function FieldButton(props: { icon?: JSX.Element; value: string; empty?: 
         <Text class="mr-[1px] text-[11px] text-faint">{props.label ?? ""}</Text>
       </If>
       {props.icon}
-      <Text class={`flex-1 text-[12.5px] font-medium line-clamp-1 ${props.empty ? "text-muted-foreground" : "text-foreground"}`}>{props.value}</Text>
+      <Text class={`flex-1 text-[13px] font-medium line-clamp-1 ${props.empty ? "text-muted-foreground" : "text-foreground"}`}>{props.value}</Text>
       <Icon name="chev-down" color="faint" size={11} />
     </View>
   );
@@ -689,7 +689,7 @@ export function Modal(props: {
       <View testID={props.testID} style={{ width: props.width ?? 616, boxShadow: SHADOW.modal() }} class="max-h-full overflow-hidden rounded-[14px] border border-border bg-card">
         <View class="min-h-[50px] flex-row items-center gap-[9px] border-b border-line-2 px-[18px] py-3">
           {props.icon}
-          <Text class="flex-1 text-[13.5px] font-semibold text-foreground line-clamp-1">{props.title}</Text>
+          <Text class="flex-1 text-[14px] font-semibold text-foreground line-clamp-1">{props.title}</Text>
           {props.aside}
         </View>
         <Scroll class="min-h-0 shrink">
@@ -711,7 +711,7 @@ export function FormRow(props: { label: string; children?: JSX.Element; hint?: s
       <View class="min-w-0 flex-1 gap-[5px]">
         {props.children}
         <If when={props.hint}>
-          <Text class="text-[11.5px] text-muted-foreground">{props.hint ?? ""}</Text>
+          <Text class="text-[12px] text-muted-foreground">{props.hint ?? ""}</Text>
         </If>
       </View>
     </View>

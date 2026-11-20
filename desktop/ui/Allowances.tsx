@@ -49,10 +49,10 @@ function WindowLine(props: { window: AllowanceWindow }) {
   const w = () => props.window;
   return (
     <View class="h-[20px] flex-row items-center gap-[10px]">
-      <Text class="w-[150px] text-[11.5px] text-fg-2 line-clamp-1">{windowName(w().name)}</Text>
+      <Text class="w-[150px] text-[12px] text-fg-2 line-clamp-1">{windowName(w().name)}</Text>
       <If
         when={!w().unlimited}
-        else={<Text class="flex-1 text-[11.5px] text-muted-foreground">{tr("Unlimited")}</Text>}
+        else={<Text class="flex-1 text-[12px] text-muted-foreground">{tr("Unlimited")}</Text>}
       >
         <View class="h-[6px] flex-1 overflow-hidden rounded-full bg-pill">
           <View class={`h-full rounded-full ${ink(w().used)}`} style={{ width: `${Math.min(100, Math.max(w().used > 0 ? 2 : 0, w().used))}%` }} />
@@ -74,7 +74,7 @@ function AllowanceRow(props: { allowance: Allowance; first: boolean }) {
     <Row first={props.first} testID={`allowance-${a().provider}-${a().account}`} class="flex-col items-stretch gap-[6px] py-[9px]">
       <View class="flex-row items-center gap-2">
         <Logo name={logoNamed(provider()?.icon ?? a().provider)} size={15} />
-        <Text class="min-w-0 shrink text-[12.5px] font-medium text-foreground line-clamp-1">{`${provider()?.name ?? a().provider} · ${a().user}`}</Text>
+        <Text class="min-w-0 shrink text-[13px] font-medium text-foreground line-clamp-1">{`${provider()?.name ?? a().provider} · ${a().user}`}</Text>
         <If when={a().plan}>
           <Badge label={a().plan ?? ""} />
         </If>
@@ -87,16 +87,16 @@ function AllowanceRow(props: { allowance: Allowance; first: boolean }) {
         </If>
       </View>
       <If when={a().error}>
-        <Text class="text-[11.5px] text-muted-foreground line-clamp-2">{tr("Couldn't be read: %s", a().error ?? "")}</Text>
+        <Text class="text-[12px] text-muted-foreground line-clamp-2">{tr("Couldn't be read: %s", a().error ?? "")}</Text>
       </If>
       <If when={!a().error && a().windows.length === 0}>
-        <Text class="text-[11.5px] text-muted-foreground">{tr("Its vendor says no allowance")}</Text>
+        <Text class="text-[12px] text-muted-foreground">{tr("Its vendor says no allowance")}</Text>
       </If>
       <Each of={a().windows} key={(w) => w.name}>
         {(w) => <WindowLine window={w()} />}
       </Each>
       <If when={a().note}>
-        <Text class="text-[11.5px] text-muted-foreground">{a().note ?? ""}</Text>
+        <Text class="text-[12px] text-muted-foreground">{a().note ?? ""}</Text>
       </If>
     </Row>
   );
@@ -122,14 +122,14 @@ function BalanceRow(props: { balance: Balance; first: boolean }) {
     <Row first={props.first} testID={`balance-${b().provider}-${b().account}`} class="flex-col items-stretch gap-[6px] py-[9px]">
       <View class="flex-row items-center gap-2">
         <Logo name={providerLogo(preset())} size={15} />
-        <Text class="min-w-0 shrink text-[12.5px] font-medium text-foreground line-clamp-1">{b().user ? `${b().name} · ${b().user}` : b().name}</Text>
+        <Text class="min-w-0 shrink text-[13px] font-medium text-foreground line-clamp-1">{b().user ? `${b().name} · ${b().user}` : b().name}</Text>
         <View class="flex-1" />
         <If when={!b().error && b().amount}>
-          <Text class="font-mono text-[12.5px] font-semibold text-foreground">{b().amount ?? ""}</Text>
+          <Text class="font-mono text-[13px] font-medium text-foreground">{b().amount ?? ""}</Text>
         </If>
       </View>
       <If when={b().error}>
-        <Text class="text-[11.5px] text-muted-foreground line-clamp-2">{tr("Couldn't be read: %s", b().error ?? "")}</Text>
+        <Text class="text-[12px] text-muted-foreground line-clamp-2">{tr("Couldn't be read: %s", b().error ?? "")}</Text>
       </If>
       <Each of={b().windows ?? []} key={(w) => w.name}>
         {(w) => <WindowLine window={w()} />}
@@ -211,10 +211,10 @@ function Ring(props: { window: AllowanceWindow }) {
             }}
           />
           <View class="absolute inset-0 items-center justify-center">
-            <Text class={`text-[9.5px] font-semibold tabular-nums ${full() ? "text-foreground" : "text-fg-2"}`}>{`${shown()}%`}</Text>
+            <Text class={`text-[10px] font-medium tabular-nums ${full() ? "text-foreground" : "text-fg-2"}`}>{`${shown()}%`}</Text>
           </View>
         </View>
-        <Text class="max-w-[44px] text-[9.5px] text-muted-foreground line-clamp-1">{ringName(props.window.name)}</Text>
+        <Text class="max-w-[44px] text-[10px] text-muted-foreground line-clamp-1">{ringName(props.window.name)}</Text>
       </View>
     </Hint>
   );
@@ -225,7 +225,7 @@ function Card(props: { testID: string; edge: string; who: string; say: string; w
   return (
     <View testID={props.testID} class="flex-row items-center gap-3 rounded-[11px] bg-card px-3 py-[10px]" style={{ boxShadow: props.edge }}>
       <View class="min-w-0 flex-1 gap-1">
-        <Text class="text-[12.5px] text-foreground line-clamp-1">{props.who}</Text>
+        <Text class="text-[13px] text-foreground line-clamp-1">{props.who}</Text>
         <If when={props.say}>
           <Text class={`text-[11px] line-clamp-2 tabular-nums ${props.warn ? "text-warning" : "text-muted-foreground"}`}>{props.say}</Text>
         </If>
@@ -265,7 +265,7 @@ function Mode() {
         testID="allowances-mode"
         class={`group h-[15px] items-center justify-center rounded-full bg-pill px-[6px] hover:bg-pill-hover ${MOTION}`}
       >
-        <Text class={`text-[9.5px] font-semibold uppercase tracking-[0.04em] text-muted-foreground group-hover:text-foreground ${MOTION}`}>{left() ? tr("Left") : tr("Used")}</Text>
+        <Text class={`text-[10px] font-medium uppercase tracking-[0.04em] text-muted-foreground group-hover:text-foreground ${MOTION}`}>{left() ? tr("Left") : tr("Used")}</Text>
       </BaseButton>
     </Hint>
   );
@@ -278,10 +278,10 @@ function Head(props: { name: string; logo?: string | null; count?: number; note?
       <If when={props.logo !== undefined}>
         <Logo name={providerLogo(props.logo)} size={14} />
       </If>
-      <Text class="min-w-0 shrink text-[10.5px] font-semibold uppercase tracking-[0.07em] text-faint line-clamp-1">{props.name}</Text>
+      <Text class="min-w-0 shrink text-[11px] font-medium uppercase tracking-[0.07em] text-faint line-clamp-1">{props.name}</Text>
       <If when={(props.count ?? 0) > 1}>
         <View class="h-[15px] min-w-[16px] items-center justify-center rounded-full bg-pill px-[5px]">
-          <Text class="text-[9.5px] font-semibold text-muted-foreground tabular-nums">{String(props.count ?? "")}</Text>
+          <Text class="text-[10px] font-medium text-muted-foreground tabular-nums">{String(props.count ?? "")}</Text>
         </View>
       </If>
       <View class="flex-1" />

@@ -91,7 +91,7 @@ function Source(props: { route?: Route }) {
         <If when={r()}>
           <View class="h-[7px] w-[7px] rounded-full" style={{ backgroundColor: hueOf(r()!.agent) }} />
         </If>
-        <Text testID="routing-agent" class="shrink text-[13px] font-semibold text-foreground line-clamp-1">
+        <Text testID="routing-agent" class="shrink text-[13px] font-medium text-foreground line-clamp-1">
           {r() ? agentName(r()!.agent) : tr("your agent")}
         </Text>
       </View>
@@ -127,11 +127,11 @@ function Hub(props: { route?: Route }) {
       <View testID="routing-hub-logo" class="mb-[3px]" style={{ rotate: turn }}>
         <Icon name="pansy" color="foreground" size={26} />
       </View>
-      <Text class="text-[13px] font-semibold text-foreground">pansy</Text>
+      <Text class="text-[13px] font-medium text-foreground">pansy</Text>
       <Text class="max-w-full text-[11px] text-muted-foreground line-clamp-1">{where()}</Text>
       <If when={chip()}>
         <View role="button" testID="routing-way" onPress={() => go("groups")} class="mt-[5px] rounded-full bg-foreground px-2 py-px">
-          <Text class="text-[10.5px] font-semibold text-card">{`${chip() ?? ""} ›`}</Text>
+          <Text class="text-[11px] font-medium text-card">{`${chip() ?? ""} ›`}</Text>
         </View>
       </If>
     </View>
@@ -380,7 +380,7 @@ function StepRow(props: { step: Step }) {
         <View class={`rounded-full ${BULLET[k()]}`} />
       </View>
       <View class="min-w-0 flex-1">
-        <Text class={`text-[12.5px] leading-[18px] ${k() === "why" ? "text-foreground" : k() === "aside" ? "text-muted-foreground" : "text-fg-2"}`}>{props.step.text}</Text>
+        <Text class={`text-[13px] leading-[18px] ${k() === "why" ? "text-foreground" : k() === "aside" ? "text-muted-foreground" : "text-fg-2"}`}>{props.step.text}</Text>
       </View>
     </View>
   );
@@ -391,8 +391,8 @@ function Swatch(props: { color: string; name: string; value: string; small?: boo
   return (
     <View class="flex-row items-center gap-[5px]">
       <View class="h-[7px] w-[7px] rounded-[2px]" style={{ backgroundColor: props.color }} />
-      <Text class={props.small ? "text-[11.5px] text-muted-foreground" : "text-[12.5px] text-fg-2"}>{props.name}</Text>
-      <Text class={props.small ? "text-[11.5px] text-fg-2" : "text-[12.5px] text-fg-2"}>{props.value}</Text>
+      <Text class={props.small ? "text-[12px] text-muted-foreground" : "text-[13px] text-fg-2"}>{props.name}</Text>
+      <Text class={props.small ? "text-[12px] text-fg-2" : "text-[13px] text-fg-2"}>{props.value}</Text>
     </View>
   );
 }
@@ -418,7 +418,7 @@ function TimeSpent(props: { t: Timing }) {
       </View>
       <View class="min-w-0 flex-1 gap-[5px]" style={{ maxWidth: 560 }}>
         <View class="flex-row flex-wrap items-center gap-x-3 gap-y-1">
-          <Text class="text-[12.5px] text-fg-2">{tr("Where the time went")}</Text>
+          <Text class="text-[13px] text-fg-2">{tr("Where the time went")}</Text>
           <Swatch color={own()} name="pansy" value={dur(props.t.pansy)} />
           <If when={props.t.before > 0}>
             <Swatch color={tries()} name={tr("earlier tries")} value={dur(props.t.before)} />
@@ -447,7 +447,7 @@ function Log(props: { route: Route }) {
   return (
     <View testID="routing-log" class="mt-[10px] border-t border-border pt-[10px]">
       <View class="flex-row items-center">
-        <Text class="flex-1 text-[12px] font-semibold text-foreground">
+        <Text class="flex-1 text-[12px] font-medium text-foreground">
           {routePicked() === null ? tr("How the last request was routed") : tr("How this request was routed")}
         </Text>
         <TextButton label={tr("View usage")} testID="routing-usage" onPress={() => go("usage")} />
@@ -481,10 +481,10 @@ function Card() {
       >
         <View class="gap-[3px]">
           <Text testID="routing-what" class="text-[13px] text-muted-foreground">
-            <Text class="font-semibold text-foreground">{top()?.name ?? tr("Waiting for a request")}</Text>
+            <Text class="font-medium text-foreground">{top()?.name ?? tr("Waiting for a request")}</Text>
             {top()?.rest ?? ""}
           </Text>
-          <Text class="text-[12.5px] leading-[18px] text-fg-2">
+          <Text class="text-[13px] leading-[18px] text-fg-2">
             {top()?.mode ?? tr("Send one from any agent connected to pansy and it plays here as it happens: who routing put first and why, each try, and what each answered.")}
           </Text>
         </View>

@@ -363,7 +363,7 @@ export function UpdatePill(props: { testID: string; hide?: boolean; always?: boo
             class={`group h-[22px] flex-row items-center gap-1 rounded-full bg-accent pl-[7px] pr-[9px] hover:bg-primary active:scale-96 disabled:opacity-60 ${MOTION}`}
           >
             <Icon name="up" color="primary" hover={busy() ? undefined : "primary-foreground"} size={11} />
-            <Text class={`text-[11.5px] font-semibold text-primary ${busy() ? "" : "group-hover:text-primary-foreground"} ${MOTION}`}>{said()}</Text>
+            <Text class={`text-[12px] font-medium text-primary ${busy() ? "" : "group-hover:text-primary-foreground"} ${MOTION}`}>{said()}</Text>
           </BaseButton>
         </Hint>
       </View>

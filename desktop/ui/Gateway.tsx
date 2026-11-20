@@ -38,8 +38,8 @@ function ModelRow(props: { choice: Choice; first: boolean }) {
         </If>
       </View>
       <View class="min-w-0 flex-1 gap-[1px]">
-        <Mono text={c().id} class="text-[12.5px] line-clamp-1" />
-        <Text class="text-[11.5px] text-muted-foreground line-clamp-1">
+        <Mono text={c().id} class="text-[13px] line-clamp-1" />
+        <Text class="text-[12px] text-muted-foreground line-clamp-1">
           {c().group ? [tr("%s · routing group", c().name), ...(members().length ? [members().map((p) => p.name).join(", ")] : [])].join(" · ") : `${c().name} · ${c().provider}`}
         </Text>
       </View>
@@ -75,11 +75,11 @@ export function GatewayPage() {
           <View class="min-w-0 flex-1 gap-[1px]">
             <View class="flex-row items-center gap-[7px]">
               <Text class="text-[13px] font-medium text-foreground">{tr("Gateway")}</Text>
-              <Text testID="gateway-status" class={`text-[11.5px] ${g()?.running ? "text-success" : "text-warning"}`}>
+              <Text testID="gateway-status" class={`text-[12px] ${g()?.running ? "text-success" : "text-warning"}`}>
                 {g()?.running ? (g()?.own ? tr("running") : tr("running in another pansy")) : tr("stopped")}
               </Text>
             </View>
-            <Text class="text-[11.5px] text-muted-foreground">{[trn(choices().length, "%d model", "%d models", choices().length), trn(routed(), "%d agent routed through it", "%d agents routed through it", routed()), tr("four APIs, one URL")].join(" · ")}</Text>
+            <Text class="text-[12px] text-muted-foreground">{[trn(choices().length, "%d model", "%d models", choices().length), trn(routed(), "%d agent routed through it", "%d agents routed through it", routed()), tr("four APIs, one URL")].join(" · ")}</Text>
           </View>
           <PillButton label={tr("Restart gateway")} testID="gateway-restart" disabled={isBusy("gateway")} onPress={() => void act("gateway", () => Gateway.restart()).then(() => loadGateway())} />
         </Row>
@@ -130,11 +130,11 @@ export function GatewayPage() {
               />
               <TextButton label={tr("Undo")} onPress={() => port.set(null)} />
             </If>
-            <Text class="flex-1 text-[11.5px] text-muted-foreground">{tr("Agents connected before a change are connected again with the new port.")}</Text>
+            <Text class="flex-1 text-[12px] text-muted-foreground">{tr("Agents connected before a change are connected again with the new port.")}</Text>
           </Row>
         </If>
       </List>
-      <Text class="px-1 text-[11.5px] text-faint">
+      <Text class="px-1 text-[12px] text-faint">
         {tr("Other computers send the gateway key as their API key once Share on the local network is on. Agents on this computer need none.")}
       </Text>
       <If when={(g()?.resting.length ?? 0) > 0}>

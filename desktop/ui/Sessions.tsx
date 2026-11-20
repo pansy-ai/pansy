@@ -220,9 +220,9 @@ function AgentTabs() {
 function Line(props: { k: string; v?: string; copy?: string; mono?: boolean; children?: JSX.Element; testID?: string }) {
   return (
     <View class="min-h-[22px] flex-row items-center gap-3">
-      <Text class="w-[92px] text-[11.5px] text-muted-foreground">{props.k}</Text>
+      <Text class="w-[92px] text-[12px] text-muted-foreground">{props.k}</Text>
       <If when={props.v !== undefined}>
-        <Text testID={props.testID} class={`min-w-0 flex-1 text-[12px] text-foreground ${props.mono ? "font-mono text-[11.5px]" : ""}`}>
+        <Text testID={props.testID} class={`min-w-0 flex-1 text-[12px] text-foreground ${props.mono ? "font-mono text-[12px]" : ""}`}>
           {props.v ?? ""}
         </Text>
       </If>
@@ -305,7 +305,7 @@ function Details(props: { s: Session }) {
               {(a, i) => (
                 <Row first={i() === 0} class="min-h-[38px] py-[5px]" onPress={() => openTalk(s(), a())} testID={`subagent-${a().id}`}>
                   <View class="min-w-0 flex-1 gap-[1px]">
-                    <Text class="text-[12.5px] text-foreground line-clamp-1">{a().title || a().id}</Text>
+                    <Text class="text-[13px] text-foreground line-clamp-1">{a().title || a().id}</Text>
                     <Text class="text-[11px] text-muted-foreground line-clamp-1">
                       {[a().kind, ago(a().last), trn(a().messages, "%d message", "%d messages", a().messages), compact(totalOf(a().tokens))].filter(Boolean).join(" · ")}
                     </Text>
@@ -342,15 +342,15 @@ function SessionRow(props: { s: Session; first: boolean }) {
                 <Badge label={tr("Running")} tone="success" />
               </If>
             </View>
-            <Text class="text-[11.5px] text-muted-foreground line-clamp-1">{sub()}</Text>
+            <Text class="text-[12px] text-muted-foreground line-clamp-1">{sub()}</Text>
             <If when={hitOf(s())}>
-              <Text class="text-[11.5px] text-fg-2 line-clamp-2">{hitOf(s()) ?? ""}</Text>
+              <Text class="text-[12px] text-fg-2 line-clamp-2">{hitOf(s()) ?? ""}</Text>
             </If>
           </View>
         </View>
         <View class="w-[78px] items-end">
-          <Text class="text-[13px] font-semibold text-foreground">{compact(totalOf(s().tokens))}</Text>
-          <Text class="text-[10.5px] text-muted-foreground">{tr("tokens")}</Text>
+          <Text class="text-[13px] font-medium text-foreground">{compact(totalOf(s().tokens))}</Text>
+          <Text class="text-[11px] text-muted-foreground">{tr("tokens")}</Text>
         </View>
         <If when={s().resume}>
           <TextButton label={tr("Resume")} onPress={() => void copy(s().resume)} testID={`session-copy-resume-${s().id}`} />
@@ -389,10 +389,10 @@ function Folder(props: { path: string; list: Session[]; index: number }) {
       >
         <Icon name={open() ? "chev-down" : "chev-right"} color="muted-foreground" size={10} />
         <Icon name="folder" color="fg-2" size={13} />
-        <Text class="text-[12.5px] font-medium text-foreground line-clamp-1">{props.path ? baseName(props.path) : tr("No folder")}</Text>
-        <Text class="shrink text-[11.5px] text-faint line-clamp-1">{props.path ? whereOf(props.path) : ""}</Text>
+        <Text class="text-[13px] font-medium text-foreground line-clamp-1">{props.path ? baseName(props.path) : tr("No folder")}</Text>
+        <Text class="shrink text-[12px] text-faint line-clamp-1">{props.path ? whereOf(props.path) : ""}</Text>
         <View class="flex-1" />
-        <Text class="text-[11.5px] text-muted-foreground">{String(props.list.length)}</Text>
+        <Text class="text-[12px] text-muted-foreground">{String(props.list.length)}</Text>
       </View>
       <If when={open()}>
         <List>
@@ -418,7 +418,7 @@ function SessionList() {
           : tr("Read from the agents' own files on this computer. Delete moves a session's files into pansy's trash.")}
       </Text>
       <If when={found()?.busy && found()?.query === needle()}>
-        <Text testID="sessions-searching" class="px-1 text-[11.5px] text-muted-foreground">
+        <Text testID="sessions-searching" class="px-1 text-[12px] text-muted-foreground">
           {tr("Looking through what was said…")}
         </Text>
       </If>
@@ -477,7 +477,7 @@ function Trash() {
                 <Logo name={agentLogo(t().agent)} size={16} />
                 <View class="min-w-0 flex-1 gap-[1px]">
                   <Text class="text-[13px] font-medium text-foreground line-clamp-1">{t().title || tr("(no prompt)")}</Text>
-                  <Text class="text-[11.5px] text-muted-foreground line-clamp-1">
+                  <Text class="text-[12px] text-muted-foreground line-clamp-1">
                     {[tr("Deleted %s", ago(t().deleted)), t().cwd ? `${whereOf(t().cwd) === "~" ? "~/" : `${whereOf(t().cwd)}/`}${baseName(t().cwd)}` : "", bytes(t().size)].filter(Boolean).join(" · ")}
                   </Text>
                 </View>
@@ -509,9 +509,9 @@ const PROSE: TextViewClasses = {
   root: "text-[13px] leading-[20px] text-foreground",
   heading1: "text-[17px] leading-[24px]",
   heading2: "text-[15px] leading-[22px]",
-  heading3: "text-[13.5px] leading-[20px]",
-  code: "text-[11.5px]",
-  codeBlockCode: "text-[11.5px] leading-[17px]",
+  heading3: "text-[14px] leading-[20px]",
+  code: "text-[12px]",
+  codeBlockCode: "text-[12px] leading-[17px]",
 };
 
 /** What the model thought, quieter than what it said. */
@@ -519,9 +519,9 @@ const THOUGHT: TextViewClasses = { ...PROSE, root: "text-[12px] leading-[18px] t
 
 /** A tool's input or output: only its code block. */
 const CODE: TextViewClasses = {
-  root: "text-[11.5px] leading-[17px] text-foreground",
+  root: "text-[12px] leading-[17px] text-foreground",
   codeBlock: "rounded-[6px] border-line-2 bg-card-2",
-  codeBlockCode: "text-[11.5px] leading-[17px]",
+  codeBlockCode: "text-[12px] leading-[17px]",
 };
 
 const COPY = () => [{ id: "copy", label: tr("Copy") }];
@@ -547,7 +547,7 @@ const STATES = () =>
 function ToolPart(props: { label: string; children: JSX.Element }) {
   return (
     <View class="gap-[6px]">
-      <Text class="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">{props.label}</Text>
+      <Text class="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{props.label}</Text>
       {props.children}
     </View>
   );
@@ -578,7 +578,7 @@ function ToolCard(props: { turn: Turn; index: number }) {
                 else={<TextView markdown={fenced(t().output ?? "", languageOf(t().output ?? ""))} classes={CODE} codeBlockActions={COPY()} />}
               >
                 <View class="rounded-[6px] bg-destructive-soft px-[10px] py-[8px]">
-                  <Text class="font-mono text-[11.5px] leading-[17px] text-destructive">{t().output ?? ""}</Text>
+                  <Text class="font-mono text-[12px] leading-[17px] text-destructive">{t().output ?? ""}</Text>
                 </View>
               </If>
             </ToolPart>
@@ -594,8 +594,8 @@ function ToolCard(props: { turn: Turn; index: number }) {
         class={`min-h-[38px] flex-row items-center gap-[8px] rounded-[8px] px-[12px] py-[8px] ${opens() ? "hover:bg-card-2" : ""}`}
       >
         <Icon name="wrench" color="muted-foreground" size={13} />
-        <Text class="shrink-0 text-[12.5px] font-medium text-foreground">{t().name || tr("Tool")}</Text>
-        <Text class="min-w-0 flex-1 font-mono text-[11.5px] text-muted-foreground line-clamp-1">{t().text}</Text>
+        <Text class="shrink-0 text-[13px] font-medium text-foreground">{t().name || tr("Tool")}</Text>
+        <Text class="min-w-0 flex-1 font-mono text-[12px] text-muted-foreground line-clamp-1">{t().text}</Text>
         <View class="h-[20px] flex-row items-center gap-[5px] rounded-full bg-pill px-[8px]">
           <Icon name={state().icon} color={state().color} size={11} />
           <Text class="text-[11px] text-fg-2">{state().label}</Text>
@@ -764,7 +764,7 @@ function Conversation() {
           <TextButton label={tr("Copy the resume command")} icon="copy-s" onPress={() => void copy(session()?.resume ?? "")} />
         </If>
         <If when={prompts().length > 0}>
-          <Text testID="session-nav-count" class="ml-1 text-[11.5px] text-muted-foreground">{`${here()} / ${prompts().length}`}</Text>
+          <Text testID="session-nav-count" class="ml-1 text-[12px] text-muted-foreground">{`${here()} / ${prompts().length}`}</Text>
         </If>
         <View class="flex-row items-center">
           <IconButton icon="top" label={tr("Top")} onPress={top} disabled={offset() <= 0} testID="session-nav-top" />

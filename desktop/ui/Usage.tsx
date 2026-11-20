@@ -24,7 +24,7 @@ function Kpi(props: { value: string; label: string; sub: string; testID?: string
       <Text testID={props.testID} class="text-[20px] font-semibold text-foreground">
         {props.value}
       </Text>
-      <Text class="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">{props.label}</Text>
+      <Text class="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{props.label}</Text>
       <Text class="text-[11px] text-muted-foreground line-clamp-1">{props.sub}</Text>
     </View>
   );
@@ -36,7 +36,7 @@ function Chart() {
   const top = () => Math.max(1, ...days().map(([, t]) => t.input + t.output));
   return (
     <List class="px-[14px] pb-[10px] pt-3">
-      <Text class="self-end text-[10.5px] text-faint">{compact(top())}</Text>
+      <Text class="self-end text-[11px] text-faint">{compact(top())}</Text>
       <View class="mt-1 h-[96px] flex-row items-end gap-[3px] border-b border-line-2">
         <Each of={days()} key={(d) => d[0]}>
           {(d) => (
@@ -50,7 +50,7 @@ function Chart() {
       <View class="mt-[5px] flex-row gap-[3px]">
         <Each of={days()} key={(d) => d[0]}>
           {(d, i) => (
-            <Text class={`flex-1 text-[10.5px] text-muted-foreground ${i() === 0 ? "" : i() === days().length - 1 ? "text-right" : "text-center"}`}>
+            <Text class={`flex-1 text-[11px] text-muted-foreground ${i() === 0 ? "" : i() === days().length - 1 ? "text-right" : "text-center"}`}>
               {days().length <= 10 || i() % Math.ceil(days().length / 8) === 0 ? dayLabel(d()[0]) : ""}
             </Text>
           )}
@@ -70,7 +70,7 @@ function Breakdown(props: { title: string; rows: Record<string, Totals>; logo: (
       <RowHead>
         <View role="button" onPress={() => open.set(!open())} class="h-[22px] flex-row items-center gap-[5px] rounded-[6px] pl-1 pr-[6px] hover:bg-pill">
           <Icon name={open() ? "chev-down" : "chev-right"} color="muted-foreground" size={10} />
-          <Text class="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">{props.title}</Text>
+          <Text class="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{props.title}</Text>
           <Text class="text-[11px] text-faint">{String(rows().length)}</Text>
         </View>
       </RowHead>
@@ -85,7 +85,7 @@ function Breakdown(props: { title: string; rows: Record<string, Totals>; logo: (
                   <Logo name={props.logo(r()[0])} size={18} />
                   <View class="w-[200px] gap-[1px]">
                     <Text class="text-[13px] font-medium text-foreground line-clamp-1">{props.name(r()[0])}</Text>
-                    <Text class="text-[11.5px] text-muted-foreground line-clamp-1">
+                    <Text class="text-[12px] text-muted-foreground line-clamp-1">
                       {[trn(t().requests, "%d call", "%d calls", t().requests), ...(t().errors ? [tr("%d failed", t().errors)] : [])].join(" · ")}
                     </Text>
                   </View>
@@ -93,8 +93,8 @@ function Breakdown(props: { title: string; rows: Record<string, Totals>; logo: (
                     <View class="h-full rounded-[2px] bg-primary/70" style={{ width: `${Math.round((tokens() / whole()) * 1000) / 10}%` }} />
                   </View>
                   <View class="min-w-[150px] items-end">
-                    <Text class="text-[13px] font-semibold text-foreground">{compact(tokens())}</Text>
-                    <Text class="text-[10.5px] text-muted-foreground">{tr("%s in · %s out · %s cached", compact(t().input), compact(t().output), compact(t().cacheRead))}</Text>
+                    <Text class="text-[13px] font-medium text-foreground">{compact(tokens())}</Text>
+                    <Text class="text-[11px] text-muted-foreground">{tr("%s in · %s out · %s cached", compact(t().input), compact(t().output), compact(t().cacheRead))}</Text>
                   </View>
                 </Row>
               );
@@ -119,10 +119,10 @@ function Requests() {
         <Each of={usage()?.latest ?? []} key={(r) => `${r.at}${r.requested}${r.ms}`}>
           {(r, i) => (
             <Row first={i() === 0} class="min-h-[36px] py-[5px]">
-              <Text class="w-[58px] text-[11.5px] text-muted-foreground">{time(r().at)}</Text>
+              <Text class="w-[58px] text-[12px] text-muted-foreground">{time(r().at)}</Text>
               <Logo name={agentLogo(r().agent)} size={14} />
               <View class="min-w-0 flex-1">
-                <Mono text={`${r().provider}/${r().model}`} class="text-[11.5px] line-clamp-1" />
+                <Mono text={`${r().provider}/${r().model}`} class="text-[12px] line-clamp-1" />
                 <If when={r().error}>
                   <Text class="text-[11px] text-destructive line-clamp-1">{r().error ?? ""}</Text>
                 </If>
@@ -131,8 +131,8 @@ function Requests() {
                 <Badge label={trn(r().failovers, "+%d try", "+%d tries", r().failovers)} tone="warning" />
               </If>
               <Badge label={String(r().status)} tone={r().status >= 400 ? "danger" : "success"} />
-              <Text class="w-[90px] text-right text-[11.5px] text-muted-foreground">{`${compact(r().input)} → ${compact(r().output)}`}</Text>
-              <Text class="w-[44px] text-right text-[11.5px] text-muted-foreground">{`${(r().ms / 1000).toFixed(1)} s`}</Text>
+              <Text class="w-[96px] text-right text-[12px] text-muted-foreground">{`${compact(r().input)} → ${compact(r().output)}`}</Text>
+              <Text class="w-[44px] text-right text-[12px] text-muted-foreground">{`${(r().ms / 1000).toFixed(1)} s`}</Text>
             </Row>
           )}
         </Each>

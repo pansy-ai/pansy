@@ -199,7 +199,7 @@ function Head() {
   return (
     <View class="h-[46px] flex-row items-center gap-2 pl-[14px] pr-[10px]">
       <Mark />
-      <Text class="flex-1 text-[13.5px] font-semibold text-foreground">pansy</Text>
+      <Text class="flex-1 text-[14px] font-semibold text-foreground">pansy</Text>
       <UpdatePill testID="panel-update" />
       <View class="flex-row gap-[2px]">
         <IconButton icon="sync" label={tab() === "agents" ? tr("Look again: agents installed or removed, settings changed") : tr("Refresh")} testID="panel-sync" onPress={refresh} />
@@ -280,7 +280,7 @@ function Field(props: { agent: Agent; small?: boolean }) {
           style={{ boxShadow: `inset 0 0 0 1px ${open() ? token("primary") : ring()}` }}
         >
           <Text class="w-[62px] text-[11px] text-faint line-clamp-1">{props.small ? tr("Quick tasks") : tr("Model")}</Text>
-          <Text class={`flex-1 text-[12.5px] line-clamp-1 ${set() ? "text-foreground" : "text-muted-foreground"}`}>
+          <Text class={`flex-1 text-[13px] line-clamp-1 ${set() ? "text-foreground" : "text-muted-foreground"}`}>
             {set() ? choiceName(model()!) : props.small ? tr("same as the main model") : tr("default")}
           </Text>
           <If when={set()}>
@@ -312,7 +312,7 @@ function Effort(props: { agent: Agent }) {
           style={{ boxShadow: `inset 0 0 0 1px ${ring()}` }}
         >
           <Text class="w-[62px] text-[11px] text-faint line-clamp-1">{tr("Effort")}</Text>
-          <Text class={`flex-1 text-[12.5px] line-clamp-1 ${value() ? "text-foreground" : "text-muted-foreground"}`}>{effortName(value())}</Text>
+          <Text class={`flex-1 text-[13px] line-clamp-1 ${value() ? "text-foreground" : "text-muted-foreground"}`}>{effortName(value())}</Text>
           <EffortBars lit={effortLit(levels(), value(), 4)} color={value() ? "foreground" : "muted-foreground"} />
           <Icon name="chev-down" color="faint" size={11} />
         </View>
@@ -337,7 +337,7 @@ function Effort(props: { agent: Agent }) {
               </If>
             </View>
             <EffortBars lit={effortLit(levels(), s(), 4)} color={s() ? "foreground" : "muted-foreground"} size={13} />
-            <Text class="text-[12.5px] text-foreground">{effortName(s())}</Text>
+            <Text class="text-[13px] text-foreground">{effortName(s())}</Text>
           </MenuItem>
         )}
       </Each>
@@ -353,7 +353,7 @@ function Body(props: { agent: Agent }) {
     <View class="gap-2 pb-3 pl-[42px] pr-3 pt-[3px]">
       <View class="min-h-[28px] flex-row items-center gap-2">
         <Text class="w-[62px] text-[11px] text-faint">pansy</Text>
-        <Text class="flex-1 text-[11.5px] text-muted-foreground line-clamp-1">{status(a()).text}</Text>
+        <Text class="flex-1 text-[12px] text-muted-foreground line-clamp-1">{status(a()).text}</Text>
         <Switch
           checked={a().connected}
           label={tr("Connect %s to pansy", a().name)}
@@ -475,7 +475,7 @@ function Card(props: { children?: JSX.Element; class?: string; testID?: string }
 function Nothing(props: { title: string; text: string; testID?: string }) {
   return (
     <Card class="gap-[2px] p-3" testID={props.testID}>
-      <Text class="text-[12px] font-semibold text-foreground">{props.title}</Text>
+      <Text class="text-[12px] font-medium text-foreground">{props.title}</Text>
       <Text class="text-[12px] leading-[19px] text-muted-foreground">{props.text}</Text>
     </Card>
   );
@@ -485,9 +485,9 @@ function Nothing(props: { title: string; text: string; testID?: string }) {
 function Figure(props: { label: string; value: string; sub: string; bad?: boolean; first?: boolean }) {
   return (
     <View class={`min-w-0 flex-1 gap-px px-[10px] py-2 ${props.first ? "" : "border-l border-line-2"}`}>
-      <Text class="text-[10.5px] text-muted-foreground line-clamp-1">{props.label}</Text>
+      <Text class="text-[11px] text-muted-foreground line-clamp-1">{props.label}</Text>
       <Text class="text-[16px] font-semibold text-foreground line-clamp-1">{props.value}</Text>
-      <Text class={`text-[10.5px] ${props.bad ? "text-destructive" : "text-muted-foreground"}`}>{props.sub}</Text>
+      <Text class={`text-[11px] ${props.bad ? "text-destructive" : "text-muted-foreground"}`}>{props.sub}</Text>
     </View>
   );
 }
@@ -581,15 +581,15 @@ function UsageTab() {
             />
             <If when={days().length > 1}>
               <View>
-                <Text class="self-end text-[10.5px] text-faint">{amount(top())}</Text>
+                <Text class="self-end text-[11px] text-faint">{amount(top())}</Text>
                 <View class="mt-1 h-[96px] flex-row items-end gap-[3px] border-b border-line-2">
                   <Each of={days()} key={(d) => d[0]}>
                     {(d) => <View class="flex-1 rounded-t-[2px] bg-primary" style={{ height: `${Math.max(1, Math.round((count(d()[1]) / top()) * 100))}%` }} />}
                   </Each>
                 </View>
                 <View class="mt-1 flex-row">
-                  <Text class="flex-1 text-[10.5px] text-muted-foreground">{dayLabel(days()[0]?.[0] ?? "")}</Text>
-                  <Text class="text-[10.5px] text-muted-foreground">{dayLabel(days().at(-1)?.[0] ?? "")}</Text>
+                  <Text class="flex-1 text-[11px] text-muted-foreground">{dayLabel(days()[0]?.[0] ?? "")}</Text>
+                  <Text class="text-[11px] text-muted-foreground">{dayLabel(days().at(-1)?.[0] ?? "")}</Text>
                 </View>
               </View>
             </If>
@@ -602,7 +602,7 @@ function UsageTab() {
                     <View class="h-1 flex-1 overflow-hidden rounded-[2px] bg-pill">
                       <View class="h-full rounded-[2px] bg-primary/70" style={{ width: `${Math.round((p().n / whole()) * 1000) / 10}%` }} />
                     </View>
-                    <Text class="w-[52px] text-right text-[12px] font-semibold text-foreground">{amount(p().n)}</Text>
+                    <Text class="w-[52px] text-right text-[12px] font-medium text-foreground">{amount(p().n)}</Text>
                   </View>
                 )}
               </Each>
@@ -726,9 +726,9 @@ function Spot(props: { name: string; sub?: string; agent?: string; how?: Seat["h
       <If when={props.agent} else={<View class={`h-[6px] w-[6px] rounded-full ${dot()}`} />}>
         <Logo name={agentLogo(props.agent!)} size={13} />
       </If>
-      <Text class="min-w-0 shrink text-[11.5px] font-medium text-foreground line-clamp-1">
+      <Text class="min-w-0 shrink text-[12px] font-medium text-foreground line-clamp-1">
         {props.name}
-        <Text class="text-[10.5px] font-normal text-muted-foreground">{props.sub ? ` ${props.sub}` : ""}</Text>
+        <Text class="text-[11px] font-normal text-muted-foreground">{props.sub ? ` ${props.sub}` : ""}</Text>
       </Text>
     </View>
   );
@@ -851,9 +851,9 @@ function RoutingTab() {
         <If when={usageToday()} else={<View class="h-[9px] w-[150px] rounded-[4px] bg-pill" />}>
           <Text testID="panel-today" class="min-w-0 shrink text-[12px] text-muted-foreground line-clamp-1 tabular-nums">
             {`${tr("today")} ${calls()[0] ?? ""}`}
-            <Text class="font-semibold text-foreground">{String(usageToday()!.requests)}</Text>
+            <Text class="font-medium text-foreground">{String(usageToday()!.requests)}</Text>
             {`${calls()[1] ?? ""} · ${tokens()[0] ?? ""}`}
-            <Text class="font-semibold text-foreground">{fmtN(usageToday()!.input + usageToday()!.output)}</Text>
+            <Text class="font-medium text-foreground">{fmtN(usageToday()!.input + usageToday()!.output)}</Text>
             {tokens()[1] ?? ""}
           </Text>
         </If>

@@ -56,11 +56,11 @@ export function PreviewDialog() {
           </>
         }
       >
-        <Text testID="preview-said" class="text-[12.5px] leading-[19px] text-fg-2">
+        <Text testID="preview-said" class="text-[13px] leading-[19px] text-fg-2">
           {tr("Connected with %s, pansy sets these keys in %s's own files and nothing else. Disconnecting puts back exactly these. Nothing is written until you connect.", choiceName(p()?.model ?? ""), p()?.agent.name ?? "")}
         </Text>
         <If when={p()?.changes !== null} else={<Text class="py-[14px] text-[12px] text-muted-foreground">{tr("Reading what it would write…")}</Text>}>
-          <If when={!p()?.error} else={<Text class="text-[12.5px] text-destructive">{p()?.error ?? ""}</Text>}>
+          <If when={!p()?.error} else={<Text class="text-[13px] text-destructive">{p()?.error ?? ""}</Text>}>
             <ChangesList changes={p()?.changes ?? []} />
           </If>
         </If>

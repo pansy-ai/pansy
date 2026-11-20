@@ -86,7 +86,7 @@ function SettingsNav() {
               style={active() ? { boxShadow: SHADOW.thumb() } : undefined}
             >
               <Icon name={t().icon} color={active() ? "foreground" : "muted-foreground"} size={13} />
-              <Text class={`text-[12.5px] ${active() ? "font-medium text-foreground" : "text-fg-2"}`}>{t().name}</Text>
+              <Text class={`text-[13px] ${active() ? "font-medium text-foreground" : "text-fg-2"}`}>{t().name}</Text>
             </View>
           );
         }}
@@ -114,7 +114,7 @@ function GatewayLine() {
   return (
     <View role="button" testID="gateway-line" onPress={() => go("gateway")} class="h-[26px] flex-row items-center gap-2 rounded-[6px] px-[9px] hover:bg-pill-hover">
       <View class={`h-[7px] w-[7px] rounded-full ${state().dot}`} style={{ boxShadow: `0 0 0 3px ${token(state().ring)}` }} />
-      <Text testID="gateway-state" class="flex-1 text-[11.5px] text-muted-foreground line-clamp-1">
+      <Text testID="gateway-state" class="flex-1 text-[12px] text-muted-foreground line-clamp-1">
         {state().label}
       </Text>
     </View>
@@ -259,7 +259,7 @@ function NavTabs() {
               class={`group h-[24px] shrink items-center justify-center rounded-[6px] px-3 active:scale-96 ${active() ? "bg-seg-thumb" : ""} ${MOTION}`}
               style={active() ? { boxShadow: SHADOW.thumb() } : undefined}
             >
-              <Text class={`text-[12.5px] line-clamp-1 ${active() ? "font-medium text-foreground" : "text-ctl group-hover:text-foreground"} ${MOTION}`}>{PLACES()[p()].name}</Text>
+              <Text class={`text-[13px] line-clamp-1 ${active() ? "font-medium text-foreground" : "text-ctl group-hover:text-foreground"} ${MOTION}`}>{PLACES()[p()].name}</Text>
             </View>
           );
         }}
@@ -273,7 +273,7 @@ function Back(props: { testID: string; label: string; onPress: () => void }) {
   return (
     <View role="button" testID={props.testID} onPress={props.onPress} class="h-[24px] flex-row items-center gap-1 rounded-[6px] pr-[6px] hover:bg-pill">
       <Icon name="chevron-left" color="muted-foreground" size={14} />
-      <Text class="text-[13.5px] text-muted-foreground">{props.label}</Text>
+      <Text class="text-[14px] text-muted-foreground">{props.label}</Text>
     </View>
   );
 }
@@ -293,25 +293,25 @@ function Crumb() {
           when={inRequest()}
           else={
             <>
-              <Text class="text-[13.5px] text-muted-foreground">{place().group}</Text>
-              <Text class="text-[13.5px] text-faint">/</Text>
-              <Text testID="page-title" class="text-[13.5px] font-semibold text-foreground">
+              <Text class="text-[14px] text-muted-foreground">{place().group}</Text>
+              <Text class="text-[14px] text-faint">/</Text>
+              <Text testID="page-title" class="text-[14px] font-semibold text-foreground">
                 {settingsQuery().trim() && page() === "settings" ? tr("Find a setting") : place().name}
               </Text>
             </>
           }
         >
           <Back testID="masking-back" label={tr("Masking")} onPress={() => maskOpen.set(null)} />
-          <Text class="text-[13.5px] text-faint">/</Text>
-          <Text testID="page-title" class="text-[13.5px] font-semibold text-foreground">
+          <Text class="text-[14px] text-faint">/</Text>
+          <Text testID="page-title" class="text-[14px] font-semibold text-foreground">
             {maskingCrumb()}
           </Text>
         </If>
       }
     >
       <Back testID="sessions-back" label={tr("Sessions")} onPress={() => sessionOpen.set(null)} />
-      <Text class="text-[13.5px] text-faint">/</Text>
-      <Text testID="page-title" class="shrink text-[13.5px] font-semibold text-foreground line-clamp-1">
+      <Text class="text-[14px] text-faint">/</Text>
+      <Text testID="page-title" class="shrink text-[14px] font-semibold text-foreground line-clamp-1">
         {sessionCrumb()}
       </Text>
     </If>

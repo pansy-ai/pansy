@@ -310,7 +310,7 @@ export function FromATerminal() {
       <Each of={["pansy doctor", "pansy test", "pansy pause all", "pansy resume all"]} key={(c) => c}>
         {(c) => (
           <View class="h-[26px] flex-row items-center gap-2 rounded-[6px] bg-card-2 pl-[9px] pr-[3px]">
-            <Text class="flex-1 font-mono text-[11.5px] text-foreground">{c()}</Text>
+            <Text class="flex-1 font-mono text-[12px] text-foreground">{c()}</Text>
             <Text class="text-[11px] text-muted-foreground">
               {({ "pansy doctor": tr("checks the same"), "pansy test": tr("sends a test request"), "pansy pause all": tr("restores every agent for now") } as Record<string, string>)[c()] ?? tr("connects them again")}
             </Text>
