@@ -102,7 +102,13 @@ pansy run --model group/daily codex         # 或者在另一个终端用另一�
 pansy codex deepseek/deepseek-chat --show   # 连接会写入什么，但什么都不写
 ```
 
-也可以打开窗口（不带参数运行 `pansy`）：**供应商 → 添加供应商**，然后在**智能体**页为每个智能体选择模型。
+也可以打开窗口（不带参数运行 `pansy`）。第一次打开时会先显示初始化引导：本机找到的智能体，
+其他应用（Claude Code、Codex、OpenCode、CC Switch）里已经配置的供应商（默认勾选，连同 Key 一起导入），
+以及智能体工作过的项目文件夹。
+
+<img src="assets/welcome.png" width="720" alt="pansy 的初始化引导：本机找到的智能体、可从 CC Switch 导入的三个供应商和四个项目">
+
+之后可在**供应商 → 添加供应商**添加更多，并在**智能体**页为每个智能体选择模型。
 关闭窗口后 pansy 留在托盘里，网关继续为智能体服务。
 
 任何可以设置 Base URL 的工具都能使用这个网关：

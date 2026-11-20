@@ -135,9 +135,16 @@ pansy run --model group/daily codex         # or on another, in another terminal
 pansy codex deepseek/deepseek-chat --show   # what connecting would write, and nothing written
 ```
 
-Or open the window (`pansy` without arguments): **Providers → Add provider**,
-then pick a model for each agent on **Agents**. Closing the window keeps pansy
-in the tray, so the gateway goes on serving your agents.
+Or open the window (`pansy` without arguments). The first time, it welcomes
+you: the agents it found on this computer, the providers your other apps
+(Claude Code, Codex, OpenCode, CC Switch) have set up, ticked to bring over
+with their keys, and the folders your agents worked in.
+
+<img src="assets/welcome.png" width="720" alt="pansy's welcome: the agents found on this computer, three providers from CC Switch to import, and four projects">
+
+Then **Providers → Add provider** for any more, and pick a model for each
+agent on **Agents**. Closing the window keeps pansy in the tray, so the
+gateway goes on serving your agents.
 
 Anything that takes a base URL can use the gateway too:
 

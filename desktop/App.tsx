@@ -3,7 +3,7 @@
 // open — and the gateway's state at its foot, a title bar with where the
 // page is, the page, and what sits above them (modals, toasts). The title
 // bar's button hides the sidebar, and its pages become tabs in the title bar.
-// On a computer pansy is new to, the welcome (ui/Welcome.tsx) comes first.
+// The first time it opens, the welcome (ui/Welcome.tsx) comes first.
 // State lives in ui/model.ts; providers, agents and the gateway themselves
 // in pansy/native (native/).
 import { effect, keymap, LayoutAnimation, mount, platform, reduceMotion, Scroll, setColorScheme, signal, Text, token, UrlScheme, View } from "nsh";

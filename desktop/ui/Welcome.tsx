@@ -3,8 +3,8 @@
 // then a line each: the agents found here (and how to install more), the
 // providers other apps have set up, ticked to bring over, and the folders
 // the agents worked in, which Sessions lists. Its button imports what is
-// ticked and opens the window; it is not shown again (NSH's storage), and
-// never to a pansy that has a provider.
+// ticked and opens the window; it is shown once to everyone, and not again
+// once gone through (NSH's storage).
 import { Clipboard, Scroll, signal, Storage, Text, View, type JSX } from "nsh";
 import { Button as BaseButton } from "nsh/base";
 import { Prefs, Providers, Sessions } from "pansy/native";
@@ -20,10 +20,9 @@ const DONE_KEY = "welcome.done";
 /** The welcome shows; null while that is being found out. */
 export const welcoming = signal<boolean | null>(null);
 
-/** Shows the welcome unless it was gone through, or pansy has a provider already. */
+/** Shows the welcome unless it was gone through. */
 export async function startWelcome() {
-  const done = await Storage.getItem(DONE_KEY).catch(() => null);
-  welcoming.set(!done && Prefs.fresh());
+  welcoming.set(!(await Storage.getItem(DONE_KEY).catch(() => null)));
 }
 
 /** A provider another app has, to bring over. */
@@ -299,8 +298,7 @@ export function WelcomePage() {
   return (
     <Scroll class="flex-1">
       <View testID="welcome" class="w-full max-w-[720px] self-center px-10 pb-8 pt-[72px]">
-        <Icon name="pansy" color="foreground" size={30} />
-        <Text class="mt-4 text-[26px] font-semibold text-foreground">{tr("Welcome to pansy")}</Text>
+        <Text class="text-[26px] font-semibold text-foreground">{tr("Welcome to pansy")}</Text>
         <Text testID="welcome-computer" class="mb-6 mt-1 text-[14px] text-muted-foreground">
           {said()[0]}
           <If when={computer}>
