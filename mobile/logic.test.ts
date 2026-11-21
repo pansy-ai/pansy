@@ -45,3 +45,12 @@ test("folds a turn's events into the feed", () => {
   expect(s.items.map((i) => i.kind)).toEqual(["user", "assistant", "tool"]);
   expect(s.items[2]).toEqual({ kind: "tool", id: "c1", tool: "commandExecution", title: "ran cargo test", status: "done", output: "ok" });
 });
+
+test("a question waits like an approval, with its choices", () => {
+  let s: FeedState = { items: [], approvals: [], running: true, startedAt: null };
+  const questions = [{ question: "Which?", header: "Pick", multiSelect: false, options: [{ label: "A", description: "" }] }];
+  s = apply(s, { type: "question", request: "q1", questions });
+  expect(s.approvals).toEqual([{ request: "q1", kind: "question", title: "Pick", detail: "", questions }]);
+  s = apply(s, { type: "resolved", request: "q1" });
+  expect(s.approvals.length).toBe(0);
+});

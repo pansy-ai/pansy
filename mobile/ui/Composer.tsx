@@ -22,7 +22,8 @@ export function Composer(props: {
   model: string;
   running?: boolean;
   onSend: (mode: SendMode | "start") => void;
-  onStop?: () => void;
+  /** Stop the turn; pressed again within a few seconds, `force`: end the agent. */
+  onStop?: (force: boolean) => void;
   onModel: () => void;
   accessory?: JSX.Element;
   disabled?: boolean;
@@ -93,7 +94,7 @@ export function Composer(props: {
               testID="stop"
               accessibilityLabel={stopping() ? tr("Force stop") : tr("Stop")}
               onPress={() => {
-                props.onStop?.();
+                props.onStop?.(stopping());
                 Haptics.impact("medium");
                 stopping.set(true);
                 setTimeout(() => stopping.set(false), 4000);

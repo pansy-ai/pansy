@@ -74,9 +74,13 @@ export type Event =
   | { type: "toolStarted"; item: string; kind: string; title: string }
   | { type: "toolFinished"; item: string; kind: string; title: string; status: string; output?: string }
   | { type: "approval"; request: string; kind: string; title: string; detail: string; reason?: string }
+  | { type: "question"; request: string; questions: Question[] }
   | { type: "resolved"; request: string }
   | { type: "turnFinished"; turn: string; status: string; error?: string }
   | { type: "exited"; code?: number };
+
+/** One of a question's choices (Claude Code's AskUserQuestion). */
+export type Question = { question: string; header: string; multiSelect: boolean; options: { label: string; description: string }[] };
 
 export type Seq<T> = { seq: number; event: T };
 

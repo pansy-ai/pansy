@@ -5,7 +5,7 @@
 import { cleanup, Clipboard, effect, Scroll, signal, Text, token, View, type JSX, type ScrollRef } from "nsh";
 import { Menu, MenuItem, NavPage } from "nsh/base";
 import { Haptics } from "nsh/mobile";
-import type { Decision, GitStatus, Mode, ThreadSummary } from "../net/types";
+import type { Decision, GitStatus, Mode, Question, ThreadSummary } from "../net/types";
 import { connState, machine, summary } from "../state/store";
 import { ThreadView, type Approval, type Item } from "../state/thread";
 import { archive, copyLink, renaming } from "./actions";
@@ -239,15 +239,75 @@ function approvalTitle(a: Approval): string {
   return a.title;
 }
 
+/** A question's choices: one, or several when it says so; Send once each has one. */
+function QuestionCard(props: { approval: Approval; onChoose: (a: Approval, answers: Record<string, string>) => void; onAnswer: (a: Approval, d: Decision) => void }) {
+  const picks = signal<Record<string, string[]>>({});
+  const qs = (): Question[] => props.approval.questions ?? [];
+  const toggle = (q: Question, label: string) => {
+    const now = picks()[q.question] ?? [];
+    const next = q.multiSelect ? (now.includes(label) ? now.filter((l) => l !== label) : [...now, label]) : [label];
+    picks.set({ ...picks(), [q.question]: next });
+    Haptics.selection();
+  };
+  const ready = () => qs().every((q) => (picks()[q.question] ?? []).length > 0);
+  const send = () => {
+    const answers: Record<string, string> = {};
+    for (const q of qs()) answers[q.question] = (picks()[q.question] ?? []).join(", ");
+    props.onChoose(props.approval, answers);
+  };
+  return (
+    <View class="gap-[12px]">
+      <Each of={qs()} key={(q) => q.question}>
+        {(q) => (
+          <View class="gap-[6px]">
+            <If when={q().header}>
+              <Text class="text-[12px] font-bold uppercase tracking-[1.1px] text-fg-2">{q().header}</Text>
+            </If>
+            <Text class="text-[16px] font-bold leading-[21px] text-fg">{q().question}</Text>
+            <View class="overflow-hidden rounded-xl bg-grouped">
+              <Each of={q().options} key={(o) => o.label}>
+                {(o, i) => {
+                  const on = () => (picks()[q().question] ?? []).includes(o().label);
+                  return (
+                    <View
+                      role="button"
+                      accessibilityLabel={o().label}
+                      testID={`question-option-${o().label}`}
+                      onPress={() => toggle(q(), o().label)}
+                      class={`min-h-11 flex-row items-center gap-[10px] px-3 py-2 active:bg-line ${i() > 0 ? "border-t border-line" : ""}`}
+                    >
+                      <Icon name={on() ? (q().multiSelect ? "square-check" : "circle-check") : q().multiSelect ? "square" : "circle"} color={on() ? "primary" : "fg-3"} size={18} />
+                      <View class="flex-1 gap-[1px]">
+                        <Text class="text-[15px] text-fg">{o().label}</Text>
+                        <If when={o().description}>
+                          <Text class="text-[13px] text-fg-3">{o().description}</Text>
+                        </If>
+                      </View>
+                    </View>
+                  );
+                }}
+              </Each>
+            </View>
+          </View>
+        )}
+      </Each>
+      <View class="gap-2">
+        <Btn label={tr("Send answer")} onPress={send} disabled={!ready()} testID="question-send" />
+        <Btn tone="danger" label={tr("Don't answer")} onPress={() => props.onAnswer(props.approval, "decline")} testID="question-decline" />
+      </View>
+    </View>
+  );
+}
+
 /** 需要批准: docked over the composer, not in the feed; several go 1 / N. */
-function ApprovalCard(props: { approvals: Approval[]; index: number; onIndex: (i: number) => void; onAnswer: (a: Approval, d: Decision) => void }) {
+function ApprovalCard(props: { approvals: Approval[]; index: number; onIndex: (i: number) => void; onAnswer: (a: Approval, d: Decision) => void; onChoose: (a: Approval, answers: Record<string, string>) => void }) {
   const a = () => props.approvals[Math.min(props.index, props.approvals.length - 1)];
   const long = signal(false);
   const lines = () => a()?.detail.split("\n") ?? [];
   return (
     <View testID="approval-card" class="gap-[10px] rounded-[20px] border border-border bg-card p-4" style={{ boxShadow: SHADOW.glass() }}>
       <View class="flex-row items-center justify-between">
-        <Text class="text-[12px] font-bold uppercase tracking-[1.1px] text-fg-2">{tr("Needs approval")}</Text>
+        <Text class="text-[12px] font-bold uppercase tracking-[1.1px] text-fg-2">{a()?.questions ? tr("A question for you") : tr("Needs approval")}</Text>
         <If when={props.approvals.length > 1}>
           <View class="flex-row items-center gap-2">
             <View role="button" accessibilityLabel={tr("Previous")} hitSlop={8} onPress={() => props.onIndex((props.index + props.approvals.length - 1) % props.approvals.length)}>
@@ -260,6 +320,10 @@ function ApprovalCard(props: { approvals: Approval[]; index: number; onIndex: (i
           </View>
         </If>
       </View>
+      <If when={a()?.questions}>
+        <QuestionCard approval={a()!} onChoose={props.onChoose} onAnswer={props.onAnswer} />
+      </If>
+      <If when={!a()?.questions}>
       <Text class="text-[18px] font-bold leading-[23px] text-fg">{a() ? approvalTitle(a()!) : ""}</Text>
       <If when={a()?.detail}>
         <View role="button" onPress={() => long.set(!long())} class="rounded-lg bg-grouped px-[10px] py-2">
@@ -279,6 +343,7 @@ function ApprovalCard(props: { approvals: Approval[]; index: number; onIndex: (i
         <Btn tone="quiet" label={tr("Allow for this session")} onPress={() => props.onAnswer(a()!, "acceptForSession")} testID="approve-session" />
         <Btn tone="danger" label={tr("Decline")} onPress={() => props.onAnswer(a()!, "decline")} testID="approve-decline" />
       </View>
+      </If>
     </View>
   );
 }
@@ -357,7 +422,14 @@ export function ThreadPage(props: { machine: string; thread: string }) {
 
   const reconnecting = () => connState(props.machine) !== "online";
   const subtitle = () => (reconnecting() ? tr("Reconnecting…") : `${project(t())} · ${m()?.name ?? ""}`);
-  const placeholder = () => (view.approvals().length ? tr("Decline with a line telling the agent what to do") : view.running() ? tr("Steer it…") : tr("Ask it to do something"));
+  const placeholder = () =>
+    view.approvals()[approvalAt()]?.questions
+      ? tr("Or type your own answer")
+      : view.approvals().length
+        ? tr("Decline with a line telling the agent what to do")
+        : view.running()
+          ? tr("Steer it…")
+          : tr("Ask it to do something");
 
   const toBottom = (animated = true) => scroller?.scrollTo({ y: Math.max(0, contentHeight), animated });
   // new content follows while the user is at the bottom
@@ -380,11 +452,27 @@ export function ThreadPage(props: { machine: string; thread: string }) {
     }
   };
 
+  const choose = async (a: Approval, answers: Record<string, string>) => {
+    try {
+      await call("runtime-request.respond", { requestId: a.request, answers });
+      view.approvals.set(view.approvals().filter((x) => x.request !== a.request));
+      approvalAt.set(0);
+      Haptics.notification("success");
+    } catch (e) {
+      toast(tr("Couldn't answer: %s", String((e as Error).message ?? e)), { tone: "error" });
+    }
+  };
+
   const send = async (mode: SendMode | "start") => {
     const text = draft().trim();
     if (!text) return;
     const pending = view.approvals()[approvalAt()];
     draft.set("");
+    if (pending?.questions) {
+      // typed: the answer to each of its questions
+      await choose(pending, Object.fromEntries(pending.questions.map((q) => [q.question, text])));
+      return;
+    }
     if (pending) {
       await answer(pending, "decline", text);
       return;
@@ -503,7 +591,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
         >
           <Capsule view={view} queue={t()?.queue ?? 0} showBottom={!atBottom()} onBottom={() => { atBottom.set(true); toBottom(); }} />
           <If when={view.approvals().length > 0}>
-            <ApprovalCard approvals={view.approvals()} index={approvalAt()} onIndex={approvalAt.set} onAnswer={(a, d) => void answer(a, d)} />
+            <ApprovalCard approvals={view.approvals()} index={approvalAt()} onIndex={approvalAt.set} onAnswer={(a, d) => void answer(a, d)} onChoose={(a, c) => void choose(a, c)} />
           </If>
           <Composer
             text={draft()}
@@ -513,7 +601,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
             model={t()?.model ?? ""}
             running={view.running()}
             onSend={(mode) => void send(mode)}
-            onStop={() => void call("run.interrupt", {}).catch(() => {})}
+            onStop={(force) => void call("run.interrupt", force ? { force: true } : {}).catch(() => {})}
             onModel={() => sheet.set("model")}
             accessory={<Accessory mode={t()?.mode ?? "full"} onMode={() => sheet.set("mode")} />}
           />

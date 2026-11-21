@@ -63,7 +63,6 @@ const ZH_HANS = {
   "PR #%d": "PR #%d",
   "View changes": "查看改动",
   "Pull latest": "拉取最新",
-  "%s has %d new commits · phase 2": "%s 新了 %d 个提交 · 二期",
   "Phase 2": "二期",
   "Branches and worktrees": "分支和工作树",
   "Merge back into %s": "合回 %s",
@@ -286,6 +285,17 @@ const ZH_HANS = {
   "Comment on %d lines": "评论这 %d 行",
   "Commit 1 file": "提交 1 个文件",
   "Commit %d files": "提交 %d 个文件",
+  // Questions and pull
+  "Send answer": "发送回答",
+  "Don't answer": "不回答",
+  "A question for you": "有个问题问你",
+  "Or type your own answer": "或者自己写一个回答",
+  "Pulling…": "正在拉取…",
+  "Not pushed yet": "还没推送过",
+  "%s has %d new commits": "%s 新了 %d 个提交",
+  "Up to date with %s": "和 %s 一致",
+  "Up to date": "已是最新",
+  "Couldn't pull: %s": "没能拉取：%s",
 };
 
 export type Message = keyof typeof ZH_HANS;

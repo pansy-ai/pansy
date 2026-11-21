@@ -3,7 +3,7 @@
 // turn runs; subscribed again with `after` (the last seq) on reconnect.
 import { signal } from "nsh";
 import type { Connection } from "../net/client";
-import type { Event, Seq, Subscribed, ThreadSummary, Turn } from "../net/types";
+import type { Event, Question, Seq, Subscribed, ThreadSummary, Turn } from "../net/types";
 import { conn, putSummary } from "./store";
 
 export type ToolStatus = "running" | "done" | "failed" | "declined" | "waiting";
@@ -17,7 +17,7 @@ export type Item =
   | { kind: "notice"; id: string; text: string; tone: "danger" | "muted" }
   | { kind: "compact"; id: string };
 
-export type Approval = { request: string; kind: string; title: string; detail: string; reason?: string };
+export type Approval = { request: string; kind: string; title: string; detail: string; reason?: string; questions?: Question[] };
 
 const SUBAGENT_KINDS = new Set(["subagent", "task", "agent"]);
 
@@ -93,6 +93,9 @@ export function apply(state: FeedState, event: Event, now = Date.now()): FeedSta
     case "approval":
       if (state.approvals.some((a) => a.request === event.request)) return state;
       return { ...state, approvals: [...state.approvals, { request: event.request, kind: event.kind, title: event.title, detail: event.detail, reason: event.reason }] };
+    case "question":
+      if (state.approvals.some((a) => a.request === event.request)) return state;
+      return { ...state, approvals: [...state.approvals, { request: event.request, kind: "question", title: event.questions[0]?.header ?? "", detail: "", questions: event.questions }] };
     case "resolved":
       return { ...state, approvals: state.approvals.filter((a) => a.request !== event.request) };
     case "turnFinished": {

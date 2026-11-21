@@ -106,6 +106,32 @@ test("a new message streams in, asks for approval and finishes", async () => {
   await app.waitFor("text:测试都通过了（42 个）。可以提交了。", { timeout: 15_000 });
 });
 
+test("a question is answered with the choice made", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_relay");
+  await app.waitFor("text:把 relay 的部署整理一下，现在一个脚本又建 Worker 又发证书");
+  await app.type("id:composer-input", "问我用哪个数据库");
+  await app.press("id:send");
+  await app.waitFor("text:Which database?", { timeout: 10_000 });
+  expect(app.texts()).toContain("A QUESTION FOR YOU");
+  await app.press("id:question-option-SQLite");
+  await app.press("id:question-send");
+  await app.waitUntil(() => called(app, "runtime-request.respond", (p) => (p.answers as Record<string, string>)?.["Which database?"] === "SQLite"));
+  await app.waitFor("text:Going with SQLite.");
+});
+
+test("pulls the upstream from the Git sheet", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_cost");
+  await app.waitFor("id:open-git >> nth=0");
+  await app.press("id:open-git >> nth=0");
+  await app.waitFor("id:git-pull");
+  expect(app.texts()).toContain("origin/pansy/sessions-cost has 1 new commits");
+  await app.press("id:git-pull");
+  await app.waitUntil(() => called(app, "git.run", (p) => p.action === "pull"));
+  await app.waitFor("text:Fast-forward");
+});
+
 test("the model sheet lists groups and providers and changes the thread's model", async () => {
   const app = await launch();
   await app.press("id:thread-t_relay");

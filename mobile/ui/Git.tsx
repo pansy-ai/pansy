@@ -32,6 +32,20 @@ export function GitSheet(props: { open: boolean; onClose: () => void; machine: s
     confirm.set(null);
     props.onCommit(w, s);
   };
+  const pulling = signal(false);
+  const pull = async () => {
+    pulling.set(true);
+    try {
+      const r = await conn(props.machine)!.call<{ pull?: string }>("git.run", { threadId: props.thread, action: "pull" });
+      toast(r.pull || tr("Up to date"));
+      Haptics.notification("success");
+      status.refetch();
+    } catch (e) {
+      toast(tr("Couldn't pull: %s", String((e as Error).message ?? e)), { tone: "error" });
+    } finally {
+      pulling.set(false);
+    }
+  };
   const add = () => (status()?.files ?? []).reduce((n, f) => n + f.add, 0);
   const del = () => (status()?.files ?? []).reduce((n, f) => n + f.del, 0);
   const subtitle = () => {
@@ -83,7 +97,14 @@ export function GitSheet(props: { open: boolean; onClose: () => void; machine: s
               <GroupRow first icon="git-pull-request" title={tr("PR #%d", status()?.pr?.number ?? 0)} sub={status()?.pr?.state ?? ""} chevron onPress={() => void openUrl(status()!.pr!.url).catch(() => {})} testID="git-pr" />
             </If>
             <GroupRow icon="file-diff" title={tr("View changes")} lead={undefined} sub={trn(status()?.files.length ?? 0, "1 file", "%d files", status()?.files.length ?? 0)} trailing={<AddDel add={add()} del={del()} size={14} />} chevron onPress={props.onDiff} testID="git-diff" />
-            <GroupRow icon="arrow-down-to-line" title={tr("Pull latest")} sub={status()?.behind ? tr("%s has %d new commits · phase 2", status()?.upstream ?? "origin", status()?.behind ?? 0) : tr("Phase 2")} tone="muted" />
+            <GroupRow
+              icon="arrow-down-to-line"
+              title={tr("Pull latest")}
+              sub={pulling() ? tr("Pulling…") : !status()?.upstream ? tr("Not pushed yet") : status()?.behind ? tr("%s has %d new commits", status()?.upstream ?? "origin", status()?.behind ?? 0) : tr("Up to date with %s", status()?.upstream ?? "origin")}
+              tone={status()?.upstream && !pulling() ? undefined : "muted"}
+              onPress={status()?.upstream && !pulling() ? () => void pull() : undefined}
+              testID="git-pull"
+            />
             <GroupRow icon="git-branch" title={tr("Branches and worktrees")} sub={tr("Phase 2")} tone="muted" />
             <If when={status()?.worktree}>
               <GroupRow icon="git-merge" title={tr("Merge back into %s", status()?.defaultBranch ?? "main")} sub={tr("Phase 2")} tone="muted" />

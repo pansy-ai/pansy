@@ -148,7 +148,7 @@ function seedHistory(): Record<string, Turn[]> {
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-type Run = { cancel: boolean; approval?: { request: string; resolve: (d: Decision) => void } };
+type Run = { cancel: boolean; approval?: { request: string; resolve: (d: Decision) => void }; question?: { request: string; resolve: (answers: Record<string, string> | null) => void } };
 
 export class FakeHome {
   readonly env: Environment;
@@ -235,6 +235,7 @@ export class FakeHome {
     this.change(threadId, { status: "working", startedAt: new Date().toISOString(), unread: false });
     await this.ms(500);
     if (stop()) return this.stopped(threadId, turn);
+    if (/问我|ask me/i.test(text)) return this.ask(threadId, turn, run);
     const read = `i_${rand()}`;
     this.emit(threadId, { type: "toolStarted", item: read, kind: "read", title: "读 desktop/ui/Sessions.tsx" });
     await this.ms(500);
@@ -264,6 +265,24 @@ export class FakeHome {
     const d = await decision;
     if (stop()) return this.stopped(threadId, turn);
     await this.afterTest(threadId, d, cmd, turn);
+  }
+
+  /** A question, as Claude Code's AskUserQuestion comes. */
+  private async ask(threadId: string, turn: string, run: Run) {
+    const request = `q_${rand()}`;
+    const answered = new Promise<Record<string, string> | null>((resolve) => (run.question = { request, resolve }));
+    this.emit(threadId, {
+      type: "question",
+      request,
+      questions: [{ question: "Which database?", header: "Storage", multiSelect: false, options: [{ label: "SQLite", description: "One file, nothing to run" }, { label: "Postgres", description: "A server" }] }],
+    });
+    this.change(threadId, { status: "approval" });
+    const answers = await answered;
+    if (run.cancel) return this.stopped(threadId, turn);
+    const msg = `i_${rand()}`;
+    const text = answers ? `Going with ${Object.values(answers).join(", ")}.` : "I'll pick one myself.";
+    this.emit(threadId, { type: "message", item: msg, text });
+    this.finish(threadId, turn, "completed");
   }
 
   /** What follows the test command's approval. */
@@ -455,6 +474,13 @@ export class FakeHome {
       case "runtime-request.respond": {
         const t = this.thread(p);
         const run = this.runs.get(t.id);
+        if (run?.question && run.question.request === p.requestId) {
+          const resolve = run.question.resolve;
+          run.question = undefined;
+          this.emit(t.id, { type: "resolved", request: String(p.requestId) });
+          resolve(p.answers ? (p.answers as Record<string, string>) : null);
+          return {};
+        }
         if (!run?.approval || run.approval.request !== p.requestId) throw err("not_found", "no such request");
         const resolve = run.approval.resolve;
         this.emit(t.id, { type: "resolved", request: String(p.requestId) });
@@ -524,6 +550,10 @@ export class FakeHome {
       case "git.run": {
         const t = this.thread(p);
         const action = String(p.action);
+        if (action === "pull") {
+          this.broadcast("git.progress", { threadId: t.id, step: "pull", status: "done", detail: "Fast-forward" });
+          return { pull: "Fast-forward" };
+        }
         const steps = ({ commit: ["commit"], push: ["push"], commit_push: ["commit", "push"], create_pr: ["pr"], commit_push_pr: ["commit", "push", "pr"] } as Record<string, string[]>)[action] ?? [];
         for (const step of steps) {
           this.broadcast("git.progress", { threadId: t.id, step, status: "running", detail: step === "push" ? "pre-push hook…" : step === "pr" ? `${t.model} 在写说明…` : undefined });
