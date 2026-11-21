@@ -13,6 +13,7 @@
 //! The process runs with the user's own `CODEX_HOME`, so its sessions are
 //! where the user's Codex keeps them and pansy's Sessions list them.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
@@ -229,9 +230,18 @@ async fn translate(
     events: mpsc::UnboundedSender<Event>,
     waiting: Arc<Mutex<Vec<(String, Value)>>>,
 ) {
+    // A file change's approval names only its item: the files are in the item started before it.
+    let mut changes: HashMap<String, Vec<String>> = HashMap::new();
     while let Some(m) = incoming.recv().await {
         match m {
-            Incoming::Request { id, method, params } => {
+            Incoming::Request {
+                id,
+                method,
+                mut params,
+            } => {
+                if let Some(paths) = params["itemId"].as_str().and_then(|i| changes.get(i)) {
+                    params["paths"] = json!(paths);
+                }
                 if let Some(e) = approval(&id, &method, &params) {
                     if let Event::Approval { request, .. } = &e {
                         waiting.lock().await.push((request.clone(), id));
@@ -240,6 +250,20 @@ async fn translate(
                 }
             }
             Incoming::Notification { method, params } => {
+                let item = &params["item"];
+                if method == "item/started" && item["type"] == "fileChange" {
+                    let paths = item["changes"].as_array().map(|c| {
+                        c.iter()
+                            .filter_map(|c| c["path"].as_str().map(str::to_owned))
+                            .collect()
+                    });
+                    changes.insert(
+                        item["id"].as_str().unwrap_or_default().to_owned(),
+                        paths.unwrap_or_default(),
+                    );
+                } else if method == "item/completed" {
+                    changes.remove(item["id"].as_str().unwrap_or_default());
+                }
                 if let Some(e) = notification(&method, &params) {
                     if let Event::Resolved { request } = &e {
                         waiting.lock().await.retain(|(r, _)| r != request);
@@ -276,10 +300,15 @@ fn approval(id: &Value, method: &str, p: &Value) -> Option<Event> {
         "item/fileChange/requestApproval" => (
             "fileChange",
             "Change files".to_owned(),
-            p["grantRoot"]
-                .as_str()
-                .map(|r| format!("write under {r}"))
-                .unwrap_or_default(),
+            match p["paths"].as_array() {
+                Some(paths) if !paths.is_empty() => {
+                    paths.iter().map(s).collect::<Vec<_>>().join("\n")
+                }
+                _ => p["grantRoot"]
+                    .as_str()
+                    .map(|r| format!("write under {r}"))
+                    .unwrap_or_default(),
+            },
         ),
         "item/permissions/requestApproval" => (
             "permissions",
@@ -553,6 +582,33 @@ mod tests {
                 "turn/interrupt"
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn a_file_change_approval_names_the_items_files() {
+        let (tx, rx) = mpsc::unbounded_channel();
+        let (events, mut out) = mpsc::unbounded_channel();
+        let waiting = Arc::new(Mutex::new(Vec::new()));
+        tx.send(Incoming::Notification {
+            method: "item/started".into(),
+            params: json!({"item": {"type": "fileChange", "id": "f1", "changes": [{"path": "/w/a.txt"}, {"path": "/w/b.txt"}]}}),
+        })
+        .unwrap();
+        tx.send(Incoming::Request {
+            id: json!(7),
+            method: "item/fileChange/requestApproval".into(),
+            params: json!({"itemId": "f1", "grantRoot": "/w"}),
+        })
+        .unwrap();
+        drop(tx);
+        translate(rx, events, waiting).await;
+        let mut detail = None;
+        while let Ok(e) = out.try_recv() {
+            if let Event::Approval { detail: d, .. } = e {
+                detail = Some(d);
+            }
+        }
+        assert_eq!(detail.as_deref(), Some("/w/a.txt\n/w/b.txt"));
     }
 
     #[test]
