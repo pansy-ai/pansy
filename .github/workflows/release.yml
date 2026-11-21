@@ -10,7 +10,9 @@
 # Secrets (the `release` environment): PANSY_RELEASE_KEY and
 # PANSY_UPDATE_KEY, the text of desktop/keys/release.secret and
 # update.secret; CLOUDFLARE_API_TOKEN, a token that may write
-# the bucket's objects; CLOUDFLARE_ACCOUNT_ID. Variables: PANSY_RELEASE_BUCKET
+# the bucket's objects; CLOUDFLARE_ACCOUNT_ID; PANSY_AUR_KEY, the private
+# SSH key of the AUR account that keeps pansy-bin (without it, the AUR is
+# left as it is). Variables: PANSY_RELEASE_BUCKET
 # when the bucket is not pansy-releases.
 name: release
 
@@ -187,3 +189,31 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" dist/* --verify-tag "${flags[@]}"
           fi
+
+  # pansy-bin on the AUR, for Arch Linux and Omarchy, once the archives it
+  # names are in the bucket; a beta is not put there
+  aur:
+    needs: [plan, publish]
+    if: needs.plan.outputs.kind == 'app' && !contains(github.ref_name, '-beta.')
+    runs-on: ubuntu-24.04
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: pansy-linux-*
+          merge-multiple: true
+      - name: AUR
+        env:
+          PANSY_AUR_KEY: ${{ secrets.PANSY_AUR_KEY }}
+        run: |
+          if [[ -z $PANSY_AUR_KEY ]]; then
+            echo "::notice::no PANSY_AUR_KEY: pansy-bin is not pushed to the AUR"
+            exit 0
+          fi
+          umask 077
+          key=$RUNNER_TEMP/aur
+          printf '%s\n' "$PANSY_AUR_KEY" > "$key"
+          trap 'rm -f -- "$key"' EXIT
+          PANSY_AUR_KEY=$key desktop/packaging/aur.sh
