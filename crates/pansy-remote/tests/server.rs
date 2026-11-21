@@ -88,7 +88,10 @@ async fn pairs_a_browser_and_answers_on_its_socket() {
         .to_owned();
     let body: Value = res.json().await.unwrap();
     assert_eq!(body["approval"], "approved");
-    assert!(body.get("accessToken").is_none(), "a cookie session has no token");
+    assert!(
+        body.get("accessToken").is_none(),
+        "a cookie session has no token"
+    );
     assert_eq!(pair(secret).await.unwrap().status(), 401);
 
     // Without the cookie there is no ticket.
@@ -112,15 +115,20 @@ async fn pairs_a_browser_and_answers_on_its_socket() {
     let mut req = format!("ws://{addr}/ws?ticket={ticket}")
         .into_client_request()
         .unwrap();
-    req.headers_mut()
-        .insert("cookie", cookie.parse().unwrap());
+    req.headers_mut().insert("cookie", cookie.parse().unwrap());
     let (mut ws, _) = tokio_tungstenite::connect_async(req).await.unwrap();
 
     let shell = call(&mut ws, 1, "shell.subscribe", json!({})).await;
     assert_eq!(shell["result"]["machine"]["id"], json!(auth.machine_id()));
     assert!(shell["result"]["threads"].is_array());
 
-    let missing = call(&mut ws, 2, "git.status", json!({"threadId": "t_000000000000"})).await;
+    let missing = call(
+        &mut ws,
+        2,
+        "git.status",
+        json!({"threadId": "t_000000000000"}),
+    )
+    .await;
     assert_eq!(missing["error"]["code"], "not_found");
 
     let unknown = call(&mut ws, 3, "no.such", json!({})).await;

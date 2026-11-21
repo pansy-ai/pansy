@@ -160,6 +160,7 @@ struct Queued {
 /// An agent being driven.
 enum Driver {
     Codex(Codex),
+    Claude(crate::claude::Claude),
 }
 
 impl Driver {
@@ -175,6 +176,10 @@ impl Driver {
                 let (c, rx) = Codex::start(launch, folder, resume, mode).await?;
                 Ok((Driver::Codex(c), rx))
             }
+            "claude-code" => {
+                let (c, rx) = crate::claude::Claude::start(launch, folder, resume, mode).await?;
+                Ok((Driver::Claude(c), rx))
+            }
             other => Err(coded("bad_request", format!("{other} can't be driven yet"))),
         }
     }
@@ -182,30 +187,35 @@ impl Driver {
     async fn send(&self, text: &str, model: Option<&str>, effort: Option<&str>) -> Result<String> {
         match self {
             Driver::Codex(c) => c.send(text, model, effort).await,
+            Driver::Claude(c) => c.send(text, model, effort).await,
         }
     }
 
     async fn steer(&self, turn: &str, text: &str) -> Result<()> {
         match self {
             Driver::Codex(c) => c.steer(turn, text).await,
+            Driver::Claude(c) => c.steer(turn, text).await,
         }
     }
 
     async fn interrupt(&self, turn: &str) -> Result<()> {
         match self {
             Driver::Codex(c) => c.interrupt(turn).await,
+            Driver::Claude(c) => c.interrupt(turn).await,
         }
     }
 
     async fn answer(&self, request: &str, decision: Decision) -> Result<()> {
         match self {
             Driver::Codex(c) => c.answer(request, decision).await,
+            Driver::Claude(c) => c.answer(request, decision).await,
         }
     }
 
     async fn stop(&self) {
         match self {
             Driver::Codex(c) => c.stop().await,
+            Driver::Claude(c) => c.stop().await,
         }
     }
 }
