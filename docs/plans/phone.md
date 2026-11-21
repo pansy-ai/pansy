@@ -1,6 +1,9 @@
 # 计划：手机 app 控制家里的 agent（第二版，照 T3 Code）
 
-**状态：P0 做完（[phone-p0.md](phone-p0.md)）；一期开始：`pansy service`、`pansy-remote` 的 Codex 驱动、`pansy drive`。** 是
+**状态：P0 做完（[phone-p0.md](phone-p0.md)）；一期的功能在 `phone-remote` 分支上齐了，
+本机端到端走通（Codex 和 Claude Code：配对、新任务进工作树、审批、提问、
+本回合 diff、提交推送、拉取），等真机试（大陆网络、手机浏览器）。开 PR 还没
+对真的 GitHub 仓库试过（只有 GitHub，别的 forge 在三期）。** 是
 [roadmap.md](roadmap.md) 迭代 7 的方案；[remote.md](remote.md) 留着远程接口、
 驱动和鉴权的细节，不一致时以本页为准；界面见 [phone-ui.md](phone-ui.md)。
 

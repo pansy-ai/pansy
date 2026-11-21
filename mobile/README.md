@@ -42,6 +42,17 @@ scripted agent up, `--port`, `--host` and `--dir` move it.
 Under the mock, a message to a thread runs a scripted turn: it reads a file,
 starts a subagent, streams an answer, then asks to run `cargo test`.
 
+## Against the pansy on this computer
+
+```sh
+nsh package --target web -o dist/web App.tsx   # served from mobile/dist/web/Pansy
+pansy remote on                                 # then restart pansy serve, or the window
+pansy pair                                      # a link to open on the phone
+```
+
+Settings › Network and sharing in the window does the same, with a QR code.
+The phone reaches port 7268 on this computer's private network or tailnet.
+
 ## Notes
 
 - The device key is a WebCrypto P-256 key kept extractable in `Storage`;
@@ -49,6 +60,4 @@ starts a subagent, streams an answer, then asks to run `cargo test`.
   app pairs in cookie mode.
 - `nsh.json` asks for `"network": { "hosts": ["*"] }`: a home pansy is at
   whatever address the user pairs with.
-- The protocol calls this uses beyond `phone-protocol.md` v1:
-  `devices.setRequireApproval { requireApproval }`, `thread.update { unread }`,
-  and an `os` in the environment; the `/ws` proof's `htu` is the `ws://` URL.
+- The `/ws` proof's `htu` is the `ws://` URL.
