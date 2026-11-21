@@ -73,6 +73,14 @@ pub enum Event {
         #[serde(skip_serializing_if = "String::is_empty")]
         reason: String,
     },
+    /// The agent asks the user to choose (Claude Code's AskUserQuestion):
+    /// `questions` as it gave them, `[{question, header, options: [{label,
+    /// description}], multiSelect}]`; answered with [`Answer::Choices`].
+    #[serde(rename_all = "camelCase")]
+    Question {
+        request: String,
+        questions: serde_json::Value,
+    },
     /// An approval was answered (here or by the agent itself).
     #[serde(rename_all = "camelCase")]
     Resolved { request: String },
@@ -102,6 +110,15 @@ pub enum Mode {
     /// Never ask (Full access): new threads start here, as in T3.
     #[default]
     Full,
+}
+
+/// What a waiting request is answered with: a decision for an approval,
+/// the choices for a question (`{question: label}`, several labels joined
+/// by ", ").
+#[derive(Debug, Clone, PartialEq)]
+pub enum Answer {
+    Decision(Decision),
+    Choices(serde_json::Value),
 }
 
 /// An answer to an [`Event::Approval`], named as T3 Code names them.

@@ -26,7 +26,7 @@ use tokio::sync::{broadcast, mpsc};
 
 use crate::auth::{self, Auth, Principal, Scope};
 use crate::hub::{Coded, Dispatch, Hub, NewThread, Push, Update, thread_param};
-use crate::{Decision, Mode, config, git};
+use crate::{Answer, Decision, Mode, config, git};
 
 /// What every handler shares.
 pub struct App {
@@ -734,9 +734,16 @@ async fn call(app: &App, p: &Principal, method: &str, params: Value) -> Result<V
         "runtime-request.respond" => {
             let id = thread_param(&params)?;
             let request = s("requestId").ok_or_else(|| bad("requestId is missing"))?;
-            let decision = Decision::parse(params["decision"].as_str().unwrap_or_default())
-                .ok_or_else(|| bad("decision: accept, acceptForSession, decline or cancel"))?;
-            hub.respond(&id, &request, decision).await?;
+            let answer = if params["answers"].is_object() {
+                Answer::Choices(params["answers"].clone())
+            } else {
+                Answer::Decision(
+                    Decision::parse(params["decision"].as_str().unwrap_or_default()).ok_or_else(
+                        || bad("decision: accept, acceptForSession, decline or cancel"),
+                    )?,
+                )
+            };
+            hub.respond(&id, &request, answer).await?;
             if let Some(feedback) = s("feedback").filter(|f| !f.trim().is_empty()) {
                 hub.dispatch(&id, &feedback, Dispatch::Queue, None, None)
                     .await?;
@@ -744,7 +751,8 @@ async fn call(app: &App, p: &Principal, method: &str, params: Value) -> Result<V
             json!({})
         }
         "run.interrupt" => {
-            hub.interrupt(&thread_param(&params)?).await?;
+            let force = params["force"].as_bool().unwrap_or(false);
+            hub.interrupt(&thread_param(&params)?, force).await?;
             json!({})
         }
         "thread.update" => {
@@ -949,6 +957,20 @@ async fn run_git(app: &App, params: &Value) -> Result<Value> {
     let id = thread_param(params)?;
     let t = hub.thread(&id)?;
     let action = params["action"].as_str().unwrap_or("commit").to_owned();
+    if action == "pull" {
+        hub.git_progress(&id, "pull", "running", String::new());
+        let d = PathBuf::from(&t.workdir);
+        return match tokio::task::spawn_blocking(move || git::pull(&d)).await? {
+            Ok(said) => {
+                hub.git_progress(&id, "pull", "done", said.clone());
+                Ok(json!({"pull": said}))
+            }
+            Err(e) => {
+                hub.git_progress(&id, "pull", "failed", format!("{e:#}"));
+                Err(e)
+            }
+        };
+    }
     let (commit, push, pr) = match action.as_str() {
         "commit" => (true, false, false),
         "push" => (false, true, false),

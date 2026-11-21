@@ -781,6 +781,34 @@ pub fn push(dir: &Path) -> Result<String> {
         .to_owned())
 }
 
+/// Brings the branch up to its upstream, fast-forward only: what git said
+/// last.
+pub fn pull(dir: &Path) -> Result<String> {
+    if !ok(
+        dir,
+        ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"],
+    ) {
+        bail!("this branch has no upstream to pull from: push it first");
+    }
+    let mut c = git(dir);
+    c.args(["pull", "--ff-only"]);
+    let out = c.output().context("running git pull")?;
+    let said = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    if !out.status.success() {
+        bail!("{}", said.trim());
+    }
+    Ok(said
+        .lines()
+        .rfind(|l| !l.trim().is_empty())
+        .unwrap_or("up to date")
+        .trim()
+        .to_owned())
+}
+
 // --- GitHub -----------------------------------------------------------------------
 
 /// The GitHub owner and repository `origin` is.
@@ -1106,6 +1134,30 @@ mod tests {
         let diff = diff(d, &Scope::Base("main".into())).unwrap();
         let paths: Vec<_> = diff.files.iter().map(|f| f.path.as_str()).collect();
         assert_eq!(paths, ["a.txt", "z.txt"]);
+    }
+
+    #[test]
+    fn pulls_from_the_upstream() {
+        let remote = tempfile::tempdir().unwrap();
+        run(
+            remote.path(),
+            ["init", "--quiet", "--bare", "--initial-branch=main"],
+        )
+        .unwrap();
+        let a = repo();
+        let url = remote.path().to_string_lossy().into_owned();
+        run(a.path(), ["remote", "add", "origin", &url]).unwrap();
+        assert!(pull(a.path()).is_err(), "no upstream yet");
+        push(a.path()).unwrap();
+        let b = tempfile::tempdir().unwrap();
+        run(b.path(), ["clone", "--quiet", &url, "."]).unwrap();
+        run(b.path(), ["config", "user.name", "B"]).unwrap();
+        run(b.path(), ["config", "user.email", "b@example.com"]).unwrap();
+        std::fs::write(b.path().join("b.txt"), "b\n").unwrap();
+        commit(b.path(), None, "b").unwrap();
+        push(b.path()).unwrap();
+        pull(a.path()).unwrap();
+        assert!(a.path().join("b.txt").exists());
     }
 
     #[test]

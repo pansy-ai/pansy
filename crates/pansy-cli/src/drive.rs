@@ -211,6 +211,11 @@ fn show(event: &Event, json: bool) -> Result<()> {
                 "  y: yes, s: yes for this session, n: no, c: no and stop"
             )?;
         }
+        Event::Question { questions, .. } => {
+            for q in questions.as_array().into_iter().flatten() {
+                writeln!(out, "? {}", q["question"].as_str().unwrap_or_default())?;
+            }
+        }
         Event::Resolved { .. } => {}
         Event::TurnFinished { status, error, .. } => {
             if error.is_empty() {

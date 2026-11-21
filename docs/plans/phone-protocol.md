@@ -97,8 +97,8 @@ payload `{"jti","htm","htu","iat","ath"?}`。`htu` 不带 query；`iat` 前后 6
 | `thread.unsubscribe` | orchestration:read | `{threadId}` | `{}` |
 | `thread.create` | orchestration:operate | `{folder, agent, model?, effort?, mode?, workspace: {kind: "current"\|"branch"\|"worktree", base?}, text}` | `{threadId}` |
 | `message.dispatch` | orchestration:operate | `{threadId, text, dispatchMode: "start"\|"queue"\|"steer"\|"restart", model?, effort?}` | `{}` |
-| `runtime-request.respond` | orchestration:operate | `{threadId, requestId, decision: "accept"\|"acceptForSession"\|"decline"\|"cancel", feedback?}` | `{}` |
-| `run.interrupt` | orchestration:operate | `{threadId}` | `{}` |
+| `runtime-request.respond` | orchestration:operate | `{threadId, requestId, decision: "accept"\|"acceptForSession"\|"decline"\|"cancel", feedback?}`；问题用 `{threadId, requestId, answers: {问题: 选项}}`（多选用 ", " 连起来） | `{}` |
+| `run.interrupt` | orchestration:operate | `{threadId, force?}` | `{}`（`force` 结束 agent 进程，下一条消息接着会话重开） |
 | `thread.update` | orchestration:operate | `{threadId, title?, model?, effort?, mode?, pinned?, archived?, snoozedUntil?}` | `{thread: ThreadSummary}` |
 | `thread.delete` | orchestration:operate | `{threadId, force?}` | `{worktreeKept}`（只删 pansy 的线程记录，不碰会话文件；pansy 建的工作树没有未提交的改动才一起删，`force` 照删；分支有未合并的提交就留着） |
 | `models.list` | orchestration:read | `{agent?}` | `{groups: [Group], providers: [{id, name, models: [Model]}]}` |
@@ -106,7 +106,7 @@ payload `{"jti","htm","htu","iat","ath"?}`。`htu` 不带 query；`iat` 前后 6
 | `git.status` | orchestration:read | `{threadId}` | `GitStatus` |
 | `git.diff` | orchestration:read | `{threadId, scope: "turn"\|"lastTurn"\|"uncommitted"\|"base"}` | `Diff` |
 | `git.generate` | source-control:write | `{threadId, kind: "commit"\|"pr"}` | `{title, body}` |
-| `git.run` | source-control:write | `{threadId, action: "commit"\|"push"\|"commit_push"\|"create_pr"\|"commit_push_pr", files?, message?, pr?: {title?, body?, base?}}` | `{commit?, pr?: {number, url}}`；进度推 `git.progress` |
+| `git.run` | source-control:write | `{threadId, action: "commit"\|"push"\|"commit_push"\|"create_pr"\|"commit_push_pr"\|"pull", files?, message?, pr?: {title?, body?, base?}}` | `{commit?, pr?: {number, url}, pull?}`；进度推 `git.progress`；`pull` 只快进上游 |
 | `devices.list` | access:read | `{}` | `{devices: [Device], requireApproval}` |
 | `devices.setRequireApproval` | access:write | `{requireApproval}` | `{}` |
 | `devices.revoke` / `devices.approve` | access:write | `{deviceId}` | `{}` |
@@ -159,6 +159,8 @@ type Event =                  // pansy_remote::Event，tag 是 type
   | { type: "toolStarted"; item: string; kind: string; title: string }
   | { type: "toolFinished"; item: string; kind: string; title: string; status: string; output?: string }
   | { type: "approval"; request: string; kind: string; title: string; detail: string; reason?: string }
+  | { type: "question"; request: string; questions: { question: string; header: string; multiSelect: boolean;
+      options: { label: string; description: string }[] }[] }
   | { type: "resolved"; request: string }
   | { type: "turnFinished"; turn: string; status: string; error?: string }
   | { type: "exited"; code?: number };

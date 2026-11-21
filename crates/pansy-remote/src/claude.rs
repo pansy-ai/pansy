@@ -290,6 +290,24 @@ impl Claude {
             .await
     }
 
+    /// Answers the question `request` ([`Event::Question`]) with
+    /// `answers`, `{question: label}`.
+    pub async fn answer_question(&self, request: &str, answers: Value) -> Result<()> {
+        let w = {
+            let mut waiting = self.waiting.lock().unwrap();
+            let at = waiting
+                .iter()
+                .position(|w| w.request == request)
+                .ok_or_else(|| anyhow!("no question {request} is waiting"))?;
+            waiting.remove(at)
+        };
+        let mut input = w.input;
+        input["answers"] = answers;
+        self.rpc
+            .respond(w.id, json!({"behavior": "allow", "updatedInput": input}))
+            .await
+    }
+
     /// Ends the host, and Claude Code with it.
     pub async fn stop(&self) {
         let _ =
@@ -508,8 +526,15 @@ async fn translate(
         let mut out = Vec::new();
         match m {
             Incoming::Request { id, method, params } if method == "canUseTool" => {
-                let e = approval(&id, &params);
-                if let Event::Approval { request, .. } = &e {
+                let e = if params["tool"] == "AskUserQuestion" {
+                    Event::Question {
+                        request: request_name(&id),
+                        questions: params["input"]["questions"].clone(),
+                    }
+                } else {
+                    approval(&id, &params)
+                };
+                if let Event::Approval { request, .. } | Event::Question { request, .. } = &e {
                     waiting.lock().unwrap().push(Waiting {
                         request: request.clone(),
                         id,
@@ -1000,6 +1025,46 @@ mod tests {
             ]
         );
         assert_eq!(events.recv().await, Some(Event::Exited { code: None }));
+    }
+
+    /// AskUserQuestion is a question, answered with the choices made.
+    #[tokio::test]
+    async fn a_question_answered_with_choices() {
+        let (rpc, incoming, (mut lines, mut w)) = pipe();
+        let host = tokio::spawn(async move {
+            while let Ok(Some(line)) = lines.next_line().await {
+                let m: Value = serde_json::from_str(&line).unwrap();
+                match m["method"].as_str() {
+                    Some("start") => {
+                        put(&mut w, json!({"id": m["id"], "result": {}})).await;
+                        put(&mut w, json!({"id": "q1", "method": "canUseTool", "params": {"tool": "AskUserQuestion",
+                            "input": {"questions": [{"question": "Which?", "header": "Pick", "multiSelect": false,
+                                "options": [{"label": "A", "description": "a"}, {"label": "B", "description": "b"}]}]},
+                            "suggestions": []}}))
+                        .await;
+                    }
+                    None => return m["result"].clone(),
+                    _ => {}
+                }
+            }
+            Value::Null
+        });
+        let (claude, mut events) = Claude::open(rpc, incoming, new_session(), "")
+            .await
+            .unwrap();
+        events.recv().await;
+        let Some(Event::Question { request, questions }) = events.recv().await else {
+            panic!()
+        };
+        assert_eq!(questions[0]["options"][1]["label"], "B");
+        claude
+            .answer_question(&request, json!({"Which?": "B"}))
+            .await
+            .unwrap();
+        let result = host.await.unwrap();
+        assert_eq!(result["behavior"], "allow");
+        assert_eq!(result["updatedInput"]["answers"], json!({"Which?": "B"}));
+        assert_eq!(result["updatedInput"]["questions"][0]["question"], "Which?");
     }
 
     /// Each answer, as the SDK is told it.

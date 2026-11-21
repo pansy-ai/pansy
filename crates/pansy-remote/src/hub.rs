@@ -18,7 +18,7 @@ use tokio::sync::{broadcast, mpsc};
 
 use crate::codex::Codex;
 use crate::store::{self, Thread};
-use crate::{Decision, Event, Mode};
+use crate::{Answer, Decision, Event, Mode};
 
 /// The events a running thread keeps for devices that reconnect.
 const KEPT: usize = 2000;
@@ -239,6 +239,13 @@ impl Driver {
         match self {
             Driver::Codex(c) => c.answer(request, decision).await,
             Driver::Claude(c) => c.answer(request, decision).await,
+        }
+    }
+
+    async fn answer_question(&self, request: &str, answers: serde_json::Value) -> Result<()> {
+        match self {
+            Driver::Codex(_) => Err(coded("bad_request", "Codex asks no questions")),
+            Driver::Claude(c) => c.answer_question(request, answers).await,
         }
     }
 
@@ -711,11 +718,14 @@ impl Hub {
         Ok(())
     }
 
-    pub async fn respond(&self, id: &str, request: &str, decision: Decision) -> Result<()> {
+    pub async fn respond(&self, id: &str, request: &str, answer: Answer) -> Result<()> {
         let run = self
             .run_of(id)
             .ok_or_else(|| coded("not_found", "nothing runs in this thread"))?;
-        run.driver.answer(request, decision).await?;
+        match answer {
+            Answer::Decision(d) => run.driver.answer(request, d).await?,
+            Answer::Choices(c) => run.driver.answer_question(request, c).await?,
+        }
         run.state
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -732,10 +742,34 @@ impl Hub {
         Ok(())
     }
 
-    pub async fn interrupt(&self, id: &str) -> Result<()> {
+    /// Stops the running turn; with `force`, ends the agent itself (the
+    /// next message starts it again, resuming the session).
+    pub async fn interrupt(&self, id: &str, force: bool) -> Result<()> {
         let run = self
             .run_of(id)
             .ok_or_else(|| coded("not_found", "nothing runs in this thread"))?;
+        if force {
+            let turn = {
+                let mut s = run.state.lock().unwrap_or_else(|e| e.into_inner());
+                s.waiting.clear();
+                s.started = None;
+                s.turn.take()
+            };
+            self.end(id).await;
+            if let Some(turn) = turn {
+                self.log(
+                    id,
+                    &run,
+                    Event::TurnFinished {
+                        turn,
+                        status: "interrupted".into(),
+                        error: String::new(),
+                    },
+                );
+            }
+            self.changed(id);
+            return Ok(());
+        }
         let turn = run
             .state
             .lock()
@@ -965,7 +999,7 @@ impl Hub {
                     s.started.get_or_insert_with(Utc::now);
                     status_changed = true;
                 }
-                Event::Approval { request, .. } => {
+                Event::Approval { request, .. } | Event::Question { request, .. } => {
                     run.state
                         .lock()
                         .unwrap_or_else(|e| e.into_inner())
@@ -1006,8 +1040,14 @@ impl Hub {
                 }
                 _ => {}
             }
-            if let Event::Approval { title, .. } = &event {
-                crate::notify::approval(&self.thread(&id).ok(), title);
+            match &event {
+                Event::Approval { title, .. } => {
+                    crate::notify::approval(&self.thread(&id).ok(), title)
+                }
+                Event::Question { .. } => {
+                    crate::notify::approval(&self.thread(&id).ok(), "A question for you")
+                }
+                _ => {}
             }
             self.log(&id, &run, event.clone());
             if status_changed {
