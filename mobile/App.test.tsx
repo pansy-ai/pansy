@@ -27,17 +27,23 @@ test("lists every machine's threads from the shell snapshot, on their shelves", 
   const app = await launch();
   await app.waitFor("text:给 Sessions 页加按项目的花费");
   const texts = app.texts();
-  expect(texts).toContain("In progress");
   expect(texts).toContain("Awaiting approval");
   expect(texts).toContain("Failed");
   expect(texts).toContain("cargo test：3 个测试失败（pansy-agents）");
   expect(texts).toContain("Opened in a terminal");
   expect(texts).toContain("deepseek/v4");
-  // archived threads are folded under their shelf's head
-  expect(texts).toContain("Archived (3)");
-  expect(texts).not.toContain("NSH 0.6.1 的升级");
-  await app.press("id:shelf-archived");
-  await app.waitFor("text:NSH 0.6.1 的升级");
+  // the settled shelf lists its first ten, as T3's, then shows the rest on asking
+  expect(texts).toContain("Settled");
+  expect(texts).toContain("NSH 0.6.1 的升级");
+  expect(texts).toContain("Show more (2 settled hidden)");
+  expect(texts).not.toContain("umiro 的中继压测");
+  await app.press("id:shelf-more-settled");
+  await app.waitFor("text:umiro 的中继压测");
+  expect(app.shows("id:shelf-more-settled")).toBe(false);
+  // and folds under its head
+  await app.press("id:shelf-settled");
+  await app.waitUntil(() => !app.texts().includes("NSH 0.6.1 的升级"));
+  expect(app.texts()).toContain("Settled (12)");
   expect(called(app, "shell.subscribe")).toBe(true);
 });
 
@@ -49,6 +55,10 @@ test("filters the list by agent", async () => {
   await app.press("id:pick-agent-codex");
   await app.waitUntil(() => !app.texts().includes("给 Sessions 页加按项目的花费"));
   expect(app.texts()).toContain("修复 Codex 子 agent 的模型头");
+  // the reset beside the filters puts every thread back
+  await app.press("id:filter-reset");
+  await app.waitFor("text:给 Sessions 页加按项目的花费");
+  expect(app.shows("id:filter-reset")).toBe(false);
 });
 
 test("the approval card answers with runtime-request.respond, and the turn goes on", async () => {
@@ -267,7 +277,7 @@ test("with nothing paired, it asks to connect a computer and pairs by address an
 test("speaks Chinese when the system does", async () => {
   const app = await launch({ locale: "zh-CN" });
   await app.waitFor("text:给 Sessions 页加按项目的花费");
-  expect(app.texts()).toContain("进行中");
   expect(app.texts()).toContain("等批准");
-  expect(app.texts()).toContain("已归档 (3)");
+  expect(app.texts()).toContain("已收尾");
+  expect(app.texts()).toContain("显示更多（已隐藏 2 个已收尾）");
 });

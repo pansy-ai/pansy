@@ -516,7 +516,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
           { id: "rename", label: tr("Rename"), icon: "pencil" as IconName, run: () => t() && renaming.set({ machine: props.machine, thread: t()! }) },
           { id: "settings", label: tr("Thread settings"), icon: "sliders-horizontal" as IconName, run: () => sheet.set("mode") },
           { id: "copy", label: tr("Copy link"), icon: "link" as IconName, run: () => t() && void copyLink(props.machine, t()!) },
-          { id: "archive", label: tr("Archive"), icon: "archive" as IconName, run: () => t() && void archive(props.machine, t()!).then(() => chats.pop()) },
+          { id: "archive", label: tr("Settle"), icon: "archive" as IconName, run: () => t() && void archive(props.machine, t()!).then(() => chats.pop()) },
           { id: "computer", label: tr("Open on the computer"), icon: "laptop" as IconName, run: () => toast(tr("Opening on the computer comes in phase 2")) },
         ]}
         key={(x) => x.id}

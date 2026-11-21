@@ -26,6 +26,8 @@ export const MOTION = "transition duration-120 ease-out";
 /** Glass: translucent ground, a blur behind and a hairline edge. */
 export const GLASS = "bg-glass border border-border";
 export const BLUR = { backdropFilter: "blur(20px)" } as const;
+/** What floats over the list as T3's does (the tab bar, compose, search, the filters): Liquid Glass on iOS 26, the blur elsewhere. */
+export const LIQUID = { ...BLUR, glassEffect: "regular" } as const;
 
 const svgSrc = (svg: string, color: string) => `data:image/svg+xml,${encodeURIComponent(svg.replaceAll("currentColor", color))}`;
 
@@ -76,15 +78,37 @@ export function Logo(props: { name: LogoName | null; size?: number }) {
   );
 }
 
-/** A project's mark: its first letter on a color of its name. */
+/** A project's mark, T3's monogram: two letters in mono, in a color of its name on a 15% wash of it. */
 export function ProjectMark(props: { name: string; dim?: boolean }) {
-  const hues = ["#7c3aed", "#0ea5e9", "#16a34a", "#ea580c", "#db2777", "#4f46e5", "#0891b2"];
-  const hue = () => hues[[...props.name].reduce((n, c) => n + c.charCodeAt(0), 0) % hues.length];
+  const hue = () => monogramHue(props.name);
+  const text = () => monogram(props.name);
   return (
-    <View class="h-5 w-5 items-center justify-center rounded-[5px]" style={{ backgroundColor: hue(), opacity: props.dim ? 0.4 : 1 }}>
-      <Text class="text-[11px] font-bold text-white">{(props.name[0] ?? "?").toLowerCase()}</Text>
+    <View class="h-5 w-5 items-center justify-center rounded-[5px]" style={{ backgroundColor: `${hue()}26`, opacity: props.dim ? 0.4 : 1 }}>
+      <Text class="font-mono" style={{ color: hue(), fontSize: [...text()].length === 1 ? 12 : 10.3, lineHeight: 20 }}>
+        {text()}
+      </Text>
     </View>
   );
+}
+
+/** T3's monogram (`projectIcon.ts`): the first word's first letter, then its first digit, the last word's first letter or its own last letter; `pansy` is "PY". */
+export function monogram(name: string): string {
+  const words = name.normalize("NFKC").trim().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const first = words[0];
+  if (!first) return "PR";
+  const glyphs = [...first];
+  const second = glyphs.slice(1).find((g) => /\p{N}/u.test(g)) ?? (words.length > 1 ? [...words[words.length - 1]][0] : glyphs[glyphs.length - 1]) ?? glyphs[0];
+  return [...`${glyphs[0]}${second}`.toUpperCase()].slice(0, 2).join("");
+}
+
+/** T3's monogram colors, Tailwind's 500s, picked by a hash of the name. */
+const MONOGRAM_HUES = ["#6b7280", "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e", "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e"];
+
+export function monogramHue(name: string): string {
+  const seed = name.normalize("NFKC").trim().toLocaleLowerCase("en-US") || "project";
+  let i = 0;
+  for (const g of seed) i = (i * 31 + (g.codePointAt(0) ?? 0)) % MONOGRAM_HUES.length;
+  return MONOGRAM_HUES[i];
 }
 
 /** A round glass button of the header: filter, new task, back. */
@@ -96,23 +120,23 @@ export function GlassButton(props: { icon: IconName; label: string; onPress: () 
       accessibilityLabel={props.label}
       testID={props.testID}
       class={`items-center justify-center rounded-full ${GLASS} active:scale-90 ${MOTION}`}
-      style={{ width: size(), height: size(), boxShadow: SHADOW.small(), ...BLUR }}
+      style={{ width: size(), height: size(), boxShadow: SHADOW.small(), ...LIQUID }}
     >
       <Icon name={props.icon} size={18} />
     </BaseButton>
   );
 }
 
-/** A filter or option capsule; the chosen one is filled with the accent. */
+/** A filter or option capsule (T3's `Chip`): glass with the muted ink, the chosen one filled with the accent. */
 export function Chip(props: { label: string; on?: boolean; icon?: IconName; logo?: LogoName | null; chevron?: boolean; onPress?: () => void; testID?: string; small?: boolean }) {
-  const ink = (): Color => (props.on ? "primary-foreground" : "fg");
+  const ink = (): Color => (props.on ? "primary-foreground" : "fg-2");
   return (
     <View
       role="button"
       testID={props.testID}
       onPress={props.onPress}
       class={`flex-row items-center gap-[6px] rounded-2xl px-3 active:opacity-70 ${props.small ? "h-[30px]" : "h-8"} ${props.on ? "bg-primary" : GLASS}`}
-      style={props.on ? undefined : BLUR}
+      style={props.on ? undefined : LIQUID}
     >
       <If when={props.icon}>
         <Icon name={props.icon!} color={ink()} size={props.small ? 14 : 15} />
@@ -120,9 +144,9 @@ export function Chip(props: { label: string; on?: boolean; icon?: IconName; logo
       <If when={props.logo}>
         <Logo name={props.logo!} />
       </If>
-      <Text class={`font-medium ${props.small ? "text-[13px]" : "text-[14px]"} text-${ink()}`}>{props.label}</Text>
+      <Text class={`max-w-[180px] font-medium text-[13px] text-${ink()} line-clamp-1`}>{props.label}</Text>
       <If when={props.chevron}>
-        <Icon name="chevron-down" color={ink()} size={12} />
+        <Icon name="chevron-down" color={ink()} size={11} />
       </If>
     </View>
   );

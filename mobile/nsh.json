@@ -16,7 +16,7 @@
     "cssVars": {
       "theme": {
         "radius": "1rem",
-        "font-sans": "DM Sans, PingFang SC, Noto Sans CJK SC, Microsoft YaHei, sans-serif",
+        "font-sans": "DM Sans 9pt, DM Sans, PingFang SC, Noto Sans CJK SC, Microsoft YaHei, sans-serif",
         "font-mono": "ui-monospace, SF Mono, Menlo, Roboto Mono, monospace"
       },
       "light": {

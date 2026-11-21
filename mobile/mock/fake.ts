@@ -105,6 +105,15 @@ function seedThreads(): ThreadSummary[] {
     t({ id: "t_nsh", title: "NSH 0.6.1 的升级", folder: "/home/me/pansy", agent: "codex", model: "group/daily", status: "idle", archived: true, updatedAt: ago(86_400 * 3) }),
     t({ id: "t_dl", title: "下载页只给安装包", folder: "/home/me/pansy", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 3) }),
     t({ id: "t_arb", title: "Binance 和 Longbridge 的套利", folder: "/home/me/ojbk", agent: "claude-code", model: "kimi/k3", status: "idle", archived: true, updatedAt: ago(86_400 * 4) }),
+    t({ id: "t_s1", title: "仿 T3 的初始化引导", folder: "/home/me/pansy", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 5) }),
+    t({ id: "t_s2", title: "发布安装包到 omarchy", folder: "/home/me/pansy", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 5) }),
+    t({ id: "t_s3", title: "Claude Desktop 支持", folder: "/home/me/pansy", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 6) }),
+    t({ id: "t_s4", title: "Web 端下载页按系统给安装包", folder: "/home/me/pansy-site", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 6) }),
+    t({ id: "t_s5", title: "提交 nsh-showcases 的 PR", folder: "/home/me/nsh-showcases", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 7) }),
+    t({ id: "t_s6", title: "macOS 和 Windows 安装包随 tag 发布", folder: "/home/me/pansy", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 7) }),
+    t({ id: "t_s7", title: "README 的 fork 文案", folder: "/home/me/pansy", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 8) }),
+    t({ id: "t_s8", title: "Web 新增插件模块", folder: "/home/me/pansy-site", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 9) }),
+    t({ id: "t_s9", title: "umiro 的中继压测", folder: "/home/me/umiro", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 10) }),
   ];
 }
 

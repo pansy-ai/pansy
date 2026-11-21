@@ -1,7 +1,8 @@
-// 对话: every machine's threads in one list (phone-ui.md "1. 对话"): the
-// header (pansy, or the machine that is offline), the filters, the shelves
-// (in progress, unsent, later, archived) and the rows; a held row's menu.
-import { cleanup, Image, Scroll, signal, Text, token, View } from "nsh";
+// 对话: every machine's threads in one list (phone-ui.md "1. 对话"), as T3's
+// home: the header (pansy, or the machines it is reconnecting to; search),
+// the filters, the rows in progress, then the snoozed and settled shelves;
+// a held row's menu.
+import { cleanup, effect, Image, Scroll, signal, Text, token, untracked, View } from "nsh";
 import { ContextMenu, MenuItem, NavPage } from "nsh/base";
 import type { Machine } from "../net/client";
 import type { ThreadSummary } from "../net/types";
@@ -9,19 +10,23 @@ import { connState, entries, machines, ready, shells, wakeAll, type Entry } from
 import { archive, copyLink, markUnread, pin, remove, renaming, snooze, tillTomorrow } from "./actions";
 import { tr } from "./i18n";
 import { ICONS } from "./icons";
-import { agentLogo, agentName, AddDel, BLUR, Btn, Chip, Field, GlassButton, Icon, Logo, PickSheet, ProjectMark, type IconName } from "./parts";
+import { agentLogo, agentName, AddDel, BLUR, Btn, Chip, Field, GlassButton, Icon, Logo, PickSheet, ProjectMark, Spinner, type IconName } from "./parts";
 import { newTask, openThread, pairOpen } from "./nav";
 import { Status, statusLook } from "./status";
-import { tick, when } from "./time";
+import { now, since, tick } from "./time";
 
-type Shelf = "active" | "unsent" | "later" | "archived";
+/** T3's shelves: the rows in progress (no head), snoozed, settled. A settled thread is one the user archived. */
+type Shelf = "active" | "snoozed" | "settled";
 
 export function shelfOf(t: ThreadSummary, at = Date.now()): Shelf {
-  if (t.archived) return "archived";
-  if (t.snoozedUntil && Date.parse(t.snoozedUntil) > at) return "later";
-  if (t.status === "unsent") return "unsent";
+  if (t.archived) return "settled";
+  if (t.snoozedUntil && Date.parse(t.snoozedUntil) > at) return "snoozed";
   return "active";
 }
+
+/** T3's settled shelf: ten rows, then 25 more each "Show more". */
+export const SETTLED_FIRST = 10;
+export const SETTLED_PAGE = 25;
 
 const project = (t: ThreadSummary) => t.folder.split(/[\\/]/).filter(Boolean).pop() ?? t.folder;
 
@@ -29,7 +34,8 @@ const project = (t: ThreadSummary) => t.folder.split(/[\\/]/).filter(Boolean).po
 const filter = { machine: signal<string | null>(null), project: signal<string | null>(null), agent: signal<string | null>(null) };
 const query = signal("");
 const searching = signal(false);
-const collapsed = signal<Record<Shelf, boolean>>({ active: false, unsent: false, later: false, archived: true });
+const collapsed = signal<Record<Shelf, boolean>>({ active: false, snoozed: true, settled: false });
+const settledShown = signal(SETTLED_FIRST);
 const picking = signal<"machine" | "project" | "agent" | null>(null);
 
 function visible(): Entry[] {
@@ -42,34 +48,62 @@ function visible(): Entry[] {
     .sort((a, b) => Number(!!b.thread.pinned) - Number(!!a.thread.pinned) || Date.parse(b.thread.updatedAt) - Date.parse(a.thread.updatedAt));
 }
 
-/** pansy's mark and name, or the machine that is offline. */
+/** What the title says while no machine is online (T3's `workspace-connection-status`): who it is reconnecting to, or that none is connected. */
+export function connectionTitle(states: { name: string; state: string }[]): { label: string; spin: boolean } | null {
+  if (states.length === 0 || states.some((m) => m.state === "online")) return null;
+  const trying = states.filter((m) => m.state === "connecting" || m.state === "offline");
+  const spin = trying.some((m) => m.state === "connecting");
+  if (trying.length === 1) return { label: tr("Reconnecting to %s", trying[0].name), spin };
+  if (trying.length > 1) return { label: tr("Reconnecting %d machines", trying.length), spin };
+  return { label: tr("Not connected"), spin: false };
+}
+
+/** T3 waits this long before the title says so, which hides a brief reconnect. */
+const STATUS_DELAY = 800;
+
+/** pansy's mark and name, or the machines it is reconnecting to. */
 function Title() {
-  const down = () => machines().find((m) => connState(m.id) === "offline" || connState(m.id) === "revoked");
+  const status = () => connectionTitle(machines().map((m) => ({ name: m.name, state: connState(m.id) })));
+  // when the status run began; a gap restarts the delay
+  const since = signal<number | null>(null);
+  effect(() => {
+    const on = !!status();
+    if (on !== (untracked(since) !== null)) since.set(on ? Date.now() : null);
+  });
+  const shown = () => {
+    const at = since();
+    return at !== null && now() - at >= STATUS_DELAY ? status() : null;
+  };
   return (
     <If
-      when={down()}
-      else={
-        <View class="flex-row items-center gap-2">
-          <Image src={`data:image/svg+xml,${encodeURIComponent(ICONS.pansy.replaceAll("currentColor", token("primary")))}`} style={{ width: 20, height: 20 }} />
-          <Text class="text-[21px] font-medium tracking-[-0.5px] text-fg-2">pansy</Text>
+      when={shown()}
+        else={
+          <View class="flex-row items-center gap-2">
+            <Image src={`data:image/svg+xml,${encodeURIComponent(ICONS.pansy.replaceAll("currentColor", token("primary")))}`} style={{ width: 20, height: 20 }} />
+            <Text class="text-[21px] font-medium tracking-[-0.5px] text-fg-2">pansy</Text>
+          </View>
+        }
+      >
+        <View testID="connection-title" class="min-w-0 flex-1 flex-row items-center gap-2">
+          <If when={shown()?.spin} else={<Icon name="wifi-off" color="fg-2" size={15} />}>
+            <Spinner size={16} color="fg-2" />
+          </If>
+          <Text class="shrink text-[16px] font-bold text-fg-2 line-clamp-1">{shown()?.label ?? ""}</Text>
         </View>
-      }
-    >
-      <View testID="offline-title" class="min-w-0 flex-1 flex-row items-center gap-2">
-        <Icon name="wifi-off" color="fg-2" size={18} />
-        <Text class="text-[15px] font-bold text-fg-2 line-clamp-1">{tr("%s is offline", down()?.name ?? "")}</Text>
-      </View>
     </If>
   );
 }
 
+/** Pansy or the status on the left; search alone on the right, as T3's (compose floats beside the tab bar). */
 function Header() {
   return (
     <View class="h-[52px] flex-row items-center gap-2 px-4">
       <Title />
       <View class="flex-1" />
-      <GlassButton icon="sliders-horizontal" label={tr("Search")} testID="threads-search" onPress={() => searching.set(!searching())} />
-      <GlassButton icon="square-pen" label={tr("New task")} testID="new-task" onPress={() => (machines().length ? newTask.set({}) : pairOpen.set(true))} />
+      <GlassButton icon={searching() ? "x" : "search"} label={searching() ? tr("Close search") : tr("Search")} testID="threads-search" onPress={() => {
+        if (searching()) query.set("");
+        searching.set(!searching());
+      }} size={44} />
     </View>
   );
 }
@@ -78,10 +112,25 @@ function Filters() {
   const name = (id: string | null) => machines().find((m) => m.id === id)?.name;
   return (
     <Scroll horizontal class="grow-0" scrollbar={false}>
-      <View class="flex-row gap-2 px-5 pb-[10px] pt-1">
-        <Chip icon="laptop" label={name(filter.machine()) ?? tr("All machines")} on={!!filter.machine()} chevron testID="filter-machine" onPress={() => picking.set("machine")} />
+      <View class="flex-row items-center gap-2 px-5 pb-[10px] pt-[2px]">
+        <Chip label={name(filter.machine()) ?? tr("All machines")} on={!!filter.machine()} chevron testID="filter-machine" onPress={() => picking.set("machine")} />
         <Chip label={filter.project() ?? tr("All projects")} on={!!filter.project()} chevron testID="filter-project" onPress={() => picking.set("project")} />
         <Chip label={filter.agent() ? agentName(filter.agent()!) : tr("All agents")} on={!!filter.agent()} chevron testID="filter-agent" onPress={() => picking.set("agent")} />
+        <If when={filter.machine() || filter.project() || filter.agent()}>
+          <View
+            role="button"
+            accessibilityLabel={tr("Reset thread filters")}
+            testID="filter-reset"
+            class="h-8 w-8 items-center justify-center active:opacity-70"
+            onPress={() => {
+              filter.machine.set(null);
+              filter.project.set(null);
+              filter.agent.set(null);
+            }}
+          >
+            <Icon name="circle-x" color="fg-3" size={18} />
+          </View>
+        </If>
       </View>
     </Scroll>
   );
@@ -131,11 +180,11 @@ function ShelfHead(props: { shelf: Shelf; label: string; count: number }) {
       role="button"
       testID={`shelf-${props.shelf}`}
       onPress={() => collapsed.set({ ...collapsed(), [props.shelf]: !shut() })}
-      class="flex-row items-center gap-2 px-5 pb-[6px] pt-[14px]"
+      class="mb-[6px] mt-4 flex-row items-center gap-[10px] px-5"
     >
-      <Text class="text-[13px] font-medium text-fg-3">{shut() ? `${props.label} (${props.count})` : props.label}</Text>
-      <View class="h-px flex-1 bg-line" />
-      <View style={{ transform: [{ rotate: shut() ? "-90deg" : "0deg" }] }} class="transition-transform duration-180">
+      <Text class="text-[12px] font-medium text-fg-3">{shut() ? `${props.label} (${props.count})` : props.label}</Text>
+      <View class="h-px flex-1 bg-border" />
+      <View style={{ transform: [{ rotate: shut() ? "0deg" : "180deg" }] }} class="transition-transform duration-180">
         <Icon name="chevron-down" color="fg-3" size={10} />
       </View>
     </View>
@@ -157,9 +206,9 @@ function RowMenu(props: { machine: Machine; thread: ThreadSummary }) {
       {item(t().pinned ? tr("Unpin") : tr("Pin"), t().pinned ? "pin-off" : "pin", () => void pin(m(), t()), "menu-pin")}
       {item(tr("Rename"), "pencil", () => renaming.set({ machine: m(), thread: t() }), "menu-rename")}
       {item(tr("Mark as unread"), "circle", () => void markUnread(m(), t()), "menu-unread")}
-      {item(t().archived ? tr("Unarchive") : tr("Archive"), t().archived ? "archive-restore" : "archive", () => void archive(m(), t(), !t().archived), "menu-archive")}
-      <If when={shelfOf(t()) === "later"} else={item(tr("Later: tomorrow morning"), "clock", () => void snooze(m(), t(), tillTomorrow()), "menu-snooze")}>
-        {item(tr("Back to in progress"), "clock", () => void snooze(m(), t(), null), "menu-unsnooze")}
+      {item(t().archived ? tr("Unsettle") : tr("Settle"), t().archived ? "archive-restore" : "archive", () => void archive(m(), t(), !t().archived), "menu-settle")}
+      <If when={shelfOf(t()) === "snoozed"} else={item(tr("Snooze until tomorrow morning"), "clock", () => void snooze(m(), t(), tillTomorrow()), "menu-snooze")}>
+        {item(tr("Unsnooze"), "clock", () => void snooze(m(), t(), null), "menu-unsnooze")}
       </If>
       {item(tr("Copy link"), "link", () => void copyLink(m(), t()), "menu-copy")}
       {item(tr("Delete thread record"), "trash-2", () => void remove(m(), t()), "menu-delete", true)}
@@ -229,16 +278,16 @@ function Row(props: { entry: Entry; first: boolean }) {
   );
 }
 
-/** An archived row: 44pt, one line, the time in mono. */
+/** A settled or snoozed row (T3's slim row): 44pt, one line, the mark at 40%, the time in mono. */
 function SlimRow(props: { entry: Entry }) {
   const t = () => props.entry.thread;
   return (
     <ContextMenu
       trigger={
-        <View role="button" testID={`thread-${t().id}`} onPress={() => openThread(props.entry.machine.id, t().id)} class="h-11 flex-row items-center gap-2 px-5 active:bg-line">
+        <View role="button" testID={`thread-${t().id}`} onPress={() => openThread(props.entry.machine.id, t().id)} class="min-h-[44px] flex-row items-center gap-2 px-5 py-2 active:bg-line">
           <ProjectMark name={project(t())} dim />
-          <Text class="flex-1 text-[16px] text-fg-2 line-clamp-1">{t().title}</Text>
-          <Text class="font-mono text-[14px] text-fg-3">{when(t().updatedAt)}</Text>
+          <Text class="flex-1 text-[16px] text-fg-2 line-clamp-1">{t().title || tr("Untitled")}</Text>
+          <Text class="font-mono text-[14px] text-fg-3">{since(t().updatedAt, now())}</Text>
         </View>
       }
       popupClass="min-w-[240px] rounded-[14px] border border-border bg-glass p-1"
@@ -250,19 +299,39 @@ function SlimRow(props: { entry: Entry }) {
   );
 }
 
-function ShelfBlock(props: { shelf: Shelf; label: string; rows: Entry[] }) {
+/** The rows in progress: no head, as T3's. */
+function ActiveRows(props: { rows: Entry[] }) {
+  return (
+    <View testID="shelf-block-active">
+      <Each of={props.rows} key={(e) => `${e.machine.id}/${e.thread.id}`}>
+        {(e, i) => <Row entry={e()} first={i() === 0} />}
+      </Each>
+    </View>
+  );
+}
+
+/** A shelf under its head: snoozed (shut until opened) or settled (its first rows, then "Show more"). */
+function ShelfBlock(props: { shelf: Shelf; label: string; rows: Entry[]; limit?: number }) {
+  const listed = () => (props.limit === undefined ? props.rows : props.rows.slice(0, props.limit));
+  const hidden = () => props.rows.length - listed().length;
   return (
     <If when={props.rows.length > 0}>
       <View testID={`shelf-block-${props.shelf}`}>
         <ShelfHead shelf={props.shelf} label={props.label} count={props.rows.length} />
         <If when={!collapsed()[props.shelf]}>
-          <Each of={props.rows} key={(e) => `${e.machine.id}/${e.thread.id}`}>
-            {(e, i) => (
-              <If when={props.shelf === "archived"} else={<Row entry={e()} first={i() === 0} />}>
-                <SlimRow entry={e()} />
-              </If>
-            )}
+          <Each of={listed()} key={(e) => `${e.machine.id}/${e.thread.id}`}>
+            {(e) => <SlimRow entry={e()} />}
           </Each>
+          <If when={hidden() > 0}>
+            <View
+              role="button"
+              testID={`shelf-more-${props.shelf}`}
+              onPress={() => settledShown.set(settledShown() + SETTLED_PAGE)}
+              class="mx-4 mt-2 items-center rounded-lg border border-dashed border-border py-[10px] active:opacity-60"
+            >
+              <Text class="text-[12px] font-medium text-fg-2">{tr("Show more (%d settled hidden)", hidden())}</Text>
+            </View>
+          </If>
         </If>
       </View>
     </If>
@@ -281,6 +350,11 @@ function Empty(props: { title: string; text: string; button: string; onPress: ()
 
 export function ThreadsPage() {
   cleanup(tick());
+  // a new scope lists the settled shelf from its first rows again, as T3's
+  effect(() => {
+    void [filter.machine(), filter.project(), filter.agent(), query()];
+    settledShown.set(SETTLED_FIRST);
+  });
   const refreshing = signal(false);
   const byShelf = (s: Shelf) => visible().filter((e) => shelfOf(e.thread) === s);
   const anyShell = () => machines().some((m) => shells()[m.id] !== undefined);
@@ -313,10 +387,9 @@ export function ThreadsPage() {
                 else={<Empty testID="empty-threads" title={tr("Start a task on %s", machines()[0]?.name ?? "")} text={tr("Pick a project and an agent, and say what to do.")} button={tr("New task")} onPress={() => newTask.set({})} />}
               >
                 <View class="pb-32" testID="thread-list">
-                  <ShelfBlock shelf="active" label={tr("In progress")} rows={byShelf("active")} />
-                  <ShelfBlock shelf="unsent" label={tr("Unsent")} rows={byShelf("unsent")} />
-                  <ShelfBlock shelf="later" label={tr("Later")} rows={byShelf("later")} />
-                  <ShelfBlock shelf="archived" label={tr("Archived")} rows={byShelf("archived")} />
+                  <ActiveRows rows={byShelf("active")} />
+                  <ShelfBlock shelf="snoozed" label={tr("Snoozed")} rows={byShelf("snoozed")} />
+                  <ShelfBlock shelf="settled" label={tr("Settled")} rows={byShelf("settled")} limit={settledShown()} />
                 </View>
               </If>
             </If>

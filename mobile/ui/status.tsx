@@ -4,7 +4,7 @@ import { Text, View } from "nsh";
 import type { ThreadSummary } from "../net/types";
 import { tr } from "./i18n";
 import { Icon, Spinner, type Color, type IconName } from "./parts";
-import { now, timer, when } from "./time";
+import { now, since, timer } from "./time";
 
 export type Look = { word: string; icon: IconName; color: Color; busy: boolean; spin?: boolean } | null;
 
@@ -37,7 +37,7 @@ export function Status(props: { thread: ThreadSummary; testID?: string }) {
   const look = () => statusLook(props.thread);
   const color = (): Color => look()?.color ?? "fg-3";
   return (
-    <If when={look()} else={<Text class="text-[13px] leading-[23px] text-fg-3">{when(props.thread.updatedAt)}</Text>}>
+    <If when={look()} else={<Text class="font-mono text-[13px] leading-[23px] text-fg-3">{since(props.thread.updatedAt, now())}</Text>}>
       <View testID={props.testID} class="flex-row items-center gap-1">
         <If when={look()?.spin} else={<Icon name={look()?.icon ?? "circle"} color={color()} size={13} />}>
           <Spinner size={13} />

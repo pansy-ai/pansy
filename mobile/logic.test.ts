@@ -1,9 +1,13 @@
 // The parts of the app that are plain functions: pairing links and
-// addresses, the Markdown blocks, and how events fold into a thread's feed.
+// addresses, the Markdown blocks, how events fold into a thread's feed, and
+// the list's monograms, times and title as T3 has them.
 import { expect, test } from "nsh/test";
 import { normalizeAddress, parsePairUrl } from "./net/pair";
 import { apply, fromHistory, type FeedState } from "./state/thread";
 import { blocks, spans } from "./ui/Markdown";
+import { monogram, monogramHue } from "./ui/parts";
+import { connectionTitle } from "./ui/Threads";
+import { since } from "./ui/time";
 
 test("reads a pairing link's address and secret from #pair=", () => {
   expect(parsePairUrl("http://192.168.1.20:7268/#pair=Zm9vYmFyLWJhego_-x")).toEqual({ base: "http://192.168.1.20:7268", secret: "Zm9vYmFyLWJhego_-x" });
@@ -53,4 +57,29 @@ test("a question waits like an approval, with its choices", () => {
   expect(s.approvals).toEqual([{ request: "q1", kind: "question", title: "Pick", detail: "", questions }]);
   s = apply(s, { type: "resolved", request: "q1" });
   expect(s.approvals.length).toBe(0);
+});
+
+test("a project's monogram and its color are T3's", () => {
+  expect(monogram("pansy")).toBe("PY");
+  expect(monogram("pansy-site")).toBe("PS");
+  expect(monogram("nsh2")).toBe("N2");
+  expect(monogram("")).toBe("PR");
+  // fuchsia, as T3 draws pansy's
+  expect(monogramHue("pansy")).toBe("#d946ef");
+});
+
+test("the list's times are T3's compact ones", () => {
+  const at = Date.parse("2026-05-02T12:00:00Z");
+  expect(since("2026-05-02T11:59:30Z", at)).toBe("<1m");
+  expect(since("2026-05-02T11:55:00Z", at)).toBe("5m");
+  expect(since("2026-05-02T09:00:00Z", at)).toBe("3h");
+  expect(since("2026-04-30T11:00:00Z", at)).toBe("2d");
+});
+
+test("the title names the machines it reconnects to only while none is online", () => {
+  expect(connectionTitle([])).toBe(null);
+  expect(connectionTitle([{ name: "mac", state: "online" }, { name: "pc", state: "offline" }])).toBe(null);
+  expect(connectionTitle([{ name: "mac", state: "connecting" }])).toEqual({ label: "Reconnecting to mac", spin: true });
+  expect(connectionTitle([{ name: "mac", state: "offline" }, { name: "pc", state: "connecting" }])).toEqual({ label: "Reconnecting 2 machines", spin: true });
+  expect(connectionTitle([{ name: "mac", state: "revoked" }])).toEqual({ label: "Not connected", spin: false });
 });

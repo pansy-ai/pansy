@@ -24,7 +24,7 @@ async function update(machine: string, threadId: string, patch: Record<string, u
 export async function archive(machine: string, t: ThreadSummary, on = true) {
   if (!(await update(machine, t.id, { archived: on }))) return;
   Haptics.impact("medium");
-  if (on) toast(tr("Archived “%s”", t.title), { action: { label: tr("Undo"), onPress: () => void update(machine, t.id, { archived: false }) } });
+  if (on) toast(tr("Settled “%s”", t.title), { action: { label: tr("Undo"), onPress: () => void update(machine, t.id, { archived: false }) } });
 }
 
 /** Snoozes `t` for `hours`: it waits on the Later shelf till then. */
