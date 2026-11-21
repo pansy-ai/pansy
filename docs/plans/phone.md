@@ -1,7 +1,8 @@
 # 计划：手机 app 控制家里的 agent（第二版，照 T3 Code）
 
-**状态：分析完，未开始。** 是 [roadmap.md](roadmap.md) 迭代 7 的方案；
-[remote.md](remote.md) 留着远程接口、驱动和鉴权的细节，不一致时以本页为准。
+**状态：P0 做完（[phone-p0.md](phone-p0.md)），一期未开始。** 是
+[roadmap.md](roadmap.md) 迭代 7 的方案；[remote.md](remote.md) 留着远程接口、
+驱动和鉴权的细节，不一致时以本页为准；界面见 [phone-ui.md](phone-ui.md)。
 
 依据：T3 Code `c7157d37`（server v0.1.11，MIT）的 `apps/mobile`、
 `apps/server`、`packages/`、`docs/`；ACP 官方登记表；本机的 Claude Code
