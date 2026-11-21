@@ -10,7 +10,8 @@ agent use every provider's models, with a desktop window on NSH 0.6.1. Read
   subscriptions' sign-ins in `subscription/`),
   `pansy-mask` (privacy masking), `pansy-gateway` (the gateway),
   `pansy-agents` (agent configs), `pansy-plugins` (magpie's community
-  plugins on Bun, `docs/plugins.md`), `pansy-cli` (the `pansy` command).
+  plugins on Bun, `docs/plugins.md`), `pansy-remote` (agents driven for the
+  phone, `docs/plans/phone.md`), `pansy-cli` (the `pansy` command).
 - `desktop/` — a workspace of its own, so NSH's crates (GTK, AppKit, Win32)
   stay out of the core's builds: `App.tsx` and `ui/` (the window in TSX),
   `native/` (`pansy/native`, what the TSX imports), `runner/` (the program:
