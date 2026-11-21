@@ -1,0 +1,853 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pansy 手机端 · 界面样稿</title>
+<style>
+/* Tokens: T3 Code's neutrals, pansy's indigo (docs/plans/phone-ui.md). */
+:root, [data-theme=light] {
+  --screen:#fcfcfc; --card:#ffffff; --grouped:#f4f4f5; --sheet:rgba(252,252,252,.98);
+  --border:#e4e4e7; --line:rgba(228,228,231,.7);
+  --fg:#27272a; --fg2:#6f6f79; --fg3:#71717b;
+  --primary:#4f46e5; --primary-fg:#fff; --prominent:#27272a; --prominent-fg:#fcfcfc;
+  --bubble:#efeff1; --composer:rgba(244,244,245,.94); --glass:rgba(255,255,255,.72);
+  --warn-bg:#fcf4e8; --warn:#bb4d00; --danger-bg:#fcebec; --danger:#c10007;
+  --sky:#0284c7; --indigo:#4f46e5; --emerald:#047857; --rose:#be123c; --violet:#6d28d9;
+  --backdrop:rgba(0,0,0,.22); --shadow:rgba(0,0,0,.15); --gshadow:rgba(0,0,0,.08);
+  --d-add:#d9f0eb; --d-del:#f5d9e6; --d-addbar:#05cc85; --d-delbar:#ff577a;
+  --d-hunk:#d4ebfa; --d-hunkfg:#0073bd; --d-addfg:#008f57; --d-delfg:#e61a3d;
+  --page:#e9e9ec;
+}
+[data-theme=dark] {
+  --screen:#0a0a0a; --card:#111111; --grouped:#1a1b1b; --sheet:rgba(10,10,10,.98);
+  --border:#191919; --line:rgba(40,40,40,.9);
+  --fg:#f5f5f5; --fg2:#838383; --fg3:#818181;
+  --primary:#a5b4fc; --primary-fg:#14142a; --prominent:#f5f5f5; --prominent-fg:#0a0a0a;
+  --bubble:#161616; --composer:rgba(26,27,27,.9); --glass:rgba(30,30,30,.7);
+  --warn-bg:#312108; --warn:#ffb900; --danger-bg:#301214; --danger:#ff6467;
+  --sky:#38bdf8; --indigo:#a5b4fc; --emerald:#6ee7b7; --rose:#fda4af; --violet:#c4b5fd;
+  --backdrop:rgba(0,0,0,.48); --shadow:rgba(0,0,0,.35); --gshadow:rgba(0,0,0,.22);
+  --d-add:#05291a; --d-del:#2e0d14; --d-addbar:#05d18a; --d-delbar:#ff5c80;
+  --d-hunk:#08242e; --d-hunkfg:#69d1ff; --d-addfg:#1ad68f; --d-delfg:#ff6185;
+  --page:#050505;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+body { background:var(--page); color:var(--fg); font:16px/23px "DM Sans","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",system-ui,sans-serif; transition:background .2s; }
+.mono { font-family:ui-monospace,"SF Mono",Menlo,"Roboto Mono",monospace; }
+.top { position:sticky; top:0; z-index:50; display:flex; gap:16px; align-items:center; padding:14px 28px; background:var(--page); border-bottom:1px solid var(--border); }
+.top h1 { font-size:18px; font-weight:700; }
+.top p { font-size:13px; color:var(--fg2); flex:1; }
+.top button { font:inherit; font-size:13px; padding:6px 14px; border-radius:99px; border:1px solid var(--border); background:var(--card); color:var(--fg); cursor:pointer; }
+.grid { display:flex; flex-wrap:wrap; gap:36px 28px; padding:28px; align-items:flex-start; }
+figure { display:flex; flex-direction:column; gap:10px; }
+figcaption { font-size:13px; color:var(--fg2); max-width:390px; line-height:18px; }
+figcaption b { color:var(--fg); font-weight:700; }
+.phone { position:relative; width:390px; height:844px; border-radius:48px; background:var(--screen); overflow:hidden; box-shadow:0 0 0 10px #111, 0 0 0 11px #333, 0 24px 60px rgba(0,0,0,.25); display:flex; flex-direction:column; }
+.status { height:47px; flex:none; display:flex; align-items:flex-end; justify-content:space-between; padding:0 30px 6px 36px; font-size:15px; font-weight:700; }
+.status .isl { position:absolute; left:50%; top:11px; width:122px; height:35px; margin-left:-61px; background:#000; border-radius:20px; }
+.status .r { display:flex; gap:6px; align-items:center; }
+.home-ind { position:absolute; bottom:8px; left:50%; width:134px; height:5px; margin-left:-67px; border-radius:3px; background:var(--fg); opacity:.85; z-index:30; }
+svg.i { width:var(--s,18px); height:var(--s,18px); stroke:currentColor; fill:none; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none; display:block; }
+img.logo { width:var(--s,14px); height:var(--s,14px); flex:none; display:block; }
+[data-theme=dark] img.logo[src*="openai"] { filter:invert(1); }
+/* Navigation bar */
+.nav { flex:none; height:52px; display:flex; align-items:center; gap:8px; padding:0 16px; position:relative; z-index:5; }
+.nav .t { flex:1; min-width:0; text-align:center; }
+.nav .t b { display:block; font-size:18px; line-height:23px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.nav .t small { display:block; font-size:12px; line-height:15px; color:var(--fg2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gbtn { width:38px; height:38px; border-radius:99px; display:flex; align-items:center; justify-content:center; background:var(--glass); backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); border:1px solid var(--border); color:var(--fg); box-shadow:0 4px 14px var(--gshadow); flex:none; cursor:pointer; }
+.ggrp { display:flex; border-radius:99px; background:var(--glass); backdrop-filter:blur(20px); border:1px solid var(--border); box-shadow:0 4px 14px var(--gshadow); }
+.ggrp > * { width:38px; height:36px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.body { flex:1; overflow-y:auto; overflow-x:hidden; position:relative; scrollbar-width:none; }
+.body::-webkit-scrollbar { display:none; }
+.body > *, .sbody > * { flex-shrink:0; }
+/* Tab bar */
+.tabs { flex:none; height:83px; display:flex; justify-content:space-around; padding:10px 40px 0; border-top:1px solid var(--line); background:var(--glass); backdrop-filter:blur(20px); }
+.tabs > span { color:var(--fg3); }
+.tabs > span.on { color:var(--primary); }
+.tabs > span.off { opacity:.35; }
+/* Chips, shelves, rows */
+.chips { display:flex; gap:8px; padding:4px 20px 10px; overflow-x:auto; scrollbar-width:none; }
+.chip { flex:none; display:flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:16px; font-size:14px; font-weight:500; background:var(--glass); border:1px solid var(--border); color:var(--fg); white-space:nowrap; }
+.chip.on { background:var(--primary); color:var(--primary-fg); border-color:transparent; }
+.shelf { display:flex; align-items:center; gap:8px; padding:14px 20px 6px; font-size:13px; line-height:17px; font-weight:500; color:var(--fg3); }
+.shelf::after { content:""; flex:1; height:1px; background:var(--line); order:1; }
+.shelf svg { order:2; --s:10px; }
+.row { position:relative; padding:10px 20px; display:flex; flex-direction:column; gap:3px; cursor:pointer; }
+.row + .row::before { content:""; position:absolute; top:0; left:20px; right:0; height:1px; background:var(--line); }
+.row .l1 { display:flex; gap:8px; align-items:flex-start; }
+.row .fav { width:20px; height:20px; border-radius:5px; flex:none; margin-top:2px; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#fff; }
+.row .ti { flex:1; min-width:0; font-size:16px; line-height:23px; font-weight:500; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.row .st { flex:none; display:flex; align-items:center; gap:4px; font-size:13px; line-height:23px; font-weight:700; }
+.row .st svg { --s:13px; }
+.row .tm { flex:none; font-size:13px; line-height:23px; color:var(--fg3); }
+.row .l2 { display:flex; gap:6px; align-items:center; padding-left:28px; font-size:13px; line-height:17px; color:var(--fg3); white-space:nowrap; overflow:hidden; }
+.row .l2 .sep { opacity:.5; }
+.row.busy .ti, .row.busy .l2, .row.busy .fav { opacity:.55; }
+.row.slim { flex-direction:row; align-items:center; height:44px; padding:0 20px; gap:8px; }
+.row.slim .fav { opacity:.4; margin:0; }
+.row.slim .ti { font-weight:400; color:var(--fg2); -webkit-line-clamp:1; }
+.row.slim .tm { font-size:14px; }
+.add { color:var(--emerald); } .del { color:var(--rose); }
+.c-sky{color:var(--sky)} .c-warn{color:var(--warn)} .c-indigo{color:var(--indigo)} .c-danger{color:var(--danger)} .c-emerald{color:var(--emerald)} .c-violet{color:var(--violet)} .c-fg2{color:var(--fg2)}
+/* Swipe demo */
+.swipe { display:flex; }
+.swipe .row { flex:none; width:390px; transform:translateX(-116px); background:var(--screen); }
+.swipe .acts { position:absolute; right:0; display:flex; height:100%; align-items:center; gap:0; padding-right:4px; }
+.swipe .act { width:58px; display:flex; flex-direction:column; align-items:center; gap:3px; font-size:11px; line-height:14px; color:var(--fg2); }
+.swipe .act span { width:36px; height:36px; border-radius:99px; display:flex; align-items:center; justify-content:center; color:#fff; }
+/* Thread */
+.feed { padding:8px 16px 260px; display:flex; flex-direction:column; gap:14px; }
+.ubub { align-self:flex-end; max-width:85%; background:var(--bubble); border-radius:20px; padding:10px 14px; }
+.umeta { align-self:flex-end; margin-top:-8px; display:flex; gap:10px; font-size:13px; font-weight:500; color:var(--fg3); }
+.amsg { padding:0 4px; font-size:16px; line-height:23px; }
+.amsg p + p, .amsg p + ul, .amsg ul + p { margin-top:8px; }
+.amsg ul { padding-left:20px; }
+.amsg code { font-family:ui-monospace,Menlo,monospace; font-size:13.5px; background:var(--grouped); padding:1px 5px; border-radius:5px; }
+.ameta { display:flex; gap:14px; align-items:center; padding:0 4px; color:var(--fg3); font-size:13px; }
+.work { display:flex; flex-direction:column; gap:1px; }
+.wrow { display:flex; align-items:center; gap:4px; min-height:28px; font-size:14px; line-height:19px; color:var(--fg2); cursor:pointer; }
+.wrow .ic { width:24px; height:24px; display:flex; align-items:center; justify-content:center; }
+.wrow .ic svg { --s:15px; }
+.wrow .tx { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.wrow .ch { --s:11px; transition:transform .18s; }
+.wrow.open .ch { transform:rotate(90deg); }
+.wdet { display:none; margin-left:28px; max-height:240px; overflow:auto; background:var(--grouped); border-radius:8px; padding:8px 10px; font-size:12px; line-height:17px; color:var(--fg2); white-space:pre; }
+.wrow.open + .wdet { display:block; }
+.wrow.live .tx { background:linear-gradient(90deg,var(--fg2) 0%,var(--fg2) 40%,var(--fg) 50%,var(--fg2) 60%,var(--fg2) 100%); background-size:300% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation:shim 2.8s linear infinite; }
+@keyframes shim { 0%{background-position:100% 0} 48%{background-position:0 0} 100%{background-position:0 0} }
+.wrow.danger { color:var(--rose); }
+.sub { display:flex; align-items:center; gap:8px; padding:6px 0; }
+.sub .dot { width:6px; height:6px; border-radius:99px; }
+.sub b { font-size:14px; font-weight:500; }
+.sub small { font-size:13px; color:var(--fg2); flex:1; }
+/* Bottom dock */
+.dock { position:absolute; left:0; right:0; bottom:0; padding:0 12px 30px; display:flex; flex-direction:column; gap:10px; background:linear-gradient(to bottom, transparent, var(--screen) 34%); z-index:10; }
+.pillbar { display:flex; gap:8px; align-items:center; justify-content:center; }
+.capsule { height:44px; display:flex; align-items:center; border-radius:99px; background:var(--glass); backdrop-filter:blur(20px); border:1px solid var(--border); box-shadow:0 8px 24px var(--gshadow); font-size:14px; }
+.capsule > span { display:flex; align-items:center; gap:6px; padding:0 14px; height:100%; }
+.capsule > span + span { border-left:1px solid var(--border); }
+.capsule svg { --s:15px; }
+.tick { font-family:system-ui; font-weight:700; font-variant-numeric:tabular-nums; }
+.composer { min-height:56px; border-radius:27px; background:var(--composer); backdrop-filter:blur(20px); border:1px solid var(--border); box-shadow:0 6px 28px var(--shadow); display:flex; align-items:center; padding:6px; gap:2px; }
+.composer .cb { width:44px; height:44px; display:flex; align-items:center; justify-content:center; color:var(--fg2); flex:none; }
+.composer .ph { flex:1; font-size:16px; color:var(--fg3); padding:0 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mpill { display:flex; align-items:center; gap:5px; height:32px; padding:0 10px; border-radius:99px; background:var(--card); border:1px solid var(--border); font-size:13px; font-weight:500; flex:none; cursor:pointer; }
+.send { width:32px; height:32px; border-radius:99px; background:var(--primary); color:var(--primary-fg); display:flex; align-items:center; justify-content:center; flex:none; margin:0 6px; }
+.stop { width:32px; height:32px; border-radius:99px; background:var(--danger-bg); color:var(--danger); display:flex; align-items:center; justify-content:center; flex:none; }
+.accbar { display:flex; gap:8px; padding:0 4px; }
+.accbar .chip { height:30px; font-size:13px; }
+/* Cards */
+.card { border-radius:20px; border:1px solid var(--border); background:var(--card); padding:16px; display:flex; flex-direction:column; gap:10px; box-shadow:0 10px 30px var(--gshadow); }
+.kick { font-size:12px; line-height:16px; font-weight:700; letter-spacing:1.1px; text-transform:uppercase; color:var(--fg2); display:flex; justify-content:space-between; }
+.card h3 { font-size:18px; line-height:23px; font-weight:700; }
+.card .det { font-size:14px; line-height:19px; color:var(--fg2); }
+.cmd { font-family:ui-monospace,Menlo,monospace; font-size:12.5px; line-height:18px; background:var(--grouped); border-radius:8px; padding:8px 10px; white-space:pre-wrap; }
+.btn { height:48px; border-radius:99px; display:flex; align-items:center; justify-content:center; gap:8px; font-size:16px; font-weight:700; border:none; cursor:pointer; font-family:inherit; width:100%; }
+.btn.p { background:var(--primary); color:var(--primary-fg); }
+.btn.s { background:var(--grouped); color:var(--fg); }
+.btn.d { background:var(--danger-bg); color:var(--danger); }
+.btn.k { background:var(--prominent); color:var(--prominent-fg); }
+.btn.o { background:var(--card); color:var(--fg); border:1px solid var(--border); }
+.btns { display:flex; flex-direction:column; gap:8px; }
+.opt { min-height:48px; border-radius:16px; border:1px solid var(--border); background:var(--grouped); padding:12px 14px; display:flex; flex-direction:column; gap:2px; cursor:pointer; }
+.opt b { font-size:14px; line-height:19px; } .opt small { font-size:14px; color:var(--fg2); line-height:19px; }
+.opt.on { border-color:var(--primary); background:color-mix(in srgb, var(--primary) 10%, transparent); }
+/* Sheets */
+.dim { position:absolute; inset:0; background:var(--backdrop); z-index:20; }
+.sheet { position:absolute; left:0; right:0; bottom:0; z-index:21; background:var(--sheet); border-radius:28px 28px 0 0; display:flex; flex-direction:column; box-shadow:0 -10px 40px var(--gshadow); }
+.grab { width:36px; height:5px; border-radius:3px; background:var(--fg3); opacity:.35; margin:6px auto 0; flex:none; }
+.shead { display:flex; align-items:center; gap:8px; padding:8px 16px 6px; }
+.shead .t { flex:1; text-align:center; }
+.shead .t b { display:block; font-size:18px; line-height:23px; font-weight:700; }
+.shead .t small { display:block; font-size:13px; line-height:17px; color:var(--fg2); }
+.sbody { flex:1; overflow-y:auto; padding:6px 20px 34px; display:flex; flex-direction:column; gap:14px; scrollbar-width:none; }
+.group { border-radius:24px; background:var(--grouped); overflow:hidden; }
+.gh { font-size:13px; font-weight:500; color:var(--fg3); padding:0 16px; margin-bottom:-8px; }
+.grow { display:flex; align-items:center; gap:12px; min-height:56px; padding:12px 16px; position:relative; cursor:pointer; }
+.grow + .grow::before { content:""; position:absolute; top:0; left:50px; right:0; height:1px; background:var(--line); }
+.grow.noic + .grow.noic::before { left:16px; }
+.grow > svg { --s:22px; color:var(--fg2); }
+.grow .gt { flex:1; min-width:0; }
+.grow .gt b { display:block; font-size:16px; line-height:21px; font-weight:500; }
+.grow .gt small { display:block; font-size:14px; line-height:19px; color:var(--fg2); }
+.grow .gr { font-size:14px; color:var(--fg2); display:flex; align-items:center; gap:6px; }
+.grow .gr svg { --s:14px; }
+.check { color:var(--primary); --s:18px; }
+.seg { display:flex; padding:3px; border-radius:10px; background:var(--grouped); }
+.seg span { flex:1; text-align:center; font-size:13px; font-weight:500; padding:6px 0; border-radius:8px; color:var(--fg2); cursor:pointer; }
+.seg span.on { background:var(--card); color:var(--fg); box-shadow:0 1px 3px var(--gshadow); }
+.field { border-radius:12px; background:var(--grouped); padding:12px 14px; font-size:16px; color:var(--fg3); }
+.bar { height:4px; border-radius:2px; background:var(--border); overflow:hidden; } .bar i { display:block; height:100%; background:var(--emerald); }
+.note { border-radius:16px; padding:10px 14px; font-size:14px; line-height:19px; display:flex; gap:8px; align-items:flex-start; }
+.note.w { background:var(--warn-bg); color:var(--warn); }
+.note.d { background:var(--danger-bg); color:var(--danger); border:1px solid var(--danger); }
+.toggle { width:51px; height:31px; border-radius:99px; background:var(--border); position:relative; flex:none; }
+.toggle::after { content:""; position:absolute; left:2px; top:2px; width:27px; height:27px; border-radius:99px; background:#fff; box-shadow:0 2px 4px rgba(0,0,0,.2); }
+.toggle.on { background:#34c759; } .toggle.on::after { left:22px; }
+/* Diff */
+.dfile { margin:8px 8px 0; border-radius:10px; border:1px solid var(--border); background:var(--card); height:44px; display:flex; align-items:center; gap:8px; padding:0 12px; font-size:12px; }
+.dfile b { flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dl { display:flex; height:22px; font-family:ui-monospace,Menlo,monospace; font-size:12px; line-height:22px; white-space:pre; position:relative; }
+.dl .n { width:46px; flex:none; text-align:right; padding-right:8px; font-size:11px; color:var(--fg3); }
+.dl.a { background:var(--d-add); } .dl.a::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--d-addbar); }
+.dl.r { background:var(--d-del); } .dl.r::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--d-delbar); }
+.dl.h { background:var(--d-hunk); color:var(--d-hunkfg); padding-left:12px; }
+.dl.sel { outline:2px solid var(--primary); outline-offset:-2px; }
+/* Desktop panel */
+.desk { width:860px; height:620px; border-radius:12px; overflow:hidden; background:var(--screen); box-shadow:0 0 0 1px var(--border), 0 24px 60px rgba(0,0,0,.2); display:flex; flex-direction:column; }
+.desk .wbar { height:40px; flex:none; display:flex; align-items:center; gap:8px; padding:0 14px; border-bottom:1px solid var(--border); font-size:13px; color:var(--fg2); }
+.desk .wbar i { width:12px; height:12px; border-radius:99px; background:var(--border); display:block; }
+.desk .side { width:200px; flex:none; border-right:1px solid var(--border); padding:12px 8px; display:flex; flex-direction:column; gap:2px; font-size:14px; }
+.desk .side span { padding:7px 10px; border-radius:8px; color:var(--fg2); }
+.desk .side span.on { background:var(--grouped); color:var(--fg); font-weight:500; }
+.desk .main { flex:1; overflow:auto; padding:24px 28px; display:flex; flex-direction:column; gap:16px; }
+.qr { width:132px; height:132px; flex:none; border-radius:12px; background:#fff; padding:10px; }
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>pansy 手机端 · 界面样稿</h1>
+  <p>照 T3 Code 的手机端：中性色、字号、圆角、动效照它，强调色是 pansy 的靛蓝。点工作记录可展开，点分段控件可切换。设计说明见 phone-ui.md。</p>
+  <button onclick="theme()">切换深浅色</button>
+</div>
+<div class="grid">
+<!-- 1. Chats -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="nav">
+    <img src="../../assets/brand/pansy-glyph.svg" style="width:20px;height:20px" alt="">
+    <span style="font-size:21px;font-weight:500;color:var(--fg2);letter-spacing:-.5px">pansy</span>
+    <span style="flex:1"></span>
+    <span class="gbtn"><i data-i="sliders"></i></span>
+    <span class="gbtn"><i data-i="pen"></i></span>
+  </div>
+  <div class="body">
+    <div class="chips">
+      <span class="chip on"><i data-i="laptop" style="--s:15px"></i>全部机器<i data-i="down" style="--s:12px"></i></span>
+      <span class="chip">全部项目<i data-i="down" style="--s:12px"></i></span>
+      <span class="chip">全部 agent<i data-i="down" style="--s:12px"></i></span>
+    </div>
+    <div class="shelf">进行中<i data-i="down"></i></div>
+    <div class="row">
+      <div class="l1"><span class="fav" style="background:#7c3aed">p</span><span class="ti">给 Sessions 页加按项目的花费</span><span class="st c-warn"><i data-i="shield"></i>等批准</span></div>
+      <div class="l2"><i data-i="laptop" style="--s:13px"></i>家里的 Mac<span class="sep">·</span><span class="mono">pansy/sessions-cost</span><span class="sep">·</span><img class="logo" src="../../desktop/ui/logos/claudecode-color.svg">deepseek/v4</div>
+    </div>
+    <div class="row busy">
+      <div class="l1"><span class="fav" style="background:#7c3aed">p</span><span class="ti">修复 Codex 子 agent 的模型头</span><span class="st c-sky"><i data-i="loader"></i><span class="tick">3:12</span></span></div>
+      <div class="l2"><i data-i="laptop" style="--s:13px"></i>家里的 Mac<span class="sep">·</span><span class="mono">main</span><span class="sep">·</span><img class="logo" src="../../desktop/ui/logos/codex-color.svg">group/daily</div>
+    </div>
+    <div class="row">
+      <div class="l1"><span class="fav" style="background:#0ea5e9">u</span><span class="ti">relay 的部署脚本要不要拆成两步？</span><span class="st c-indigo"><i data-i="question"></i>等回答</span></div>
+      <div class="l2"><i data-i="server" style="--s:13px"></i>工作站<span class="sep">·</span><img class="logo" src="../../desktop/ui/logos/geminicli-color.svg">kimi/k3</div>
+    </div>
+    <div class="row">
+      <div class="l1"><span class="fav" style="background:#7c3aed">p</span><span class="ti">AUR 包的 PKGBUILD 校验和</span><span class="st c-danger"><i data-i="alert"></i>失败</span></div>
+      <div class="l2" style="color:var(--danger)">cargo test：3 个测试失败（pansy-agents）</div>
+    </div>
+    <div class="row">
+      <div class="l1"><span class="fav" style="background:#16a34a">o</span><span class="ti">ojbk：港股开盘的价差回测</span><span class="st c-emerald"><i data-i="check-c"></i>完成</span></div>
+      <div class="l2"><i data-i="laptop" style="--s:13px"></i>家里的 Mac<span class="sep">·</span><i data-i="pr" style="--s:13px" class="c-emerald"></i><span class="mono">#16</span><span class="sep">·</span><span class="add">+214</span><span class="del">−37</span></div>
+    </div>
+    <div class="row">
+      <div class="l1"><span class="fav" style="background:#7c3aed">p</span><span class="ti">README 的截图换成深色</span><span class="tm">昨天</span></div>
+      <div class="l2"><i data-i="terminal" style="--s:13px"></i>终端里开的<span class="sep">·</span><img class="logo" src="../../desktop/ui/logos/claudecode-color.svg">claude-sonnet-5.5</div>
+    </div>
+    <div class="shelf">已归档 (12)<i data-i="down" style="transform:rotate(180deg)"></i></div>
+    <div class="row slim"><span class="fav" style="background:#7c3aed">p</span><span class="ti">NSH 0.6.1 的升级</span><span class="tm mono">11-20</span></div>
+    <div class="row slim"><span class="fav" style="background:#7c3aed">p</span><span class="ti">下载页只给安装包</span><span class="tm mono">11-20</span></div>
+    <div class="row slim"><span class="fav" style="background:#16a34a">o</span><span class="ti">Binance 和 Longbridge 的套利</span><span class="tm mono">11-19</span></div>
+  </div>
+  <div class="tabs"><span class="on"><i data-i="chat" style="--s:26px"></i></span><span class="off"><i data-i="pr" style="--s:26px"></i></span><span class="off"><i data-i="chart" style="--s:26px"></i></span><span><i data-i="gear" style="--s:26px"></i></span></div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>1. 对话。</b>所有机器的线程一个列表。状态只用 13pt 加粗字和图标上色；进行中的行淡到 55%。第二行是机器、分支、agent 和 pansy 的模型或路由组。终端里开过的会话也在，标"终端里开的"。PR、用量两个标签二期才有，先灰掉。</figcaption>
+</figure>
+
+<!-- 1b. Swipe and context -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="nav">
+    <span style="font-size:21px;font-weight:500;color:var(--fg2);display:flex;gap:8px;align-items:center"><i data-i="wifi-off" style="--s:18px"></i><b style="font-size:15px">家里的 Mac 离线</b></span>
+    <span style="flex:1"></span>
+    <span class="gbtn"><i data-i="sliders"></i></span>
+    <span class="gbtn"><i data-i="pen"></i></span>
+  </div>
+  <div class="body">
+    <div style="padding:4px 20px 8px"><div class="field" style="display:flex;gap:8px;align-items:center;padding:9px 12px;font-size:16px"><i data-i="search" style="--s:16px"></i>搜索线程</div></div>
+    <div class="shelf">进行中<i data-i="down"></i></div>
+    <div class="row swipe" style="padding:0;overflow:hidden;height:64px">
+      <div class="row" style="height:64px"><div class="l1"><span class="fav" style="background:#7c3aed">p</span><span class="ti">给 Sessions 页加按项目的花费</span></div><div class="l2"><i data-i="laptop" style="--s:13px"></i>家里的 Mac<span class="sep">·</span>deepseek/v4</div></div>
+      <div class="acts">
+        <div class="act"><span style="background:#8e8e93"><i data-i="clock" style="--s:15px"></i></span>稍后</div>
+        <div class="act"><span style="background:var(--primary);color:var(--primary-fg)"><i data-i="archive" style="--s:15px"></i></span>归档</div>
+      </div>
+    </div>
+    <div class="shelf">未发出<i data-i="down"></i></div>
+    <div class="row">
+      <div class="l1"><span class="fav" style="background:#7c3aed">p</span><span class="ti">顺便把 i18n 的中文也补上</span><span class="st c-fg2"><i data-i="upload"></i>未发出</span></div>
+      <div class="l2">家里的 Mac 离线 · 连上后自动发</div>
+    </div>
+    <div style="margin:22px 20px 0;border-radius:14px;background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);box-shadow:0 14px 40px var(--shadow);overflow:hidden;width:240px">
+      <div class="grow noic" style="min-height:44px;padding:10px 16px"><span class="gt"><b style="font-size:16px">置顶</b></span><i data-i="pin" style="--s:18px"></i></div>
+      <div class="grow noic" style="min-height:44px;padding:10px 16px"><span class="gt"><b style="font-size:16px">改名</b></span><i data-i="pen" style="--s:18px"></i></div>
+      <div class="grow noic" style="min-height:44px;padding:10px 16px"><span class="gt"><b style="font-size:16px">标为未读</b></span><i data-i="dot" style="--s:18px"></i></div>
+      <div class="grow noic" style="min-height:44px;padding:10px 16px"><span class="gt"><b style="font-size:16px">复制链接</b></span><i data-i="link" style="--s:18px"></i></div>
+      <div class="grow noic" style="min-height:44px;padding:10px 16px;color:var(--danger)"><span class="gt"><b style="font-size:16px">删除线程记录</b></span><i data-i="trash" style="--s:18px"></i></div>
+    </div>
+    <div style="position:absolute;left:12px;right:12px;bottom:12px;height:56px;border-radius:28px;background:var(--glass);backdrop-filter:blur(20px);border:1px solid var(--border);box-shadow:0 14px 28px var(--gshadow);display:flex;align-items:center;gap:10px;padding:0 8px 0 16px">
+      <i data-i="check-c" style="--s:20px" class="c-emerald"></i><b style="flex:1;font-size:14px;font-weight:600">已归档"AUR 包的校验和"</b><span class="chip" style="height:36px;border-radius:99px;font-weight:700">撤销</span>
+    </div>
+  </div>
+  <div class="tabs"><span class="on"><i data-i="chat" style="--s:26px"></i></span><span class="off"><i data-i="pr" style="--s:26px"></i></span><span class="off"><i data-i="chart" style="--s:26px"></i></span><span><i data-i="gear" style="--s:26px"></i></span></div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>1b. 列表的操作和状态。</b>离线写在头上，不弹横幅。左滑：归档、稍后；长按是系统菜单。离线时发的话进"未发出"。撤销提示是毛玻璃的 Toast。</figcaption>
+</figure>
+<!-- 2. Thread with approval -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="nav">
+    <span class="gbtn"><i data-i="left"></i></span>
+    <div class="t"><b>给 Sessions 页加按项目的花费</b><small>pansy · 家里的 Mac</small></div>
+    <div class="ggrp"><span><i data-i="branch"></i></span><span><i data-i="diff"></i></span><span><i data-i="more"></i></span></div>
+  </div>
+  <div class="body">
+    <div class="feed">
+      <div class="ubub">Sessions 页按文件夹分组的地方，加上每个项目这个月花了多少钱，数字从 usage 里来。</div>
+      <div class="umeta"><span class="tick" style="font-weight:500">10:02</span><i data-i="copy" style="--s:14px"></i></div>
+      <div class="work">
+        <div class="wrow"><span class="ic"><i data-i="brain"></i></span><span class="tx">思考了 8 秒</span><i data-i="right" class="ch"></i></div>
+        <div class="wdet">用户要按项目看花费。usage/&lt;day&gt;.jsonl 里有 project 字段，
+pansy run 发出的请求才有。先看 Sessions.tsx 怎么分组。</div>
+        <div class="wrow"><span class="ic"><i data-i="file"></i></span><span class="tx">读了 desktop/ui/Sessions.tsx</span><i data-i="right" class="ch"></i></div>
+        <div class="wdet mono">desktop/ui/Sessions.tsx · 1–220 行</div>
+        <div class="wrow"><span class="ic"><i data-i="search"></i></span><span class="tx">搜了 "project" · 14 处</span><i data-i="right" class="ch"></i></div>
+        <div class="wdet mono">crates/pansy-core/src/usage.rs:88
+crates/pansy-core/src/project.rs:12
+crates/pansy-gateway/src/server.rs:1512
+…</div>
+        <div class="wrow"><span class="ic"><i data-i="pencil"></i></span><span class="tx">改了 2 个文件 <span class="add">+48</span> <span class="del">−6</span></span><i data-i="right" class="ch"></i></div>
+        <div class="wdet mono">desktop/ui/Sessions.tsx   +31 −4
+crates/pansy-core/src/usage.rs  +17 −2</div>
+      </div>
+      <div class="amsg"><p>花费从 <code>usage::by_project</code> 来，按月汇总；Sessions 的每个文件夹标题右边显示 <code>¥12.40 本月</code>。</p><p>还差一步：跑测试确认没改坏。</p></div>
+      <div class="work">
+        <div class="wrow live"><span class="ic"><i data-i="terminal"></i></span><span class="tx">要运行 cargo test -p pansy-core</span><i data-i="right" class="ch"></i></div>
+        <div class="wdet mono">$ cargo test -p pansy-core</div>
+      </div>
+    </div>
+  </div>
+  <div class="dock">
+    <div class="card">
+      <div class="kick"><span>需要批准</span><span>1 / 2</span></div>
+      <h3>运行命令</h3>
+      <div class="cmd">cargo test -p pansy-core usage::</div>
+      <div class="det" style="color:var(--warn);font-size:13px">确认按项目汇总的改动没有改坏用量的测试。</div>
+      <div class="btns">
+        <button class="btn p">允许这一次</button>
+        <button class="btn s">本会话都允许</button>
+        <button class="btn d">拒绝</button>
+      </div>
+    </div>
+    <div class="composer">
+      <span class="cb"><i data-i="plus" style="--s:22px"></i></span>
+      <span class="ph">发一句话拒绝，并告诉 agent 该怎么做</span>
+      <span class="stop"><i data-i="stop" style="--s:14px"></i></span>
+    </div>
+  </div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>2. 线程，等批准。</b>只有用户的话是气泡；回答平铺。工具调用合成工作记录，点开看细节（这里可以点），正在等的那一行有扫光。审批卡片停在输入框上方：允许一次（主）、本会话都允许、拒绝（淡红）。几条审批时右上角 1 / 2。</figcaption>
+</figure>
+
+<!-- 2b. Thread running, composer -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="nav">
+    <span class="gbtn"><i data-i="left"></i></span>
+    <div class="t"><b>修复 Codex 子 agent 的模型头</b><small>pansy · 家里的 Mac</small></div>
+    <div class="ggrp"><span><i data-i="branch"></i></span><span style="width:auto;padding:0 10px;gap:4px;font-size:12px"><span class="add">+18</span><span class="del">−3</span></span><span><i data-i="more"></i></span></div>
+  </div>
+  <div class="body">
+    <div class="feed">
+      <div class="amsg"><p>找到了：<code>default_subagent_model</code> 只写进了 config，子 agent 的请求头里没有。</p></div>
+      <div class="ameta"><i data-i="copy" style="--s:15px"></i><i data-i="split" style="--s:15px"></i><span class="tick" style="font-weight:500">10:14</span><span class="add">+18</span><span class="del">−3</span></div>
+      <div class="ubub">好，顺手把 Codex 的 golden 也 bless 一下</div>
+      <div class="work">
+        <div class="wrow"><span class="ic"><i data-i="layers"></i></span><span class="tx">用了 6 个工具</span><i data-i="right" class="ch"></i></div>
+        <div class="wdet mono">读了 crates/pansy-agents/agents/codex.toml
+读了 crates/pansy-agents/src/run.rs
+改了 crates/pansy-agents/agents/codex.toml
+…</div>
+        <div class="wrow danger"><span class="ic"><i data-i="trash"></i></span><span class="tx">删了 agents/edits.golden.orig</span><i data-i="right" class="ch"></i></div>
+        <div class="wdet mono">rm crates/pansy-agents/agents/edits.golden.orig</div>
+        <div class="wrow live"><span class="ic"><i data-i="terminal"></i></span><span class="tx">PANSY_BLESS=1 cargo test -p pansy-agents</span><i data-i="right" class="ch"></i></div>
+        <div class="wdet mono">   Compiling pansy-agents v0.1.6
+    Running unittests src/lib.rs
+test tests::edits_golden ... </div>
+      </div>
+      <div class="sub"><span class="dot" style="background:var(--sky)"></span><b>Explore</b><small>codex · deepseek/v4</small><i data-i="right" style="--s:12px;color:var(--fg3)"></i></div>
+      <div class="ubub" style="opacity:.6">测完再看看 docs/compat.md 要不要重写</div>
+      <div class="umeta"><span>排队中</span></div>
+    </div>
+  </div>
+  <div class="dock">
+    <div class="pillbar">
+      <div class="capsule"><span class="c-sky"><i data-i="loader"></i><span class="tick">3:12</span></span><span><i data-i="list"></i>排队 1</span><span><i data-i="users"></i>1</span></div>
+      <span class="gbtn" style="width:44px;height:44px"><i data-i="down"></i></span>
+    </div>
+    <div class="composer">
+      <span class="cb"><i data-i="plus" style="--s:22px"></i></span>
+      <span class="ph">插一句话…</span>
+      <span class="mpill"><img class="logo" src="../../desktop/ui/logos/codex-color.svg">daily<i data-i="down" style="--s:12px"></i></span>
+      <span class="send" title="插话（长按：排队）"><i data-i="steer" style="--s:16px"></i></span>
+      <span class="stop"><i data-i="stop" style="--s:14px"></i></span>
+    </div>
+    <div class="accbar">
+      <span class="chip"><i data-i="shield" style="--s:14px"></i>完全访问<i data-i="down" style="--s:11px"></i></span>
+      <span class="chip"><i data-i="list-check" style="--s:14px"></i>计划</span>
+      <span class="chip"><i data-i="at" style="--s:14px"></i></span>
+    </div>
+  </div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>2b. 线程，正在跑。</b>输入框上方的状态胶囊：进行中计时、排队数、子 agent 数。跑着的时候发送变成"插话"，长按换"排队"；红色是停止。模型胶囊显示 pansy 的模型或路由组（这里是 group/daily）。键盘上方一条：权限模式、计划模式、@ 文件。危险的工具行是红的。</figcaption>
+</figure>
+<!-- 3. Model sheet -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="nav"><span class="gbtn"><i data-i="left"></i></span><div class="t"><b>修复 Codex 子 agent 的模型头</b><small>pansy · 家里的 Mac</small></div><div class="ggrp"><span><i data-i="branch"></i></span><span><i data-i="diff"></i></span><span><i data-i="more"></i></span></div></div>
+  <div class="body"></div>
+  <div class="dim"></div>
+  <div class="sheet" style="height:78%">
+    <div class="grab"></div>
+    <div class="shead"><span class="gbtn" style="opacity:0"></span><div class="t"><b>模型</b><small><img class="logo" src="../../desktop/ui/logos/codex-color.svg" style="display:inline-block;vertical-align:-2px"> Codex · 只换这个线程</small></div><span class="gbtn"><i data-i="x"></i></span></div>
+    <div class="sbody">
+      <div class="field" style="display:flex;gap:8px;align-items:center;padding:9px 12px"><i data-i="search" style="--s:16px"></i>搜索模型</div>
+      <div class="gh">路由组</div>
+      <div class="group">
+        <div class="grow"><i data-i="route"></i><span class="gt"><b>group/daily</b><small>3 个模型 · 依次</small></span><i data-i="check" class="check"></i></div>
+        <div class="grow"><i data-i="route"></i><span class="gt"><b>group/cheap</b><small>4 个模型 · 最少用</small></span></div>
+      </div>
+      <div class="gh">DeepSeek</div>
+      <div class="group">
+        <div class="grow"><img class="logo" style="--s:22px" src="../../desktop/ui/logos/deepseek-color.svg"><span class="gt"><b>deepseek/v4</b><small>128K · <i data-i="brain" style="--s:12px;display:inline-block;vertical-align:-1px"></i> 推理</small></span></div>
+        <div class="grow"><img class="logo" style="--s:22px" src="../../desktop/ui/logos/deepseek-color.svg"><span class="gt"><b>deepseek/v4-flash</b><small>128K</small></span></div>
+      </div>
+      <div class="gh">ChatGPT 订阅（codex/…）</div>
+      <div class="group">
+        <div class="grow"><img class="logo" style="--s:22px" src="../../desktop/ui/logos/openai.svg"><span class="gt"><b>codex/gpt-5.5</b><small style="display:flex;gap:8px;align-items:center">5 小时额度剩 62%<span class="bar" style="width:80px;display:inline-block"><i style="width:62%"></i></span></small></span></div>
+      </div>
+      <div class="gh">推理强度</div>
+      <div class="seg" data-seg><span>低</span><span class="on">中</span><span>高</span><span>超高</span></div>
+      <div style="font-size:13px;color:var(--fg2);text-align:center">下一回合起生效</div>
+    </div>
+  </div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>3. 模型（pansy 多出来的）。</b>底部弹出，有把手，可拉到全屏。列的是 pansy 的路由组和各 provider 的模型，订阅的带额度条；agent 自己的模型在最后。推理强度只在 agent 支持时出现。</figcaption>
+</figure>
+
+<!-- 4. Git sheet -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="nav"><span class="gbtn"><i data-i="left"></i></span><div class="t"><b>给 Sessions 页加按项目的花费</b><small>pansy · 家里的 Mac</small></div><div class="ggrp"><span><i data-i="branch"></i></span><span><i data-i="diff"></i></span><span><i data-i="more"></i></span></div></div>
+  <div class="body"></div>
+  <div class="dim"></div>
+  <div class="sheet" style="height:62%">
+    <div class="grab"></div>
+    <div class="shead"><span class="gbtn" style="opacity:0"></span><div class="t"><b class="mono" style="font-size:16px">pansy/sessions-cost</b><small>领先 2 · 3 个文件未提交 · 工作树</small></div><span class="gbtn"><i data-i="x"></i></span></div>
+    <div class="sbody">
+      <div style="display:flex;gap:8px"><button class="btn k" style="flex:1"><i data-i="upload" style="--s:18px"></i>提交并推送</button><button class="btn k" style="width:48px;flex:none"><i data-i="down" style="--s:16px"></i></button></div>
+      <div class="group">
+        <div class="grow"><i data-i="pr"></i><span class="gt"><b>开 PR</b><small>合进 main，标题和说明由 deepseek/v4 写</small></span><i data-i="right" style="--s:14px;color:var(--fg3)"></i></div>
+        <div class="grow"><i data-i="diff"></i><span class="gt"><b>查看改动</b><small><span class="add">+48</span> <span class="del">−6</span> · 3 个文件</small></span><i data-i="right" style="--s:14px;color:var(--fg3)"></i></div>
+        <div class="grow"><i data-i="pull"></i><span class="gt"><b>拉取最新</b><small>origin/main 新了 1 个提交</small></span></div>
+        <div class="grow"><i data-i="branch"></i><span class="gt"><b>分支和工作树</b><small>~/.pansy/worktrees/pansy/sessions-cost-3f2a</small></span><i data-i="right" style="--s:14px;color:var(--fg3)"></i></div>
+        <div class="grow"><i data-i="merge"></i><span class="gt"><b>合回 main</b><small>二期</small></span></div>
+      </div>
+    </div>
+  </div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>4. Git。</b>标题是分支（等宽），副标题是状态。主操作是反色的大按钮，右边下拉换成只提交、只推送、提交推送并开 PR。在 main 上时，按钮上方多一条黄色提示，按下要再确认。</figcaption>
+</figure>
+
+<!-- 5. Commit and progress -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="body"></div>
+  <div class="dim"></div>
+  <div class="sheet" style="height:88%">
+    <div class="grab"></div>
+    <div class="shead"><span class="gbtn"><i data-i="left"></i></span><div class="t"><b>提交</b><small class="mono">pansy/sessions-cost</small></div><span class="gbtn" style="opacity:0"></span></div>
+    <div class="sbody">
+      <div class="field" style="min-height:96px;position:relative;color:var(--fg)">Sessions: each folder's spend this month, from usage by project<span class="chip" style="position:absolute;right:8px;bottom:8px;height:28px;font-size:13px"><i data-i="sparkle" style="--s:13px"></i>重新生成</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--fg2)"><span>3 个文件</span><span style="color:var(--primary)">全不选</span></div>
+      <div class="group">
+        <div class="grow noic" style="min-height:52px"><i data-i="check-sq" style="--s:20px;color:var(--primary)"></i><span class="gt mono" style="font-size:13px"><span style="color:var(--fg3)">desktop/ui/</span>Sessions.tsx</span><span class="gr mono" style="font-size:12px"><span class="add">+31</span><span class="del">−4</span></span></div>
+        <div class="grow noic" style="min-height:52px"><i data-i="check-sq" style="--s:20px;color:var(--primary)"></i><span class="gt mono" style="font-size:13px"><span style="color:var(--fg3)">crates/pansy-core/src/</span>usage.rs</span><span class="gr mono" style="font-size:12px"><span class="add">+17</span><span class="del">−2</span></span></div>
+        <div class="grow noic" style="min-height:52px"><i data-i="square" style="--s:20px;color:var(--fg3)"></i><span class="gt mono" style="font-size:13px;color:var(--fg2)"><span style="color:var(--fg3)">desktop/ui/</span>i18n.ts</span><span class="gr mono" style="font-size:12px"><span class="add">+2</span></span></div>
+      </div>
+      <div class="group">
+        <div class="grow noic" style="min-height:48px"><span class="gt"><b>推送</b></span><span class="toggle on"></span></div>
+        <div class="grow noic" style="min-height:48px"><span class="gt"><b>开 PR</b><small>合进 main</small></span><span class="toggle on"></span></div>
+      </div>
+      <div class="gh">进行中</div>
+      <div class="group" style="padding:6px 0">
+        <div class="grow noic" style="min-height:40px"><i data-i="check-c" style="--s:18px" class="c-emerald"></i><span class="gt"><b style="font-size:15px">提交</b></span><span class="gr mono" style="font-size:12px">a1c9e04</span></div>
+        <div class="grow noic" style="min-height:40px"><i data-i="check-c" style="--s:18px" class="c-emerald"></i><span class="gt"><b style="font-size:15px">推送</b></span><span class="gr">pre-push 通过<i data-i="right"></i></span></div>
+        <div class="grow noic" style="min-height:40px"><i data-i="loader" style="--s:18px" class="c-sky"></i><span class="gt"><b style="font-size:15px">开 PR</b><small>deepseek/v4 在写说明…</small></span></div>
+      </div>
+      <button class="btn p" style="opacity:.5">提交 2 个文件</button>
+    </div>
+  </div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>5. 提交。</b>说明不填就由网关的模型写，"重新生成"立刻再写一句。勾选文件，开关推送和 PR。按下后同一个弹层变成进度：提交、推送（hook 输出可展开）、开 PR，最后给出 PR 链接。</figcaption>
+</figure>
+<!-- 6. Diff -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="shead" style="padding-top:4px"><span class="gbtn"><i data-i="x"></i></span><div class="t"><b>改动</b><small><span class="add">+48</span> <span class="del">−6</span> · 3 个文件</small></div><span class="gbtn"><i data-i="list"></i></span></div>
+  <div style="padding:4px 16px 8px"><div class="seg" data-seg><span class="on">本回合</span><span>最近回合</span><span>未提交</span><span>全部</span></div></div>
+  <div class="body" style="padding-bottom:120px">
+    <div class="dfile"><i data-i="file" style="--s:14px"></i><b class="mono">desktop/ui/Sessions.tsx</b><span class="add mono">+31</span><span class="del mono">−4</span><span style="font-size:9px;font-weight:700;color:var(--fg3)">修改</span></div>
+    <div style="margin-top:6px">
+      <div class="dl h">@@ -142,9 +142,14 @@ function Folder(props)</div>
+      <div class="dl"><span class="n">142</span>  const t = useT();</div>
+      <div class="dl"><span class="n">143</span>  return (</div>
+      <div class="dl r"><span class="n">144</span>    &lt;Row title={props.name}&gt;</div>
+      <div class="dl a sel"><span class="n">144</span>    &lt;Row title={props.name} trailing={</div>
+      <div class="dl a sel"><span class="n">145</span>      &lt;Spend value={cost(props.folder)} /&gt;</div>
+      <div class="dl a"><span class="n">146</span>    }&gt;</div>
+      <div class="dl"><span class="n">147</span>      {props.children}</div>
+      <div class="dl"><span class="n">148</span>    &lt;/Row&gt;</div>
+    </div>
+    <div class="dfile"><i data-i="file" style="--s:14px"></i><b class="mono">crates/pansy-core/src/usage.rs</b><span class="add mono">+17</span><span class="del mono">−2</span><span style="font-size:9px;font-weight:700;color:var(--fg3)">修改</span></div>
+    <div style="margin-top:6px">
+      <div class="dl h">@@ -88,6 +88,21 @@ impl Usage</div>
+      <div class="dl"><span class="n">88</span>    }</div>
+      <div class="dl a"><span class="n">89</span>    pub fn by_project(&amp;self, month: Month)</div>
+      <div class="dl a"><span class="n">90</span>        -&gt; BTreeMap&lt;PathBuf, Cost&gt; {</div>
+      <div class="dl a"><span class="n">91</span>        let mut out = BTreeMap::new();</div>
+      <div class="dl r"><span class="n">89</span>    // TODO: by project</div>
+    </div>
+  </div>
+  <div style="position:absolute;left:0;right:0;bottom:34px;display:flex;justify-content:center;gap:8px;z-index:10">
+    <button class="btn p" style="width:auto;padding:0 22px;box-shadow:0 8px 24px var(--shadow)"><i data-i="chat" style="--s:16px"></i>评论这 2 行</button>
+    <span class="gbtn" style="width:48px;height:48px"><i data-i="x"></i></span>
+  </div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>6. 改动。</b>全屏弹出。四种范围：本回合、最近回合、未提交、全部（相对基线）。行 22pt、行号槽 46pt、等宽 12pt，增删的底色和左边色条照 T3。长按选几行，"评论"把它们连同你的话放进输入框。</figcaption>
+</figure>
+
+<!-- 7. New task -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="nav"><span class="gbtn"><i data-i="x"></i></span><div class="t"><b>新任务</b></div><span class="gbtn" style="opacity:0"></span></div>
+  <div class="body" style="display:flex;flex-direction:column;justify-content:center;padding:0 28px 220px">
+    <div style="font-size:26px;line-height:32px;font-weight:500;letter-spacing:-.6px;text-align:center">在 <span style="text-decoration:underline;text-underline-offset:5px;text-decoration-color:var(--fg3)">pansy</span> 里<br>做点什么？</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:22px">
+      <span class="chip"><i data-i="laptop" style="--s:15px"></i>家里的 Mac<i data-i="down" style="--s:12px"></i></span>
+      <span class="chip"><img class="logo" src="../../desktop/ui/logos/claudecode-color.svg">Claude Code<i data-i="down" style="--s:12px"></i></span>
+      <span class="chip">deepseek/v4<i data-i="down" style="--s:12px"></i></span>
+      <span class="chip"><i data-i="branch" style="--s:15px"></i>新工作树 · 从 main<i data-i="down" style="--s:12px"></i></span>
+    </div>
+  </div>
+  <div class="dim" style="background:transparent"></div>
+  <div class="sheet" style="height:40%;z-index:22">
+    <div class="grab"></div>
+    <div class="shead"><span class="gbtn" style="opacity:0"></span><div class="t"><b>工作区</b></div><span class="gbtn" style="opacity:0"></span></div>
+    <div class="sbody">
+      <div class="group">
+        <div class="grow"><i data-i="branch"></i><span class="gt"><b>当前分支</b><small class="mono">main · 有 1 个文件未提交</small></span></div>
+        <div class="grow"><i data-i="plus"></i><span class="gt"><b>新分支</b><small>在原来的文件夹里切过去</small></span></div>
+        <div class="grow"><i data-i="layers"></i><span class="gt"><b>新工作树</b><small>另开一个文件夹，不碰你手上的改动</small></span><i data-i="check" class="check"></i></div>
+      </div>
+      <div class="group"><div class="grow noic"><span class="gt"><b>基线</b></span><span class="gr mono">origin/main<i data-i="down"></i></span></div></div>
+    </div>
+  </div>
+  <div class="dock" style="z-index:23;background:none">
+    <div class="composer"><span class="cb"><i data-i="plus" style="--s:22px"></i></span><span class="ph">让它做点什么</span><span class="cb"><i data-i="mic" style="--s:20px"></i></span><span class="send"><i data-i="up" style="--s:16px"></i></span></div>
+  </div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>7. 新任务。</b>居中的大标题，项目名下划线可点。下面一排胶囊：机器、agent、模型、工作区；选工作区时弹出：当前分支、新分支、新工作树（再选基线）。发出就建线程跳进去。</figcaption>
+</figure>
+
+<!-- 8. User input card -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="nav"><span class="gbtn"><i data-i="left"></i></span><div class="t"><b>relay 的部署脚本要不要拆成两步？</b><small>umiro · 工作站</small></div><div class="ggrp"><span><i data-i="branch"></i></span><span><i data-i="diff"></i></span><span><i data-i="more"></i></span></div></div>
+  <div class="body">
+    <div class="feed">
+      <div class="ubub">把 relay 的部署整理一下，现在一个脚本又建 Worker 又发证书</div>
+      <div class="amsg"><p>可以拆，但证书那一步要你的 Cloudflare 账号权限，我先问清楚。</p></div>
+    </div>
+  </div>
+  <div class="dock">
+    <div class="card">
+      <div class="kick"><span>需要回答</span><span class="gbtn" style="width:32px;height:32px;box-shadow:none"><i data-i="down" style="--s:14px"></i></span></div>
+      <h3>证书怎么处理？</h3>
+      <div class="btns" data-opts>
+        <div class="opt on"><b>拆成两个脚本</b><small>deploy.sh 只建 Worker，certs.sh 手动跑</small></div>
+        <div class="opt"><b>保持一个，加 --skip-certs</b><small>默认还是一起做</small></div>
+        <div class="opt"><b>其他…</b><small>写你自己的回答</small></div>
+      </div>
+      <button class="btn p">提交回答</button>
+      <div style="text-align:center;font-size:14px;color:var(--fg2)">不回答</div>
+    </div>
+    <div class="composer"><span class="cb"><i data-i="plus" style="--s:22px"></i></span><span class="ph">让它做点什么</span><span class="mpill"><img class="logo" src="../../desktop/ui/logos/geminicli-color.svg">k3<i data-i="down" style="--s:12px"></i></span><span class="send"><i data-i="up" style="--s:16px"></i></span></div>
+  </div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>8. agent 问你。</b>和审批同一个外壳。选项按钮圆角 16，选中是强调色边框和淡底（可以点）。可以收成一个胶囊先去看别的。</figcaption>
+</figure>
+<!-- 9. Add a machine -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="body"></div>
+  <div class="dim"></div>
+  <div class="sheet" style="height:90%">
+    <div class="grab"></div>
+    <div class="shead"><span class="gbtn"><i data-i="x"></i></span><div class="t"><b>添加机器</b></div><span class="gbtn" style="background:var(--primary);color:var(--primary-fg);border:none"><i data-i="check"></i></span></div>
+    <div class="sbody">
+      <div class="gh">你账号下的电脑</div>
+      <div class="group">
+        <div class="grow"><i data-i="laptop"></i><span class="gt"><b>家里的 Mac</b><small>已连上</small></span><i data-i="check" class="check"></i></div>
+        <div class="grow"><i data-i="server"></i><span class="gt"><b>工作站</b><small>在线 · 点一下连</small></span><i data-i="right" style="--s:14px;color:var(--fg3)"></i></div>
+      </div>
+      <div style="height:220px;border-radius:26px;background:radial-gradient(circle at 50% 40%, var(--grouped), var(--border));display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px">
+        <div style="width:130px;height:130px;border-radius:28px;border:3px solid var(--fg);opacity:.85;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;background:var(--glass)"><i data-i="qr" style="--s:40px;stroke-width:1.4"></i><span style="font-size:13px;font-weight:500">用相机扫</span></div>
+        <span style="font-size:13px;color:var(--fg2);padding:0 24px;text-align:center">打开电脑上 pansy 的"设置 › 共享与访问"，用系统相机扫二维码</span>
+      </div>
+      <div class="gh">或者手动输入</div>
+      <div class="group" style="border:1px solid var(--danger)">
+        <div class="grow noic" style="min-height:52px"><span style="width:80px;font-size:16px;font-weight:500">地址</span><span class="gt mono" style="font-size:15px">192.168.1.20:7268</span></div>
+        <div class="grow noic" style="min-height:52px"><span style="width:80px;font-size:16px;font-weight:500">配对码</span><span class="gt mono" style="font-size:15px;color:var(--fg3)">••••-••••</span></div>
+      </div>
+      <div style="font-size:14px;color:var(--danger);margin-top:-6px">配对码已过期，在电脑上重新生成一个</div>
+      <div style="font-size:14px;color:var(--fg2)">家里和手机在同一个 Wi-Fi，或者都在 Tailscale 上，就能直接连。</div>
+    </div>
+  </div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>9. 添加机器。</b>登录了就先列账号下的电脑，点一下就连。扫码卡片照 T3 的样子；NSH 一期没有相机，所以提示用系统相机扫（会打开 pansy）。手动输入出错时红边加一句红字。</figcaption>
+</figure>
+
+<!-- 10. Sign in -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="nav"><span class="gbtn"><i data-i="x"></i></span><span style="flex:1"></span></div>
+  <div class="body" style="padding:24px 24px 40px;display:flex;flex-direction:column;gap:14px">
+    <img src="../../assets/brand/pansy-icon-256.png" style="width:72px;height:72px;border-radius:18px;align-self:center" alt="">
+    <div style="font-size:26px;line-height:32px;font-weight:700;text-align:center;letter-spacing:-.4px">登录 pansy</div>
+    <div style="font-size:14px;line-height:19px;color:var(--fg2);text-align:center;padding:0 8px">登录后，手机能找到你账号下的电脑，在外面也能连，并收到推送。不登录也能在家里扫码连。</div>
+    <div class="btns" style="margin-top:10px">
+      <button class="btn" style="background:#000;color:#fff"><i data-i="apple" style="--s:18px;fill:#fff;stroke:none"></i>用 Apple 登录</button>
+      <button class="btn o"><span style="font-weight:800;color:#4285f4">G</span>用 Google 登录</button>
+      <button class="btn o"><i data-i="github" style="--s:18px"></i>用 GitHub 登录</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;color:var(--fg3);font-size:13px"><span style="flex:1;height:1px;background:var(--line)"></span>或<span style="flex:1;height:1px;background:var(--line)"></span></div>
+    <div class="field" style="display:flex;gap:10px;align-items:center"><i data-i="mail" style="--s:18px"></i>你的邮箱</div>
+    <button class="btn p">发送验证码</button>
+    <div style="flex:1"></div>
+    <div style="font-size:12px;color:var(--fg3);text-align:center">继续即表示同意 <u>条款</u> 和 <u>隐私政策</u></div>
+  </div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>10. 登录。</b>Apple（照它的规定样式，黑底）、Google、GitHub，再是邮箱。按钮全宽、全圆、48pt。Google、GitHub 在当前网络连不上时，点了给一句"试试邮箱或 Apple"，不隐藏按钮。</figcaption>
+</figure>
+
+<!-- 11. Code -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="nav"><span class="gbtn"><i data-i="left"></i></span><span style="flex:1"></span></div>
+  <div class="body" style="padding:24px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:26px;line-height:32px;font-weight:700;letter-spacing:-.4px">查看邮箱</div>
+    <div style="font-size:15px;line-height:21px;color:var(--fg2)">验证码发到了 <b style="color:var(--fg)">aiden@example.com</b>。也可以直接点邮件里的链接，在电脑上点也行，这里会自动登进去。</div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <span class="field mono" style="flex:1;text-align:center;font-size:24px;color:var(--fg);padding:14px 0">4</span>
+      <span class="field mono" style="flex:1;text-align:center;font-size:24px;color:var(--fg);padding:14px 0">1</span>
+      <span class="field mono" style="flex:1;text-align:center;font-size:24px;color:var(--fg);padding:14px 0">9</span>
+      <span class="field mono" style="flex:1;text-align:center;font-size:24px;padding:14px 0;box-shadow:inset 0 0 0 2px var(--primary)">&nbsp;</span>
+      <span class="field mono" style="flex:1;text-align:center;font-size:24px;padding:14px 0">&nbsp;</span>
+      <span class="field mono" style="flex:1;text-align:center;font-size:24px;padding:14px 0">&nbsp;</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--fg2)"><i data-i="loader" style="--s:15px" class="c-sky"></i>等你点邮件里的链接…</div>
+    <div style="font-size:14px;color:var(--fg3)">重新发送（42 秒）</div>
+    <div style="flex:1"></div>
+    <div style="border-radius:12px 12px 0 0;margin:0 -24px -24px;background:var(--grouped);padding:10px 16px 40px;display:flex;justify-content:center"><span class="chip" style="height:36px"><i data-i="mail" style="--s:15px"></i>来自"邮件"：419027</span></div>
+  </div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>11. 验证码和 magic link。</b>6 个格子，系统能从邮件自动填（键盘上方那条）。同一页也在等邮件里的链接被点开，不需要深链。</figcaption>
+</figure>
+
+<!-- 12. Settings: a machine -->
+<figure>
+<div class="phone">
+  <div class="status"><span>9:41</span><div class="isl"></div><span class="r"><i data-i="wifi" style="--s:16px"></i><i data-i="battery" style="--s:22px"></i></span></div>
+  <div class="nav"><span class="gbtn"><i data-i="left"></i></span><div class="t"><b>家里的 Mac</b><small>macOS · pansy 0.2.0 · 在线</small></div><span class="gbtn" style="opacity:0"></span></div>
+  <div class="body" style="padding:8px 20px 40px;display:flex;flex-direction:column;gap:14px;background:var(--screen)">
+    <div class="gh">路由</div>
+    <div class="group">
+      <div class="grow"><i data-i="wifi"></i><span class="gt"><b>局域网</b><small class="mono">192.168.1.20:7268</small></span><span class="gr c-emerald"><i data-i="check-c"></i>在用</span></div>
+      <div class="grow"><i data-i="network"></i><span class="gt"><b>Tailscale</b><small class="mono">mac.tail1234.ts.net</small></span><span class="gr">12 ms</span></div>
+      <div class="grow"><i data-i="globe"></i><span class="gt"><b>隧道</b><small class="mono">m-3f2a.pansy.dev</small></span><span class="gr">48 ms</span></div>
+      <div class="grow" style="color:var(--primary)"><i data-i="plus" style="color:var(--primary)"></i><span class="gt"><b>添加路由</b></span></div>
+    </div>
+    <div class="gh">这台手机</div>
+    <div class="group">
+      <div class="grow noic"><span class="gt"><b>你的权限</b><small>全部：对话、git、终端、设置</small></span><i data-i="right" style="--s:14px;color:var(--fg3)"></i></div>
+      <div class="grow noic"><span class="gt"><b>设备批准</b><small>新设备要在电脑或已连的手机上批准</small></span><span class="toggle"></span></div>
+    </div>
+    <div class="note w"><i data-i="shield" style="--s:16px;margin-top:2px"></i><span>设备批准关着：登录了你账号的设备都能控制这台电脑。建议给账号开两步验证。</span></div>
+    <div class="gh">连着这台电脑的设备</div>
+    <div class="group">
+      <div class="grow"><i data-i="phone"></i><span class="gt"><b>这台 iPhone</b><small>刚刚</small></span></div>
+      <div class="grow"><i data-i="globe"></i><span class="gt"><b>Safari · iPad</b><small>3 天前</small></span><span class="gr c-danger">吊销</span></div>
+    </div>
+    <button class="btn d">移除这台机器</button>
+  </div>
+  <div class="tabs"><span><i data-i="chat" style="--s:26px"></i></span><span class="off"><i data-i="pr" style="--s:26px"></i></span><span class="off"><i data-i="chart" style="--s:26px"></i></span><span class="on"><i data-i="gear" style="--s:26px"></i></span></div>
+  <div class="home-ind"></div>
+</div>
+<figcaption><b>12. 设置 › 一台机器。</b>路由是有序的表，连第一条通的，显示延迟。设备批准默认关（照 T3），关着时一条黄色提示。可以吊销别的设备。</figcaption>
+</figure>
+<!-- 13. Desktop: Settings › Sharing -->
+<figure>
+<div class="desk">
+  <div class="wbar"><i></i><i></i><i></i><span style="margin-left:10px">pansy</span></div>
+  <div style="flex:1;display:flex;min-height:0">
+    <div class="side"><span>Agents</span><span>Providers</span><span>Routing</span><span>Sessions</span><span>Usage</span><span class="on">共享与访问</span><span>设置</span></div>
+    <div class="main">
+      <div style="display:flex;align-items:center;gap:12px"><div style="flex:1"><div style="font-size:20px;font-weight:600">允许其他设备控制这台电脑</div><div style="font-size:13px;color:var(--danger);margin-top:2px">配对过的设备能在这台电脑上做任何事：运行 agent、提交和推送代码、打开终端。</div></div><span class="toggle on"></span></div>
+      <div style="display:flex;gap:16px">
+        <div class="group" style="flex:1;border-radius:14px;padding:16px;display:flex;gap:16px;align-items:center;background:var(--card);border:1px solid var(--border)">
+          <div class="qr"><svg viewBox="0 0 21 21" width="112" height="112" shape-rendering="crispEdges"><path fill="#000" d="M0 0h7v7H0zM1 1v5h5V1zM2 2h3v3H2zM14 0h7v7h-7zM15 1v5h5V1zM16 2h3v3h-3zM0 14h7v7H0zM1 15v5h5v-5zM2 16h3v3H2zM8 0h1v2H8zM10 1h2v1h-2zM9 3h3v1H9zM8 5h2v3H8zM11 6h2v2h-2zM0 8h2v1H0zM3 9h3v1H3zM8 9h1v3H8zM10 9h4v1h-4zM15 8h2v2h-2zM18 9h3v1h-3zM1 11h4v1H1zM10 11h1v3h-1zM12 12h3v1h-3zM16 11h2v3h-2zM19 12h2v2h-2zM8 14h2v2H8zM11 15h3v1h-3zM15 15h1v3h-1zM17 16h4v1h-4zM8 17h1v4H8zM10 18h3v1h-3zM12 20h4v1h-4zM17 18h2v3h-2zM20 19h1v2h-1z"/></svg></div>
+          <div style="display:flex;flex-direction:column;gap:6px;min-width:0"><b style="font-size:15px">添加设备</b><span style="font-size:13px;color:var(--fg2)">用手机的相机扫，或打开链接。9:42 后失效。</span><span class="mono" style="font-size:12px;color:var(--fg2)">https://192.168.1.20:7268/pair#…</span><div style="display:flex;gap:8px;margin-top:4px"><span class="chip" style="height:30px;font-size:13px">复制链接</span><span class="chip" style="height:30px;font-size:13px">只读</span></div></div>
+        </div>
+        <div class="group" style="width:260px;border-radius:14px;padding:14px 16px;background:var(--warn-bg);color:var(--warn);font-size:13px;display:flex;flex-direction:column;gap:8px">
+          <b style="font-size:14px">待批准</b>
+          <span>"Pixel 9 · Chrome" 想连这台电脑。核对手机上显示的码：</span>
+          <span class="mono" style="font-size:22px;font-weight:700;letter-spacing:3px;color:var(--fg)">K7Q-42M</span>
+          <div style="display:flex;gap:8px"><span class="chip" style="height:30px;font-size:13px;background:var(--primary);color:var(--primary-fg);border:none">批准</span><span class="chip" style="height:30px;font-size:13px">拒绝</span></div>
+        </div>
+      </div>
+      <div style="font-size:13px;font-weight:500;color:var(--fg2)">设备</div>
+      <div style="border:1px solid var(--border);border-radius:12px;background:var(--card);font-size:14px">
+        <div style="display:flex;gap:12px;padding:10px 14px;align-items:center"><i data-i="phone" style="--s:16px"></i><span style="flex:1">iPhone 17 · pansy app</span><span style="color:var(--fg2)">全部权限</span><span style="color:var(--fg2);width:70px">刚刚</span><span style="color:var(--danger)">吊销</span></div>
+        <div style="display:flex;gap:12px;padding:10px 14px;align-items:center;border-top:1px solid var(--border)"><i data-i="globe" style="--s:16px"></i><span style="flex:1">iPad · Safari</span><span style="color:var(--fg2)">只读</span><span style="color:var(--fg2);width:70px">3 天前</span><span style="color:var(--danger)">吊销</span></div>
+      </div>
+      <div style="display:flex;gap:16px;font-size:14px">
+        <div style="flex:1;border:1px solid var(--border);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px"><b>路由</b><span style="color:var(--fg2)">局域网 <span class="mono">192.168.1.20:7268</span></span><span style="color:var(--fg2)">Tailscale <span class="mono">mac.tail1234.ts.net</span></span><span style="color:var(--fg2)">隧道 <span class="mono">m-3f2a.pansy.dev</span> · 开</span></div>
+        <div style="flex:1;border:1px solid var(--border);border-radius:12px;background:var(--card);padding:12px 14px;display:flex;flex-direction:column;gap:6px"><b>账号和服务</b><span style="color:var(--fg2)">已登录 aiden@example.com</span><span style="color:var(--fg2)">设备批准：关</span><span style="color:var(--emerald)">后台服务已安装，关窗口不影响手机</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<figcaption style="max-width:860px"><b>13. 电脑这一侧：设置 › 共享与访问。</b>总开关和红字说明、配对二维码（10 分钟）、待批准的设备（设备批准开着时）、设备列表可吊销、路由、账号和后台服务。用的是 pansy 窗口现有的主题。</figcaption>
+</figure>
+
+</div>
+<script>
+// Icons: Lucide (ISC), simplified.
+const P = {
+  "wifi":'<path d="M12 20h.01"/><path d="M2 8.8a15 15 0 0 1 20 0"/><path d="M5 12.9a10 10 0 0 1 14 0"/><path d="M8.5 16.4a5 5 0 0 1 7 0"/>',
+  "wifi-off":'<path d="M12 20h.01"/><path d="M8.5 16.4a5 5 0 0 1 7 0"/><path d="M2 8.8a15 15 0 0 1 4.2-2.8"/><path d="M10.7 5.1A15 15 0 0 1 22 8.8"/><path d="m2 2 20 20"/>',
+  "battery":'<rect x="2" y="7" width="17" height="10" rx="2.5"/><path d="M22 11v2"/><rect x="4" y="9" width="11" height="6" rx="1" fill="currentColor" stroke="none"/>',
+  "sliders":'<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  "pen":'<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/>',
+  "laptop":'<rect x="4" y="4" width="16" height="11" rx="2"/><path d="M2 20h20"/>',
+  "server":'<rect x="3" y="3" width="18" height="8" rx="2"/><rect x="3" y="13" width="18" height="8" rx="2"/><path d="M7 7h.01M7 17h.01"/>',
+  "down":'<path d="m6 9 6 6 6-6"/>', "up":'<path d="M12 19V5M5 12l7-7 7 7"/>', "left":'<path d="m15 18-6-6 6-6"/>', "right":'<path d="m9 18 6-6-6-6"/>',
+  "shield":'<path d="M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4M12 16h.01"/>',
+  "loader":'<path d="M21 12a9 9 0 1 1-6.2-8.6"/>',
+  "question":'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>',
+  "alert":'<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>',
+  "check-c":'<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  "pr":'<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"/>',
+  "terminal":'<path d="m4 17 6-6-6-6M12 19h8"/>',
+  "chat":'<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  "chart":'<path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/>',
+  "gear":'<path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+  "search":'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  "clock":'<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  "archive":'<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4"/>',
+  "upload":'<path d="M12 3v12M7 8l5-5 5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>',
+  "pin":'<path d="M12 17v5M9 10.8V5h6v5.8l2 3.2H7z"/><path d="M8 3h8"/>',
+  "dot":'<circle cx="12" cy="12" r="5" fill="currentColor"/>',
+  "link":'<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+  "trash":'<path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  "branch":'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="6" r="3"/><path d="M6 9v6M18 9a9 9 0 0 1-9 9"/>',
+  "diff":'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M9 10h6M12 7v6M9 17h6"/>',
+  "more":'<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  "copy":'<rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2"/>',
+  "brain":'<path d="M12 5a3 3 0 1 0-6 .1 4 4 0 0 0-2.5 5.8A4 4 0 0 0 6 18a4 4 0 0 0 6 1z"/><path d="M12 5a3 3 0 1 1 6 .1 4 4 0 0 1 2.5 5.8A4 4 0 0 1 18 18a4 4 0 0 1-6 1z"/><path d="M12 5v14"/>',
+  "file":'<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/>',
+  "pencil":'<path d="M21.2 6.8a2.8 2.8 0 0 0-4-4L4 16l-1 5 5-1z"/><path d="m15 5 4 4"/>',
+  "plus":'<path d="M5 12h14M12 5v14"/>', "x":'<path d="M18 6 6 18M6 6l12 12"/>', "check":'<path d="M20 6 9 17l-5-5"/>',
+  "stop":'<rect x="5" y="5" width="14" height="14" rx="2" fill="currentColor"/>',
+  "split":'<circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><circle cx="6" cy="5" r="3"/><path d="M6 8v8M18 8a6 6 0 0 1-6 6H9"/>',
+  "layers":'<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+  "users":'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  "list":'<path d="M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>',
+  "steer":'<path d="M14 9 9 4 4 9"/><path d="M20 20h-7a4 4 0 0 1-4-4V4"/>',
+  "list-check":'<path d="M11 18H3M15 18l2 2 4-4M16 12H3M16 6H3"/>',
+  "at":'<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>',
+  "route":'<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
+  "pull":'<path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/>',
+  "merge":'<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/>',
+  "sparkle":'<path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/>',
+  "check-sq":'<rect x="3" y="3" width="18" height="18" rx="4"/><path d="m8 12 3 3 5-6"/>',
+  "square":'<rect x="3" y="3" width="18" height="18" rx="4"/>',
+  "mic":'<rect x="9" y="2" width="6" height="13" rx="3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/>',
+  "qr":'<rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><path d="M15 15h2v2M21 15v6h-4M13 13h0M13 21h0"/>',
+  "apple":'<path d="M16.4 12.6c0-2.6 2.1-3.8 2.2-3.9a4.8 4.8 0 0 0-3.8-2c-1.6-.2-3.1.9-3.9.9s-2-.9-3.4-.9a5 5 0 0 0-4.2 2.6c-1.8 3.1-.5 7.7 1.3 10.2.9 1.2 1.9 2.6 3.2 2.6s1.8-.8 3.4-.8 2 .8 3.4.8 2.2-1.3 3.1-2.5a10 10 0 0 0 1.4-2.9 4.5 4.5 0 0 1-2.7-4.1zM13.9 5c.7-.9 1.2-2 1.1-3.2-1 0-2.3.7-3 1.6-.7.8-1.2 2-1.1 3.1 1.2.1 2.3-.6 3-1.5z"/>',
+  "github":'<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.1-1.3-.3-2.5-1-3.5.3-1.1.3-2.3 0-3.5 0 0-1 0-3 1.5-2.6-.5-5.4-.5-8 0C6 2 5 2 5 2c-.3 1.2-.3 2.4 0 3.5A5.4 5.4 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.4.5-.7 1.1-.8 1.7-.2.6-.3 1.2-.2 1.8v4"/><path d="M9 18c-4.5 2-5-2-7-2"/>',
+  "mail":'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+  "network":'<rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3M12 12V8"/>',
+  "globe":'<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20"/>',
+  "phone":'<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/>',
+};
+document.querySelectorAll("i[data-i]").forEach(el => {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("class", "i " + (el.getAttribute("class") || ""));
+  if (el.getAttribute("style")) svg.setAttribute("style", el.getAttribute("style"));
+  svg.innerHTML = P[el.dataset.i] || P.dot;
+  el.replaceWith(svg);
+});
+document.querySelectorAll(".wrow").forEach(r => r.addEventListener("click", () => r.classList.toggle("open")));
+document.querySelectorAll("[data-seg]").forEach(s => s.querySelectorAll("span").forEach(o => o.addEventListener("click", () => {
+  s.querySelectorAll("span").forEach(x => x.classList.remove("on")); o.classList.add("on");
+})));
+document.querySelectorAll("[data-opts]").forEach(s => s.querySelectorAll(".opt").forEach(o => o.addEventListener("click", () => {
+  s.querySelectorAll(".opt").forEach(x => x.classList.remove("on")); o.classList.add("on");
+})));
+function theme() {
+  const r = document.documentElement;
+  r.dataset.theme = r.dataset.theme === "dark" ? "light" : "dark";
+}
+if (matchMedia("(prefers-color-scheme: dark)").matches) theme();
+</script>
+</body>
+</html>
