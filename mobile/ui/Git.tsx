@@ -105,10 +105,6 @@ export function GitSheet(props: { open: boolean; onClose: () => void; machine: s
               onPress={status()?.upstream && !pulling() ? () => void pull() : undefined}
               testID="git-pull"
             />
-            <GroupRow icon="git-branch" title={tr("Branches and worktrees")} sub={tr("Phase 2")} tone="muted" />
-            <If when={status()?.worktree}>
-              <GroupRow icon="git-merge" title={tr("Merge back into %s", status()?.defaultBranch ?? "main")} sub={tr("Phase 2")} tone="muted" />
-            </If>
           </Group>
         </View>
       </If>

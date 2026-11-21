@@ -1,7 +1,7 @@
 // 输入框 (phone-ui.md "3. 输入框"): a glass capsule floating over the feed:
-// attachments (phase 2), the text, the model's pill, send. While a turn
-// runs, send steers it, or queues after it (a long press switches), and a
-// red stop sits beside it. Under it, the permission mode and plan mode.
+// the text, the model's pill, send. While a turn runs, send steers it, or
+// queues after it (a long press switches), and a red stop sits beside it.
+// Under it, the permission mode.
 import { signal, Text, View, type JSX } from "nsh";
 import { Button as BaseButton, Input } from "nsh/base";
 import { Haptics } from "nsh/mobile";
@@ -43,9 +43,6 @@ export function Composer(props: {
         class="min-h-14 flex-row items-end gap-[2px] rounded-[27px] border border-border bg-composer p-[6px]"
         style={{ ...BLUR, boxShadow: SHADOW.composer() }}
       >
-        <View role="button" accessibilityLabel={tr("Attach")} onPress={() => toast(tr("Attachments come in phase 2"))} class="h-11 w-11 items-center justify-center active:opacity-50">
-          <Icon name="plus" color="fg-2" size={22} />
-        </View>
         <Input
           value={props.text}
           onChange={({ value }) => props.onText(value)}
@@ -55,7 +52,7 @@ export function Composer(props: {
           multiline
           submitBehavior="newline"
           ios={{ inputAccessoryViewID: "composer-accessory" }}
-          class="max-h-[160px] min-h-11 flex-1 px-1 py-[10px] text-[16px] leading-[22px] text-fg placeholder:text-fg-3"
+          class="max-h-[160px] min-h-11 flex-1 pl-3 pr-1 py-[10px] text-[16px] leading-[22px] text-fg placeholder:text-fg-3"
         />
         <View class="h-11 flex-row items-center gap-[2px]">
           <View
@@ -111,13 +108,11 @@ export function Composer(props: {
   );
 }
 
-/** The bar under the composer: the permission mode, plan mode (phase 2), `@` files (phase 2). */
+/** The bar under the composer: the permission mode. */
 export function Accessory(props: { mode: Mode; onMode: () => void }) {
   return (
     <View class="flex-row gap-2 px-1">
       <Chip small icon="shield" label={modeLabel(props.mode)} chevron onPress={props.onMode} testID="mode-chip" />
-      <Chip small icon="list-checks" label={tr("Plan")} onPress={() => toast(tr("Plan mode comes in phase 2"))} testID="plan-chip" />
-      <Chip small icon="at-sign" label="" onPress={() => toast(tr("@ files come in phase 2"))} />
     </View>
   );
 }

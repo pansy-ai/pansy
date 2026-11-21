@@ -149,6 +149,26 @@ async fn pairs_a_browser_and_answers_on_its_socket() {
     assert_eq!(list[0]["name"], "Test phone");
     assert_eq!(list[0]["current"], true);
 
+    // What the gateway counted, by day and by model, never a request's text.
+    pansy_core::usage::append(&pansy_core::usage::Record {
+        at: chrono::Utc::now(),
+        agent: "codex".into(),
+        provider: "deepseek".into(),
+        model: "deepseek-chat".into(),
+        status: 200,
+        input: 120,
+        output: 30,
+        ..Default::default()
+    })
+    .unwrap();
+    let usage = call(&mut ws, 7, "usage.summary", json!({"days": 7})).await;
+    let usage = &usage["result"];
+    assert_eq!(usage["total"]["requests"], 1);
+    assert_eq!(usage["byModel"]["deepseek/deepseek-chat"]["input"], 120);
+    assert_eq!(usage["byAgent"]["codex"]["output"], 30);
+    assert_eq!(usage["byDay"].as_object().unwrap().len(), 7);
+    assert!(usage.get("latest").is_none());
+
     // Revoked, the device is cut off and its cookie is worth nothing.
     let id = list[0]["id"].as_str().unwrap().to_owned();
     let gone = call(&mut ws, 6, "devices.revoke", json!({"deviceId": id})).await;

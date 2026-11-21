@@ -1,10 +1,9 @@
 // 线程设置 (phone-ui.md "5. 线程设置"): the permission mode, four options as
-// T3 names them (only those the agent can keep), plan mode (phase 2), and
-// where the thread works.
+// T3 names them (only those the agent can keep), and where the thread works.
 import { Text, View } from "nsh";
 import type { Mode } from "../net/types";
 import { tr } from "./i18n";
-import { BottomSheet, Group, GroupHead, GroupRow, Toggle } from "./parts";
+import { BottomSheet, Group, GroupHead, GroupRow } from "./parts";
 import { modeLabel } from "./Composer";
 
 /** The modes `agent` can keep: Codex and Claude Code all four, the others asking or not. */
@@ -45,9 +44,6 @@ export function ModeSheet(props: { open: boolean; onClose: () => void; agent: st
             }}
           </Each>
         </View>
-        <Group>
-          <GroupRow first title={tr("Plan mode")} sub={tr("Phase 2")} trailing={<Toggle on={false} disabled onChange={() => {}} label={tr("Plan mode")} />} />
-        </Group>
         <If when={props.workspace}>
           <GroupHead text={tr("Workspace")} />
           <Group>

@@ -3,12 +3,13 @@
 import { signal } from "nsh";
 import { createNavStack } from "nsh/base";
 
-export type Tab = "chats" | "settings";
+export type Tab = "chats" | "usage" | "settings";
 export type ChatRoute = { name: "list" } | { name: "thread"; machine: string; thread: string };
 export type SettingsRoute = { name: "root" } | { name: "machine"; id: string } | { name: "about" };
 
 export const tab = signal<Tab>("chats");
 export const chats = createNavStack<ChatRoute>([{ name: "list" }]);
+export const usageNav = createNavStack<{ name: "root" }>([{ name: "root" }]);
 export const settingsNav = createNavStack<SettingsRoute>([{ name: "root" }]);
 
 /** The pairing sheet, and the link it was opened with (the page's `#pair=`). */

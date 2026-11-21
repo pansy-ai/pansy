@@ -236,6 +236,26 @@ test("settings show a machine's routes, scopes and devices, and revoke one", asy
   await app.waitUntil(() => called(app, "devices.setRequireApproval", (p) => p.requireApproval === true));
 });
 
+test("the usage tab shows what the gateway counted, by model and by agent, for the range chosen", async () => {
+  const app = await launch();
+  await app.press("id:tab-usage");
+  await app.waitFor("id:usage-by-model");
+  await app.waitUntil(() => called(app, "usage.summary", (p) => p.days === 7));
+  const texts = app.texts();
+  expect(texts).toContain("deepseek-v4");
+  expect(texts).toContain("Claude Code");
+  expect(app.shows("id:usage-bars")).toBe(true);
+  // today alone has no bars
+  await app.press("id:usage-range-1");
+  await app.waitUntil(() => called(app, "usage.summary", (p) => p.days === 1));
+  await app.waitUntil(() => !app.shows("id:usage-bars"));
+  // the rows count the new range too, never the last one's
+  await app.waitUntil(() => app.texts().some((t) => /^\d+%$/.test(t)));
+  expect(app.texts().filter((t) => /^\d+%$/.test(t)).every((t) => Number(t.slice(0, -1)) <= 100)).toBe(true);
+  await app.press("id:usage-range-30");
+  await app.waitUntil(() => called(app, "usage.summary", (p) => p.days === 30));
+});
+
 test("with nothing paired, it asks to connect a computer and pairs by address and code", async () => {
   const env = { id: "m_new", name: "Workstation", version: "0.2.0", protocol: 1, capabilities: ["codex", "claude"], routes: [{ kind: "lan", url: BASE }] };
   const app = await open("./App.tsx", {

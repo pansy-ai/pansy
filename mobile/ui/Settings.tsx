@@ -14,8 +14,8 @@ import { pairOpen, settingsNav } from "./nav";
 import { Btn, Field, GlassButton, Group, GroupHead, GroupRow, Icon, Note, Seg, toast, Toggle } from "./parts";
 import { ago } from "./time";
 
-/** A page of the Settings tab: its header on the web and the desktops, the system's elsewhere. */
-function Page(props: { title: string; subtitle?: string; back?: boolean; children?: JSX.Element; testID?: string }) {
+/** A page of the Settings or the Usage tab: its header on the web and the desktops, the system's elsewhere. */
+export function Page(props: { title: string; subtitle?: string; back?: boolean; children?: JSX.Element; testID?: string }) {
   return (
     <NavPage
       title={props.title}
@@ -96,10 +96,6 @@ export function SettingsRoot() {
           { value: "zh-Hans", label: "简体中文" },
         ]}
       />
-      <GroupHead text={tr("Notifications")} />
-      <Group>
-        <GroupRow first icon="info" title={tr("Push notifications")} sub={tr("Phase 2: add the web app to the home screen to get them, or give an ntfy or Bark address")} tone="muted" />
-      </Group>
       <Group>
         <GroupRow first icon="info" title={tr("About")} chevron onPress={() => settingsNav.push({ name: "about" })} testID="settings-about" />
       </Group>

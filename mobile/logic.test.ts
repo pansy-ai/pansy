@@ -1,6 +1,6 @@
 // The parts of the app that are plain functions: pairing links and
 // addresses, the Markdown blocks, how events fold into a thread's feed, and
-// the list's monograms, times and title as T3 has them.
+// the list's monograms, times and title as T3 has them, and usage's counts.
 import { expect, test } from "nsh/test";
 import { normalizeAddress, parsePairUrl } from "./net/pair";
 import { apply, fromHistory, type FeedState } from "./state/thread";
@@ -8,6 +8,7 @@ import { blocks, spans } from "./ui/Markdown";
 import { monogram, monogramHue } from "./ui/parts";
 import { connectionTitle } from "./ui/Threads";
 import { since } from "./ui/time";
+import { compact, top } from "./ui/Usage";
 
 test("reads a pairing link's address and secret from #pair=", () => {
   expect(parsePairUrl("http://192.168.1.20:7268/#pair=Zm9vYmFyLWJhego_-x")).toEqual({ base: "http://192.168.1.20:7268", secret: "Zm9vYmFyLWJhego_-x" });
@@ -82,4 +83,13 @@ test("the title names the machines it reconnects to only while none is online", 
   expect(connectionTitle([{ name: "mac", state: "connecting" }])).toEqual({ label: "Reconnecting to mac", spin: true });
   expect(connectionTitle([{ name: "mac", state: "offline" }, { name: "pc", state: "connecting" }])).toEqual({ label: "Reconnecting 2 machines", spin: true });
   expect(connectionTitle([{ name: "mac", state: "revoked" }])).toEqual({ label: "Not connected", spin: false });
+});
+
+test("usage counts are short, and who used most comes first", () => {
+  expect(compact(1019)).toBe("1019");
+  expect(compact(12_400)).toBe("12.4K");
+  expect(compact(3_400_000)).toBe("3.4M");
+  expect(compact(250_000_000)).toBe("250M");
+  const t = (input: number, requests = 1) => ({ requests, errors: 0, input, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 });
+  expect(top({ a: t(5), b: t(9), c: t(0, 0), d: t(7) }, 2).map(([k]) => k)).toEqual(["b", "d"]);
 });

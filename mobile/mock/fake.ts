@@ -1,11 +1,11 @@
 // A scripted home pansy: protocol v1 (docs/plans/phone-protocol.md) with
-// canned machines, threads, models, git and devices, and a fake agent that
+// canned machines, threads, models, git, devices and usage, and a fake agent that
 // streams an answer, asks to run a command and finishes. Plain TypeScript
 // with no platform API but timers: mock/server.ts serves it over HTTP and a
 // WebSocket (Bun), test/harness.tsx puts it behind the app's transport.
 // It checks no DPoP proof and no token: a stand-in to try the app with.
 import type { Socket } from "../net/transport";
-import type { Decision, Device, Diff, DiffFile, Environment, Event, GitStatus, Models, Project, Seq, ThreadSummary, Turn } from "../net/types";
+import type { Decision, Device, Diff, DiffFile, Environment, Event, GitStatus, Models, Project, Seq, ThreadSummary, Totals, Turn, Usage } from "../net/types";
 
 export type Client = { send(msg: unknown): void; shell: boolean; threads: Set<string>; deviceId: string };
 export type HttpResult = { status: number; body?: unknown; headers?: Record<string, string> };
@@ -36,6 +36,37 @@ const MODELS: Models = {
     { id: "codex", name: "ChatGPT subscription (codex/…)", models: [{ id: "codex/gpt-5.5", name: "GPT-5.5", context: 400_000, reasoning: true, vision: true }] },
   ],
 };
+
+/** The gateway's count of the last `days` days: the same canned week, again and again. */
+function usageOf(days: number): Usage {
+  const zero = (): Totals => ({ requests: 0, errors: 0, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 });
+  const add = (into: Totals, t: Totals) => {
+    for (const k of Object.keys(into) as (keyof Totals)[]) into[k] += t[k];
+  };
+  const shares: [string, string, number][] = [
+    ["deepseek/deepseek-v4", "codex", 0.46],
+    ["kimi/kimi-k3", "claude-code", 0.27],
+    ["codex/gpt-5.5", "codex", 0.19],
+    ["anthropic/claude-sonnet-5.5", "claude-code", 0.08],
+  ];
+  const week = [1.0, 0.4, 0.75, 1.3, 0.2, 0.9, 1.1];
+  const out: Usage = { days, total: zero(), byDay: {}, byModel: {}, byAgent: {} };
+  for (let back = days - 1; back >= 0; back--) {
+    const d = new Date(Date.now() - back * 86_400_000);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const day = zero();
+    for (const [model, agent, share] of shares) {
+      const f = week[back % week.length] * share;
+      const t: Totals = { requests: Math.round(180 * f), errors: model.startsWith("kimi") ? Math.round(4 * f) : 0, input: Math.round(2_400_000 * f), output: Math.round(160_000 * f), cacheRead: Math.round(1_800_000 * f), cacheWrite: 0, reasoning: Math.round(40_000 * f) };
+      add(day, t);
+      add((out.byModel[model] ??= zero()), t);
+      add((out.byAgent[agent] ??= zero()), t);
+    }
+    out.byDay[key] = day;
+    add(out.total, day);
+  }
+  return out;
+}
 
 const ANSWER = `花费从 \`usage::by_project\` 来，按月汇总；Sessions 的每个文件夹标题右边显示 \`¥12.40 本月\`。
 
@@ -531,6 +562,8 @@ export class FakeHome {
         return MODELS;
       case "projects.list":
         return { projects: PROJECTS };
+      case "usage.summary":
+        return usageOf(Math.min(90, Math.max(1, Number(p.days ?? 7))));
       case "git.status": {
         const t = this.thread(p);
         const onDefault = !t.branch || t.branch === "main";

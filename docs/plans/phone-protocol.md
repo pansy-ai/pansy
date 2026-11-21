@@ -103,6 +103,7 @@ payload `{"jti","htm","htu","iat","ath"?}`。`htu` 不带 query；`iat` 前后 6
 | `thread.delete` | orchestration:operate | `{threadId, force?}` | `{worktreeKept}`（只删 pansy 的线程记录，不碰会话文件；pansy 建的工作树没有未提交的改动才一起删，`force` 照删；分支有未合并的提交就留着） |
 | `models.list` | orchestration:read | `{agent?}` | `{groups: [Group], providers: [{id, name, models: [Model]}]}` |
 | `projects.list` | orchestration:read | `{}` | `{projects: [{folder, name, git: bool, branch?}]}` |
+| `usage.summary` | orchestration:read | `{days?}`（1 到 90，默认 7） | `{days, total: Totals, byDay: {日期: Totals}, byModel: {"provider/model": Totals}, byAgent: {agent: Totals}}`；`Totals` 是 `pansy_core::usage::Totals`（`requests, errors, input, output, cacheRead, cacheWrite, reasoning`），每个请求的明细不给 |
 | `git.status` | orchestration:read | `{threadId}` | `GitStatus` |
 | `git.diff` | orchestration:read | `{threadId, scope: "turn"\|"lastTurn"\|"uncommitted"\|"base"}` | `Diff` |
 | `git.generate` | source-control:write | `{threadId, kind: "commit"\|"pr"}` | `{title, body}` |

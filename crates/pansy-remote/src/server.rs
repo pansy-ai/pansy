@@ -646,7 +646,7 @@ fn forbidden(scope: Scope) -> anyhow::Error {
 fn scope_of(method: &str) -> Option<Scope> {
     Some(match method {
         "shell.subscribe" | "thread.subscribe" | "thread.unsubscribe" | "models.list"
-        | "projects.list" | "git.status" | "git.diff" => Scope::OrchestrationRead,
+        | "projects.list" | "git.status" | "git.diff" | "usage.summary" => Scope::OrchestrationRead,
         "thread.create"
         | "message.dispatch"
         | "runtime-request.respond"
@@ -788,6 +788,19 @@ async fn call(app: &App, p: &Principal, method: &str, params: Value) -> Result<V
         "projects.list" => {
             let hub = hub.clone();
             tokio::task::spawn_blocking(move || projects(&hub)).await?
+        }
+        "usage.summary" => {
+            // the gateway's count, as the window's Usage page has it; the
+            // phone takes the totals, by day, by model and by agent
+            let days = params["days"].as_u64().unwrap_or(7).clamp(1, 90) as u32;
+            let s = tokio::task::spawn_blocking(move || pansy_core::usage::summary(days)).await?;
+            json!({
+                "days": s.days,
+                "total": s.total,
+                "byDay": s.by_day,
+                "byModel": s.by_model,
+                "byAgent": s.by_agent,
+            })
         }
         "git.status" => {
             let t = hub.thread(&thread_param(&params)?)?;

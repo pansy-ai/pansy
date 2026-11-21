@@ -247,7 +247,7 @@ Web 版由家里的 pansy 在 `/` 上送出；Web Push（主屏幕上的 Web 版
 
 | T3 | 期 |
 | :-- | :-- |
-| 首页标签：Chats、PRs、Usage（T3 另有 Issues，不做） | Chats 一期；PRs、Usage 二期 |
+| 首页标签：Chats、PRs、Usage（T3 另有 Issues，不做） | Chats、Usage（网关的用量，`usage.summary`）一期；PRs 不做标签，开 PR 在 Git 里 |
 | Chats：所有机器的线程，Working / Settled / Snoozed 三栏，按机器和项目筛，角标 | 一期；搜索、置顶、贪睡、settle、未读、撤销 二期 |
 | 机器：列表、配对（链接、扫码、地址加码）、路由、"你的权限"、移除 | 一期 |
 | 新任务：项目 → 机器 → 分支（当前 / 新分支 / 新工作树）→ 线程设置 | 一期；添加项目（克隆、本地文件夹）二期 |

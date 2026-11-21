@@ -132,7 +132,12 @@ export type Device = {
   current?: boolean;
 };
 
-export type Decision = "accept" | "acceptForSession" | "decline" | "cancel";
+/** What the gateway counted (`pansy_core::usage::Totals`). */
+export type Totals = { requests: number; errors: number; input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number };
+/** `usage.summary`: the last `days` days, every day present; `byModel` is keyed `provider/model`. */
+export type Usage = { days: number; total: Totals; byDay: Record<string, Totals>; byModel: Record<string, Totals>; byAgent: Record<string, Totals> };
+
+export type Decision ="accept" | "acceptForSession" | "decline" | "cancel";
 export type DispatchMode = "start" | "queue" | "steer" | "restart";
 export type Workspace = { kind: "current" | "branch" | "worktree"; base?: string };
 
