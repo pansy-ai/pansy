@@ -252,9 +252,10 @@ pub fn agent_of(headers: &HeaderMap) -> String {
     // The first that is in the user agent: one that holds another's name
     // (workbuddy-ai, github-copilot in VS Code's) comes before it. Claude
     // Desktop's Code tab runs Claude Code as `claude-cli/… (external,
-    // claude-desktop)`.
+    // claude-desktop)`. T3 Code runs Codex as `T3 Code/<codex's version> …`.
     const KNOWN: &[(&str, &str)] = &[
         ("claude-desktop", desktop::AGENT),
+        ("t3 code", "t3code"),
         ("claude-cli", "claude-code"),
         ("claude-code", "claude-code"),
         ("codex", "codex"),
@@ -1964,6 +1965,14 @@ mod tests {
             HeaderValue::from_static("codex_cli_rs/0.50.0"),
         );
         assert_eq!(agent_of(&headers), "codex");
+        // Codex's app-server, named by the client that started it
+        headers.insert(
+            header::USER_AGENT,
+            HeaderValue::from_static(
+                "T3 Code/0.171.0 (Arch Linux Rolling Release; x86_64) unknown (T3 Code; 0.1.0)",
+            ),
+        );
+        assert_eq!(agent_of(&headers), "t3code");
         headers.insert(header::USER_AGENT, HeaderValue::from_static("curl/8"));
         assert_eq!(agent_of(&headers), "other");
     }

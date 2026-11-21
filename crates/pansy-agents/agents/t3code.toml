@@ -3,11 +3,19 @@
 # address and key in the instance's environment, and every model one of its
 # custom models. The model is picked in T3 Code's model picker, not in a
 # file. T3's server watches the file and reloads it.
+# Beside it (pansy's own) an instance of T3's codex driver: the installed
+# codex app-server pointed at the gateway by -c in its launch arguments, as
+# `pansy run codex` does, so Codex's config.toml is not written. Its key is
+# in the instance's environment (env_key), out of the command line. A
+# provider that is not OpenAI's asks for no ChatGPT sign-in (account/read's
+# requiresOpenaiAuth is false), so T3 has the instance ready without one;
+# Codex names itself T3 Code to the gateway. Tried on T3 Code's main of
+# 2026-11-20 and codex 0.171.0.
 id = "t3code"
 name = "T3 Code"
 protocol = "anthropic"
 dirs = [".t3"]
-note = "T3 Code lists every model of pansy under its Pansy provider; pick one in T3 Code's model picker."
+note = "T3 Code lists every model of pansy under its Pansy (Claude) and Pansy (Codex) providers; pick one in T3 Code's model picker."
 
 [files]
 settings = "{env:T3CODE_HOME|~/.t3}/userdata/settings.json"
@@ -18,7 +26,7 @@ key = ["providerInstances", "pansy"]
 
 [set.value]
 driver = "claudeAgent"
-displayName = "Pansy"
+displayName = "Pansy (Claude)"
 enabled = true
 environment = [
   { name = "ANTHROPIC_BASE_URL", value = "{base_url}", sensitive = false },
@@ -26,6 +34,19 @@ environment = [
   { name = "ENABLE_TOOL_SEARCH", value = "true", sensitive = false },
 ]
 config = { customModels = [{ "$each_model" = { slug = "{id}", name = "{name}" } }] }
+
+[[set]]
+file = "settings"
+key = ["providerInstances", "pansy-codex"]
+
+[set.value]
+driver = "codex"
+displayName = "Pansy (Codex)"
+enabled = true
+environment = [
+  { name = "PANSY_API_KEY", value = "{key}", sensitive = false },
+]
+config = { launchArgs = """-c 'model_provider="pansy"' -c 'model_providers.pansy.name="Pansy"' -c 'model_providers.pansy.base_url="{v1}"' -c 'model_providers.pansy.wire_api="responses"' -c 'model_providers.pansy.env_key="PANSY_API_KEY"'""", customModels = [{ "$each_model" = { slug = "{id}", name = "{name}" } }] }
 
 [base_url]
 file = "settings"
