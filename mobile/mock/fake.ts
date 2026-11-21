@@ -162,6 +162,8 @@ export class FakeHome {
   readonly runs = new Map<string, Run>();
   readonly tickets = new Map<string, string>();
   readonly tokens = new Map<string, string>();
+  /** Threads whose next push is rejected: a commit message saying "[push fails]". */
+  readonly rejecting = new Set<string>();
   requireApproval = false;
   /** Every RPC, for tests. */
   onCall?: (call: Call) => void;
@@ -555,9 +557,14 @@ export class FakeHome {
           return { pull: "Fast-forward" };
         }
         const steps = ({ commit: ["commit"], push: ["push"], commit_push: ["commit", "push"], create_pr: ["pr"], commit_push_pr: ["commit", "push", "pr"] } as Record<string, string[]>)[action] ?? [];
+        if (steps.includes("commit") && String(p.message ?? "").includes("[push fails]")) this.rejecting.add(t.id);
         for (const step of steps) {
           this.broadcast("git.progress", { threadId: t.id, step, status: "running", detail: step === "push" ? "pre-push hook…" : step === "pr" ? `${t.model} 在写说明…` : undefined });
           await this.ms(700);
+          if (step !== "commit" && this.rejecting.delete(t.id)) {
+            this.broadcast("git.progress", { threadId: t.id, step: "push", status: "failed", detail: "! [rejected] (fetch first)" });
+            throw err("conflict", "! [rejected] pansy/sessions-cost -> pansy/sessions-cost (fetch first)");
+          }
           this.broadcast("git.progress", { threadId: t.id, step, status: "done", detail: step === "push" ? "pre-push 通过" : undefined });
         }
         const out: { commit?: string; pr?: { number: number; url: string } } = {};

@@ -161,6 +161,24 @@ test("commits and pushes from the Git sheet, step by step", async () => {
   expect(called(app, "git.run", (p) => p.action === "commit_push" && (p.files as string[]).length === 3)).toBe(true);
 });
 
+test("a push that fails after its commit is retried alone", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_cost");
+  await app.waitFor("id:open-git >> nth=0");
+  await app.press("id:open-git >> nth=0");
+  await app.waitFor("id:git-commit-push");
+  await app.press("id:git-commit-push");
+  await app.waitFor("id:commit-message");
+  await app.type("id:commit-message", "Sessions: spend by folder [push fails]");
+  await app.press("id:commit-run");
+  await app.waitFor("id:step-push-failed", { timeout: 10_000 });
+  expect(app.shows("id:step-commit-done")).toBe(true);
+  await app.press("text:Retry");
+  await app.waitFor("id:step-push-done", { timeout: 10_000 });
+  expect(app.shows("id:step-commit-done")).toBe(true);
+  expect(calls(app).filter((c) => c.method === "git.run").map((c) => c.params.action)).toEqual(["commit_push", "push"]);
+});
+
 test("the diff shows a scope, and held lines go into the composer as a comment", async () => {
   const app = await launch();
   await app.press("id:thread-t_cost");

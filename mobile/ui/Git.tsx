@@ -174,9 +174,17 @@ export function CommitSheet(props: { open: boolean; onClose: () => void; machine
     }
   };
 
-  const run = async () => {
-    const a = action();
-    steps.set(stepsOf(a).map((step) => ({ step, status: "waiting" })));
+  // the steps done stay done: a push that failed after its commit pushes
+  // again (create_pr pushes too), a failed commit goes back to the form
+  const retry = () => {
+    const committed = steps()?.some((s) => s.step === "commit" && s.status === "done");
+    if (!committed) return steps.set(null);
+    void run(pr() ? "create_pr" : "push");
+  };
+
+  const run = async (rest?: GitAction) => {
+    const a = rest ?? action();
+    steps.set(rest ? steps()!.map((s) => (s.status === "done" ? s : { step: s.step, status: "waiting" })) : stepsOf(a).map((step) => ({ step, status: "waiting" })));
     failed.set(null);
     try {
       const r = await conn(props.machine)!.call<{ commit?: string; pr?: { number: number; url: string } }>("git.run", {
@@ -186,7 +194,7 @@ export function CommitSheet(props: { open: boolean; onClose: () => void; machine
         message: message().trim() || undefined,
         pr: pr() ? { title: prTitle().trim() || undefined, base: props.status?.defaultBranch } : undefined,
       });
-      result.set(r);
+      result.set({ ...result(), ...r });
       steps.set(steps()!.map((s) => (s.status === "failed" ? s : { ...s, status: "done" })));
       Haptics.notification("success");
     } catch (e) {
@@ -303,7 +311,7 @@ export function CommitSheet(props: { open: boolean; onClose: () => void; machine
             </Each>
           </Group>
           <If when={failed()}>
-            <Note tone="danger" text={failed() ?? ""} action={{ label: tr("Retry"), onPress: () => steps.set(null) }} />
+            <Note tone="danger" text={failed() ?? ""} action={{ label: tr("Retry"), onPress: retry }} />
           </If>
           <If when={result()?.pr}>
             <Btn tone="outline" icon="external-link" label={tr("Open PR #%d in the browser", result()?.pr?.number ?? 0)} onPress={() => void openUrl(result()!.pr!.url).catch(() => {})} testID="commit-open-pr" />
