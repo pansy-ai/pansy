@@ -160,7 +160,7 @@ pub(crate) fn pair(words: &[&str]) -> Result<()> {
     let auth = Auth::load()?;
     let (secret, expires) =
         auth.create_pairing(scopes.as_deref(), pansy_remote::auth::PAIRING_TTL)?;
-    let hosts = pansy_remote::server::pair_hosts(s.port);
+    let hosts = pansy_remote::server::pair_hosts(s.port, s.lan);
     println!(
         "Open on the phone (valid until {}):",
         expires.with_timezone(&chrono::Local).format("%H:%M")

@@ -3065,6 +3065,7 @@ dependencies = [
  "p256",
  "pansy-agents",
  "pansy-core",
+ "pansy-plugins",
  "reqwest",
  "serde",
  "serde_json",

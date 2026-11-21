@@ -201,17 +201,17 @@ async fn descriptor(State(app): State<Arc<App>>, headers: HeaderMap) -> Response
         "version": env!("CARGO_PKG_VERSION"),
         "protocol": 1,
         "capabilities": caps,
-        "routes": routes(settings.port, &host),
+        "routes": routes(settings.port, settings.lan, &host),
     }))
     .into_response()
 }
 
 /// This computer's addresses on its networks, for the phone to try in
 /// order: private networks, then tailnets.
-fn routes(port: u16, asked: &str) -> Vec<Value> {
+fn routes(port: u16, lan: bool, asked: &str) -> Vec<Value> {
     let mut out = Vec::new();
     let mut seen = HashSet::new();
-    for ip in local_addresses() {
+    for ip in local_addresses().into_iter().filter(|_| lan) {
         let kind = match ip {
             IpAddr::V4(v4) if v4.octets()[0] == 100 && (64..128).contains(&v4.octets()[1]) => {
                 "tailnet"
@@ -239,10 +239,11 @@ fn routes(port: u16, asked: &str) -> Vec<Value> {
 }
 
 /// `address:port` of this computer on its private networks and tailnets:
-/// what a pairing link names.
-pub fn pair_hosts(port: u16) -> Vec<String> {
+/// what a pairing link names. None while it answers this computer alone.
+pub fn pair_hosts(port: u16, lan: bool) -> Vec<String> {
     local_addresses()
         .into_iter()
+        .filter(|_| lan)
         .filter(|ip| near(*ip) && !ip.is_loopback())
         .map(|ip| format!("{ip}:{port}"))
         .collect()
@@ -738,8 +739,9 @@ async fn call(app: &App, p: &Principal, method: &str, params: Value) -> Result<V
             json!({"thread": hub.update(&id, u).await?})
         }
         "thread.delete" => {
-            hub.delete(&thread_param(&params)?).await?;
-            json!({})
+            let force = params["force"].as_bool().unwrap_or(false);
+            let kept = hub.delete(&thread_param(&params)?, force).await?;
+            json!({"worktreeKept": kept})
         }
         "models.list" => tokio::task::spawn_blocking(models).await??,
         "projects.list" => {
@@ -812,8 +814,12 @@ async fn call(app: &App, p: &Principal, method: &str, params: Value) -> Result<V
             let (secret, expires) =
                 app.auth
                     .create_pairing_by(p, scopes.as_deref(), auth::PAIRING_TTL)?;
-            let port = config::load().unwrap_or_default().port;
-            let urls: Vec<String> = pair_hosts(port)
+            let settings = config::load().unwrap_or_default();
+            let mut hosts = pair_hosts(settings.port, settings.lan);
+            if hosts.is_empty() {
+                hosts.push(format!("127.0.0.1:{}", settings.port));
+            }
+            let urls: Vec<String> = hosts
                 .iter()
                 .map(|h| format!("http://{h}/#pair={secret}"))
                 .collect();
@@ -892,6 +898,16 @@ async fn generate(t: &crate::store::Thread, kind: git::Writing) -> Result<(Strin
     .await
 }
 
+/// Whether nothing in `dir` waits to be committed.
+async fn commit_clean(dir: &Path) -> bool {
+    let d = dir.to_path_buf();
+    tokio::task::spawn_blocking(move || git::status(&d))
+        .await
+        .ok()
+        .and_then(Result::ok)
+        .is_some_and(|s| s.files.is_empty())
+}
+
 async fn run_git(app: &App, params: &Value) -> Result<Value> {
     let hub = &app.hub;
     let id = thread_param(params)?;
@@ -912,6 +928,14 @@ async fn run_git(app: &App, params: &Value) -> Result<Value> {
             .collect()
     });
     let mut result = json!({});
+    // Nothing to commit: commit alone says so, commit and push pushes.
+    let commit = commit && !commit_clean(&dir).await;
+    if !commit && !push {
+        return Err(anyhow::Error::new(crate::hub::Coded(
+            "conflict",
+            "nothing to commit".into(),
+        )));
+    }
     if commit {
         hub.git_progress(&id, "commit", "running", String::new());
         let message = match params["message"].as_str().filter(|m| !m.trim().is_empty()) {

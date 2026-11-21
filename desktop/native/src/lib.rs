@@ -1404,7 +1404,7 @@ impl Remote {
             Ok(to_json(&json!({
                 "machine": auth.machine_id(),
                 "name": pansy_remote::config::machine_name(&settings),
-                "hosts": pansy_remote::server::pair_hosts(settings.port),
+                "hosts": pansy_remote::server::pair_hosts(settings.port, settings.lan),
                 "requireApproval": auth.require_approval(),
                 "devices": devices,
                 "service": {"installed": service.installed, "answering": service.answering},
@@ -1456,7 +1456,7 @@ impl Remote {
             });
             let (secret, expires) =
                 auth.create_pairing(scopes.as_deref(), pansy_remote::auth::PAIRING_TTL)?;
-            let mut urls: Vec<String> = pansy_remote::server::pair_hosts(settings.port)
+            let mut urls: Vec<String> = pansy_remote::server::pair_hosts(settings.port, settings.lan)
                 .iter()
                 .map(|h| format!("http://{h}/#pair={secret}"))
                 .collect();

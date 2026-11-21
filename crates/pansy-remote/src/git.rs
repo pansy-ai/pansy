@@ -334,6 +334,17 @@ pub fn remove_worktree(repo: &Path, path: &Path, branch: &str) -> Result<()> {
     Ok(())
 }
 
+/// Deletes a thread's checkpoints.
+pub fn drop_checkpoints(repo: &Path, thread: &str) {
+    let prefix = format!("refs/pansy/checkpoints/{thread}/");
+    let Ok(refs) = run(repo, ["for-each-ref", "--format=%(refname)", &prefix]) else {
+        return;
+    };
+    for r in refs.lines() {
+        let _ = run(repo, ["update-ref", "-d", r]);
+    }
+}
+
 /// A branch name of a model's words: lowercase, letters, digits and
 /// hyphens, at most 48 characters.
 pub fn slug(text: &str) -> String {
@@ -1079,6 +1090,8 @@ mod tests {
         assert!(st.files.is_empty());
         remove_worktree(dir.path(), &w.path, &named).unwrap();
         assert!(!w.path.exists());
+        drop_checkpoints(dir.path(), "t_1");
+        assert!(!exists(dir.path(), &checkpoint_ref("t_1", 0)));
     }
 
     #[test]

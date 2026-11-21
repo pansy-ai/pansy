@@ -157,6 +157,36 @@ struct Queued {
     effort: Option<String>,
 }
 
+/// The model a new thread starts on when none is asked for: the one the
+/// project file (said yes to) or the agent's connection gives, else the
+/// first pansy has.
+fn default_model(agent: &str, folder: &Path) -> Result<String> {
+    let a = pansy_agents::run::by_name(agent)
+        .ok_or_else(|| coded("bad_request", format!("no agent {agent}")))?;
+    let file = pansy_agents::run::find(folder)
+        .and_then(|p| pansy_agents::run::read(&p).ok())
+        .filter(|f| f.trusted);
+    if let Ok(l) = pansy_agents::run::launch(a, folder, file.as_ref(), Default::default(), &[]) {
+        return Ok(l.model);
+    }
+    let config = pansy_core::config::Config::load()?;
+    config
+        .providers
+        .iter()
+        .filter(|p| p.enabled)
+        .find_map(|p| {
+            p.visible_models()
+                .next()
+                .map(|m| format!("{}/{}", p.id, m.id))
+        })
+        .ok_or_else(|| {
+            coded(
+                "bad_request",
+                "pansy has no model yet: add a provider on the computer",
+            )
+        })
+}
+
 /// An agent being driven.
 enum Driver {
     Codex(Codex),
@@ -465,6 +495,10 @@ impl Hub {
                 format!("no folder {}", new.folder.display()),
             ));
         }
+        let model = match new.model.clone() {
+            Some(m) => m,
+            None => default_model(&new.agent, &new.folder)?,
+        };
         let folder = new.folder.to_string_lossy().into_owned();
         let (workdir, branch, worktree, base) =
             crate::workspace::prepare(&new.folder, &new.workspace, new.base.as_deref())?;
@@ -479,7 +513,7 @@ impl Hub {
             branch,
             worktree,
             base,
-            model: new.model.clone().unwrap_or_default(),
+            model,
             effort: new.effort.clone(),
             mode: new.mode,
             session: None,
@@ -764,14 +798,41 @@ impl Hub {
     }
 
     /// Forgets pansy's record of a thread; the agent's session stays.
-    pub async fn delete(&self, id: &str) -> Result<()> {
+    /// Forgets a thread (never the agent's session files). Its worktree,
+    /// one pansy made, goes too when nothing in it is uncommitted, or with
+    /// `force`; its branch stays while it has commits not merged. Whether
+    /// the worktree was kept.
+    pub async fn delete(&self, id: &str, force: bool) -> Result<bool> {
         self.end(id).await;
-        if self.threads().remove(id).is_none() {
+        let Some(t) = self.threads().remove(id) else {
             return Err(coded("not_found", format!("no thread {id}")));
-        }
+        };
         self.save();
         self.tell(Push::Removed(id.to_owned()));
-        Ok(())
+        if !t.worktree {
+            return Ok(false);
+        }
+        let kept = tokio::task::spawn_blocking(move || {
+            let dir = PathBuf::from(&t.workdir);
+            if !dir.is_dir() {
+                return false;
+            }
+            let dirty = crate::git::status(&dir).map_or(true, |s| !s.files.is_empty());
+            if dirty && !force {
+                return true;
+            }
+            let repo = PathBuf::from(&t.folder);
+            let branch = t.branch.clone().unwrap_or_default();
+            if let Err(e) = crate::git::remove_worktree(&repo, &dir, &branch) {
+                tracing::warn!("removing the worktree of {}: {e:#}", t.id);
+                return true;
+            }
+            crate::git::drop_checkpoints(&repo, &t.id);
+            false
+        })
+        .await
+        .unwrap_or(true);
+        Ok(kept)
     }
 
     pub fn thread(&self, id: &str) -> Result<Thread> {
@@ -913,11 +974,12 @@ impl Hub {
                     status_changed = true;
                 }
                 Event::Resolved { request } => {
-                    run.state
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .waiting
-                        .retain(|r| r != request);
+                    let mut s = run.state.lock().unwrap_or_else(|e| e.into_inner());
+                    if !s.waiting.contains(request) {
+                        // Answered here, and said so already.
+                        continue;
+                    }
+                    s.waiting.retain(|r| r != request);
                     status_changed = true;
                 }
                 Event::TurnFinished { status, error, .. } => {

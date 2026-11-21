@@ -100,7 +100,7 @@ payload `{"jti","htm","htu","iat","ath"?}`。`htu` 不带 query；`iat` 前后 6
 | `runtime-request.respond` | orchestration:operate | `{threadId, requestId, decision: "accept"\|"acceptForSession"\|"decline"\|"cancel", feedback?}` | `{}` |
 | `run.interrupt` | orchestration:operate | `{threadId}` | `{}` |
 | `thread.update` | orchestration:operate | `{threadId, title?, model?, effort?, mode?, pinned?, archived?, snoozedUntil?}` | `{thread: ThreadSummary}` |
-| `thread.delete` | orchestration:operate | `{threadId}` | `{}`（只删 pansy 的线程记录，不碰会话文件） |
+| `thread.delete` | orchestration:operate | `{threadId, force?}` | `{worktreeKept}`（只删 pansy 的线程记录，不碰会话文件；pansy 建的工作树没有未提交的改动才一起删，`force` 照删；分支有未合并的提交就留着） |
 | `models.list` | orchestration:read | `{agent?}` | `{groups: [Group], providers: [{id, name, models: [Model]}]}` |
 | `projects.list` | orchestration:read | `{}` | `{projects: [{folder, name, git: bool, branch?}]}` |
 | `git.status` | orchestration:read | `{threadId}` | `GitStatus` |
