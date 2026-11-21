@@ -16,6 +16,8 @@ agent use every provider's models, with a desktop window on NSH 0.6.1. Read
   stay out of the core's builds: `App.tsx` and `ui/` (the window in TSX),
   `native/` (`pansy/native`, what the TSX imports), `runner/` (the program:
   the window, or the command line when given arguments).
+- `mobile/` — the phone app in NSH TSX alone (`docs/plans/phone-ui.md`),
+  with a mock home pansy on Bun to run it against (`mobile/README.md`).
 
 ## Invariants
 
@@ -87,6 +89,7 @@ agent use every provider's models, with a desktop window on NSH 0.6.1. Read
 ```sh
 cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
 cd desktop && cargo fmt --all && cargo clippy --workspace && nsh check && ./test.sh
+cd mobile && nsh check && nsh test && nsh package --target web -o dist/web App.tsx
 ```
 
 NSH 0.6.1 exactly (`nsh --version`): the crates are pinned to `=0.6.1`.
