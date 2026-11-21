@@ -129,7 +129,26 @@ fn window() -> ExitCode {
 /// this window forward.
 #[cfg(target_os = "macos")]
 fn window() -> ExitCode {
+    thin_text();
     run_window!(nsh_platform_macos,)
+}
+
+/// Text without macOS's font smoothing, which thickens every stroke: the
+/// thinner grayscale text T3 Code and Chromium's `-webkit-font-smoothing:
+/// antialiased` draw. Registered for this run only, before anything is
+/// drawn, so nothing is written to the user's preferences and an
+/// `AppleFontSmoothing` the user set themselves still wins.
+#[cfg(target_os = "macos")]
+fn thin_text() {
+    use objc2::runtime::AnyObject;
+    use objc2_foundation::{NSDictionary, NSNumber, NSString, NSUserDefaults};
+
+    let key = NSString::from_str("AppleFontSmoothing");
+    let off = NSNumber::new_i32(0);
+    let defaults = NSDictionary::<NSString, AnyObject>::from_slices(&[&*key], &[&*off]);
+    // SAFETY: a dictionary of string keys and property-list values, the
+    // type `registerDefaults:` takes.
+    unsafe { NSUserDefaults::standardUserDefaults().registerDefaults(&defaults) };
 }
 
 #[cfg(not(any(target_os = "linux", windows, target_os = "macos")))]

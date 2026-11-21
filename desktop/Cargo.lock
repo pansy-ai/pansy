@@ -2869,6 +2869,8 @@ dependencies = [
  "nsh-platform-linux",
  "nsh-platform-macos",
  "nsh-platform-windows",
+ "objc2",
+ "objc2-foundation",
  "pansy-cli",
  "pansy-desktop-native",
  "serde_json",
