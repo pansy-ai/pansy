@@ -2,7 +2,7 @@
 // answers flat in Markdown, its work folded into rows, subagents, the
 // approval card docked over the composer, the status capsule; the header's
 // Git, changes and more. History and live events come from state/thread.ts.
-import { cleanup, Clipboard, effect, Scroll, signal, Text, token, View, type JSX, type ScrollRef } from "nsh";
+import { cleanup, Clipboard, createAnimatedValue, effect, Scroll, signal, Text, token, View, type JSX, type ScrollRef } from "nsh";
 import { Menu, MenuItem, NavPage } from "nsh/base";
 import { Haptics } from "nsh/mobile";
 import type { Decision, GitStatus, Mode, Question, ThreadSummary } from "../net/types";
@@ -19,6 +19,7 @@ import { ModeSheet } from "./ModeSheet";
 import { chats } from "./nav";
 import { AddDel, BLUR, Btn, GLASS, GlassButton, Icon, Loading, Note, SHADOW, Spinner, toast, type Color, type IconName } from "./parts";
 import { clock, now, tick, timer } from "./time";
+import { actionOf, duration, firstLine, leadAction, liveLabel, rowsOf, summary as workSummary, type Action, type Row, type WorkItem } from "./work";
 
 const project = (t: ThreadSummary | undefined | null) => (t ? (t.folder.split(/[\\/]/).filter(Boolean).pop() ?? t.folder) : "");
 
@@ -28,63 +29,94 @@ function toolLook(tool: string, title: string, status: string): { icon: IconName
   if (status === "failed") return { icon: "circle-x", color: "danger" };
   if (/\brm\b|delete|remove|删/.test(k)) return { icon: "trash-2", color: "rose" };
   if (/quota|额度/.test(k)) return { icon: "circle-alert", color: "warning" };
-  if (/command|exec|bash|shell|terminal|跑|运行/.test(k)) return { icon: "terminal", color: "fg-2" };
-  if (/read|view|读/.test(k)) return { icon: "file-text", color: "fg-2" };
-  if (/edit|write|patch|change|改/.test(k)) return { icon: "pencil", color: "fg-2" };
-  if (/search|grep|find|glob|搜/.test(k)) return { icon: "search", color: "fg-2" };
-  if (/web|fetch|http|网/.test(k)) return { icon: "globe", color: "fg-2" };
-  return { icon: "wrench", color: "fg-2" };
+  return { icon: ACTION_ICONS[actionOf(tool)], color: "fg-2" };
+}
+
+const ACTION_ICONS: Record<Action, IconName> = { command: "terminal", edit: "pencil", read: "eye", "code-search": "search", search: "globe", other: "wrench" };
+
+/** `#rrggbb` or `#rrggbbaa` at `alpha`. */
+const rgba = (hex: string, alpha: number) => {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+/** T3's shimmer over a line of work going on: a band sweeping across in 1350 ms, then a pause of 1450. */
+function Shimmer() {
+  const x = createAnimatedValue(-72);
+  void x.keyframes(
+    [
+      { offset: 0, value: -72 },
+      { offset: 0.48, value: 420 },
+      { offset: 1, value: 420 },
+    ],
+    { duration: 2800, iterations: "infinite", easing: "linear" },
+  );
+  cleanup(() => void x.stop());
+  const glow = (alpha: number) => rgba(token("screen"), alpha);
+  return <View class="absolute bottom-0 top-0 w-[72px]" style={{ transform: [{ translateX: x }], backgroundImage: `linear-gradient(to right, ${glow(0)}, ${glow(0.85)}, ${glow(0)})`, pointerEvents: "none" }} />;
 }
 
 /** A row of the work log: 28pt, its icon, a line in 14pt, a chevron; open, what went in and came out. */
-function WorkRow(props: { icon: IconName; color: Color; text: string; live?: boolean; detail?: string; testID?: string; tall?: number }) {
-  const open = signal(false);
+function WorkRow(props: { icon: IconName; color: Color; text: string; live?: boolean; detail?: string; exit?: number; testID?: string; tall?: number; onPress?: () => void; open?: boolean; children?: JSX.Element }) {
+  const own = signal(false);
+  const open = () => props.open ?? own();
+  const opens = () => !!props.detail || !!props.onPress;
   return (
     <View>
       <View
         role="button"
         testID={props.testID}
         onPress={() => {
-          if (!props.detail) return;
-          open.set(!open());
+          if (!opens()) return;
+          if (props.onPress) props.onPress();
+          else own.set(!own());
           Haptics.selection();
         }}
         class="min-h-7 flex-row items-center gap-1"
       >
         <View class="h-6 w-6 items-center justify-center">
-          <If when={props.live} else={<Icon name={props.icon} color={props.color} size={15} />}>
-            <Spinner size={14} />
+          <If when={props.live} else={<Icon name={props.icon} color={props.color} size={14} />}>
+            <Spinner size={13} />
           </If>
         </View>
-        <Text class={`min-w-0 flex-1 text-[14px] leading-[19px] line-clamp-1 text-${props.color} ${props.live ? "animate-pulse" : ""}`}>{props.text}</Text>
-        <If when={props.detail}>
+        <View class="min-w-0 flex-1 overflow-hidden">
+          <Text class={`text-[14px] leading-[19px] line-clamp-1 text-${props.color}`}>{props.text}</Text>
+          <If when={props.live}>
+            <Shimmer />
+          </If>
+        </View>
+        <If when={opens()}>
           <View class="transition-transform duration-180" style={{ transform: [{ rotate: open() ? "90deg" : "0deg" }] }}>
             <Icon name="chevron-right" color="fg-3" size={11} />
           </View>
         </If>
       </View>
-      <If when={open()}>
+      <If when={open() && props.detail}>
         <Scroll class="ml-7 rounded-lg bg-grouped" style={{ maxHeight: props.tall ?? 240 }}>
-          <Text class="px-[10px] py-2 font-mono text-[12px] leading-[17px] text-fg-2" style={{ userSelect: "text" }}>
+          <Text class="px-[10px] pt-2 font-mono text-[12px] leading-[17px] text-fg-2" style={{ userSelect: "text" }}>
             {props.detail ?? ""}
           </Text>
+          <Text class={`px-[10px] pb-2 font-mono text-[12px] leading-[17px] ${props.exit ? "text-danger" : "text-fg-3"}`}>{props.exit !== undefined ? `exit ${props.exit}` : ""}</Text>
         </Scroll>
       </If>
+      {props.children}
     </View>
   );
 }
 
 function ToolItem(props: { item: Extract<Item, { kind: "tool" }> }) {
   const look = () => toolLook(props.item.tool, props.item.title, props.item.status);
+  const running = () => props.item.status === "running";
   const detail = () => [props.item.input, props.item.output].filter(Boolean).join("\n\n") || undefined;
   return (
     <WorkRow
       testID={`tool-${props.item.id}`}
       icon={look().icon}
       color={props.item.status === "declined" ? "fg-3" : look().color}
-      text={props.item.status === "declined" ? tr("%s (declined)", props.item.title) : props.item.title}
-      live={props.item.status === "running"}
+      text={props.item.status === "declined" ? tr("%s (declined)", props.item.title) : running() ? liveLabel(props.item) : props.item.title}
+      live={running()}
       detail={detail()}
+      exit={props.item.exit}
     />
   );
 }
@@ -101,54 +133,44 @@ function SubagentItem(props: { item: Extract<Item, { kind: "subagent" }> }) {
   );
 }
 
-type WorkItem = Extract<Item, { kind: "tool" | "reasoning" | "subagent" }>;
-
-function WorkItemView(props: { item: WorkItem }) {
+function WorkItemView(props: { item: WorkItem; live?: boolean }) {
   const it = props.item;
   if (it.kind === "tool") return <ToolItem item={it} />;
-  if (it.kind === "subagent") return <SubagentItem item={it} />;
-  return <WorkRow icon="brain" color="fg-2" text={it.seconds ? tr("Thought for %d s", it.seconds) : tr("Thought")} detail={it.text} tall={384} />;
+  return <WorkRow icon="brain" color="fg-2" text={props.live ? liveLabel(it) : firstLine(it.text) || tr("Thought")} live={props.live} detail={it.text || undefined} tall={384} />;
 }
 
-/** Work rows in a run; four or more finished tools fold into "Used N tools". */
-function Work(props: { items: WorkItem[] }) {
+/** A run of work: one call as its row; more under one line saying what they did, the running one's in the present. */
+function Work(props: { items: WorkItem[]; live: boolean }) {
   const open = signal(false);
-  const fold = () => props.items.length >= 4 && props.items.every((i) => i.kind !== "subagent" && (i.kind !== "tool" || i.status !== "running"));
+  const latest = () => props.items[props.items.length - 1];
+  const failed = () => props.items.some((i) => i.kind === "tool" && i.status === "failed");
+  const icon = (): IconName => {
+    const lead = leadAction(props.items);
+    return lead === "thought" ? "brain" : ACTION_ICONS[lead];
+  };
   return (
-    <View class="gap-px">
-      <If
-        when={fold() && !open()}
-        else={
-          <Each of={props.items} key={(i) => `${i.id}:${JSON.stringify(i)}`}>
-            {(i) => <WorkItemView item={i()} />}
-          </Each>
-        }
+    <If when={props.items.length > 1} else={<WorkItemView item={props.items[0]} live={props.live && latest().kind === "reasoning"} />}>
+      <WorkRow
+        testID="work-fold"
+        icon={failed() ? "circle-x" : icon()}
+        color={failed() ? "danger" : "fg-2"}
+        text={props.live && !open() ? liveLabel(latest()) : workSummary(props.items)}
+        live={props.live && !open()}
+        open={open()}
+        onPress={() => open.set(!open())}
       >
-        <View role="button" testID="work-fold" onPress={() => open.set(true)} class="min-h-7 flex-row items-center gap-1">
-          <View class="h-6 w-6 items-center justify-center">
-            <Icon name="layers" color="fg-2" size={15} />
-          </View>
-          <Text class="flex-1 text-[14px] text-fg-2">{tr("Used %d tools", props.items.length)}</Text>
-          <Icon name="chevron-right" color="fg-3" size={11} />
-        </View>
-      </If>
-    </View>
+        <If when={open()}>
+          <Scroll style={{ maxHeight: 256 }}>
+            <View class="gap-px">
+              <Each of={props.items} key={(i) => `${i.id}:${JSON.stringify(i)}`}>
+                {(i) => <WorkItemView item={i()} live={props.live && i() === latest() && i().kind === "reasoning"} />}
+              </Each>
+            </View>
+          </Scroll>
+        </If>
+      </WorkRow>
+    </If>
   );
-}
-
-type Block = { kind: "item"; item: Item } | { kind: "work"; id: string; items: WorkItem[] };
-
-/** The feed's items with each run of work gathered. */
-function blocksOf(items: Item[]): Block[] {
-  const out: Block[] = [];
-  for (const item of items) {
-    if (item.kind === "tool" || item.kind === "reasoning" || item.kind === "subagent") {
-      const last = out[out.length - 1];
-      if (last?.kind === "work") last.items.push(item);
-      else out.push({ kind: "work", id: `w${item.id}`, items: [item] });
-    } else out.push({ kind: "item", item });
-  }
-  return out;
 }
 
 async function copy(text: string) {
@@ -197,21 +219,42 @@ function Answer(props: { item: Extract<Item, { kind: "assistant" }> }) {
   );
 }
 
-/** A block of the feed; its kind stays for its key, its content changes (props are read where they show). */
-function FeedBlock(props: { block: Block }) {
-  if (props.block.kind === "work") return <Work items={(props.block as Extract<Block, { kind: "work" }>).items} />;
-  const item = <K extends Item["kind"]>() => (props.block as Extract<Block, { kind: "item" }>).item as Extract<Item, { kind: K }>;
+/** A row of the feed; its kind stays for its key, its content changes (props are read where they show). */
+function FeedRow(props: { row: Row; startedAt: number | null; onFold: (id: string) => void }) {
+  const row = <K extends Row["kind"]>() => props.row as Extract<Row, { kind: K }>;
+  switch (props.row.kind) {
+    case "work":
+      return <Work items={row<"work">().items} live={row<"work">().live} />;
+    case "fold":
+      return (
+        <WorkRow
+          testID="turn-fold"
+          icon="clock"
+          color="fg-2"
+          text={row<"fold">().label}
+          open={row<"fold">().open}
+          onPress={row<"fold">().foldable ? () => props.onFold(row<"fold">().id) : undefined}
+        />
+      );
+    case "working":
+      return <WorkRow testID="turn-working" icon="loader-circle" color="fg-2" text={props.startedAt ? tr("Working for %s", duration(now() - props.startedAt)) : tr("Working")} live />;
+    case "thinking":
+      return <WorkRow testID="turn-thinking" icon="brain" color="fg-2" text={tr("Thinking")} live />;
+  }
+  const item = <K extends Item["kind"]>() => row<"item">().item as Extract<Item, { kind: K }>;
   const it = item();
   switch (it.kind) {
     case "user":
       return <UserBubble item={item<"user">()} />;
     case "assistant":
       return <Answer item={item<"assistant">()} />;
+    case "subagent":
+      return <SubagentItem item={item<"subagent">()} />;
     case "notice":
       return (
         <View class="flex-row items-center gap-2 px-1">
-          <Icon name={it.tone === "danger" ? "circle-alert" : "square"} color={it.tone === "danger" ? "danger" : "fg-3"} size={14} />
-          <Text class={`flex-1 text-[14px] ${it.tone === "danger" ? "text-danger" : "text-fg-3"}`}>{it.text === "stopped" ? tr("Stopped") : it.text}</Text>
+          <Icon name="circle-alert" color="danger" size={14} />
+          <Text class="flex-1 text-[14px] text-danger">{it.text}</Text>
         </View>
       );
     case "compact":
@@ -417,6 +460,13 @@ export function ThreadPage(props: { machine: string; thread: string }) {
   const commitWay = signal<Way>("commit_push");
   const commitStatus = signal<GitStatus | null>(null);
   const atBottom = signal(true);
+  // the settled turns opened past their "Worked for" line
+  const opened = signal<ReadonlySet<string>>(new Set());
+  const fold = (id: string) => {
+    const next = new Set(opened());
+    if (!next.delete(id)) next.add(id);
+    opened.set(next);
+  };
   let scroller: ScrollRef | undefined;
   let contentHeight = 0;
 
@@ -578,8 +628,8 @@ export function ThreadPage(props: { machine: string; thread: string }) {
               <If when={t()?.source === "terminal" && !view.items().some((i) => i.kind === "user" && i.id.startsWith("local"))}>
                 <Note tone="warning" icon="terminal" text={tr("Opened in a terminal: what you send first takes the session over")} />
               </If>
-              <Each of={blocksOf(view.items())} key={(b) => (b.kind === "work" ? b.id : b.item.id)}>
-                {(b) => <FeedBlock block={b()} />}
+              <Each of={rowsOf(view.items(), view.running(), opened(), view.approvals().length > 0)} key={(r) => (r.kind === "item" ? r.item.id : r.id)}>
+                {(r) => <FeedRow row={r()} startedAt={view.startedAt()} onFold={fold} />}
               </Each>
             </If>
           </View>

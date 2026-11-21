@@ -363,6 +363,7 @@ fn notification(method: &str, p: &Value) -> Option<Event> {
                     title,
                     status: item["status"].as_str().unwrap_or("completed").to_owned(),
                     output: cut(item["aggregatedOutput"].as_str().unwrap_or_default()),
+                    exit: item["exitCode"].as_i64(),
                 }
             }
         }
@@ -471,7 +472,7 @@ mod tests {
                         for v in [
                             json!({"method": "serverRequest/resolved", "params": {"requestId": 7}}),
                             json!({"method": "item/started", "params": {"item": {"type": "commandExecution", "id": "c1", "command": "ls"}}}),
-                            json!({"method": "item/completed", "params": {"item": {"type": "commandExecution", "id": "c1", "command": "ls", "status": "completed", "aggregatedOutput": "a\nb"}}}),
+                            json!({"method": "item/completed", "params": {"item": {"type": "commandExecution", "id": "c1", "command": "ls", "status": "completed", "aggregatedOutput": "a\nb", "exitCode": 0}}}),
                             json!({"method": "item/agentMessage/delta", "params": {"itemId": "m1", "delta": "do"}}),
                         ] {
                             reply(&mut their_write, v).await;
@@ -550,7 +551,7 @@ mod tests {
             matches!(events.recv().await, Some(Event::ToolStarted { kind, .. }) if kind == "commandExecution")
         );
         assert!(
-            matches!(events.recv().await, Some(Event::ToolFinished { output, status, .. }) if output == "a\nb" && status == "completed")
+            matches!(events.recv().await, Some(Event::ToolFinished { output, status, exit, .. }) if output == "a\nb" && status == "completed" && exit == Some(0))
         );
         assert_eq!(
             events.recv().await,

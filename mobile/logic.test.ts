@@ -1,6 +1,7 @@
 // The parts of the app that are plain functions: pairing links and
 // addresses, the Markdown blocks, how events fold into a thread's feed, and
-// the list's monograms, times and title as T3 has them, and usage's counts.
+// the list's monograms, times and title as T3 has them, usage's counts, and
+// the work log's lines and folds.
 import { expect, test } from "nsh/test";
 import { normalizeAddress, parsePairUrl } from "./net/pair";
 import { apply, fromHistory, type FeedState } from "./state/thread";
@@ -9,6 +10,8 @@ import { monogram, monogramHue } from "./ui/parts";
 import { connectionTitle } from "./ui/Threads";
 import { since } from "./ui/time";
 import { compact, top } from "./ui/Usage";
+import { duration, program, rowsOf, summary as workSummary, type WorkItem } from "./ui/work";
+import type { Item } from "./state/thread";
 
 test("reads a pairing link's address and secret from #pair=", () => {
   expect(parsePairUrl("http://192.168.1.20:7268/#pair=Zm9vYmFyLWJhego_-x")).toEqual({ base: "http://192.168.1.20:7268", secret: "Zm9vYmFyLWJhego_-x" });
@@ -47,8 +50,11 @@ test("folds a turn's events into the feed", () => {
   s = apply(s, { type: "toolFinished", item: "c1", kind: "commandExecution", title: "ran cargo test", status: "completed", output: "ok" });
   s = apply(s, { type: "turnFinished", turn: "t1", status: "completed" });
   expect(s.running).toBe(false);
-  expect(s.items.map((i) => i.kind)).toEqual(["user", "assistant", "tool"]);
-  expect(s.items[2]).toEqual({ kind: "tool", id: "c1", tool: "commandExecution", title: "ran cargo test", status: "done", output: "ok" });
+  expect(s.items.map((i) => i.kind)).toEqual(["user", "assistant", "tool", "end"]);
+  expect(s.items[2]).toEqual({ kind: "tool", id: "c1", tool: "commandExecution", title: "ran cargo test", status: "done", output: "ok", exit: undefined });
+  // the turn's end keeps how long it took from its start
+  expect(s.items[3]).toMatchObject({ kind: "end", stopped: false });
+  expect(typeof (s.items[3] as { ms?: number }).ms).toBe("number");
 });
 
 test("a question waits like an approval, with its choices", () => {
@@ -92,4 +98,44 @@ test("usage counts are short, and who used most comes first", () => {
   expect(compact(250_000_000)).toBe("250M");
   const t = (input: number, requests = 1) => ({ requests, errors: 0, input, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 });
   expect(top({ a: t(5), b: t(9), c: t(0, 0), d: t(7) }, 2).map(([k]) => k)).toEqual(["b", "d"]);
+});
+
+const tool = (id: string, name: string, title: string, status: "done" | "running" | "failed" = "done"): WorkItem => ({ kind: "tool", id, tool: name, title, status });
+
+test("a run of calls says what it did, as T3's work log", () => {
+  expect(workSummary([tool("a", "commandExecution", "cargo test"), tool("b", "commandExecution", "cargo fmt")])).toBe("Ran 2 commands");
+  // an edit counts files, Codex's several in a call; reads come after commands and edits
+  expect(workSummary([tool("a", "Read", "a.rs"), tool("b", "fileChange", "a.rs, b.rs"), tool("c", "Bash", "ls")])).toBe("Changed 2 files, ran 1 command, and performed 1 other action");
+  expect(workSummary([tool("a", "Grep", "fn main"), tool("b", "WebSearch", "nsh")])).toBe("Searched code once and searched the web once");
+  expect(workSummary([{ kind: "reasoning", id: "r", text: "" }, { kind: "reasoning", id: "s", text: "" }])).toBe("Thought (×2)");
+});
+
+test("a command's program, and T3's durations", () => {
+  expect(program("bash -lc 'RUST_LOG=1 cargo test -p x'")).toBe("cargo");
+  expect(program("sudo /usr/bin/pacman -S git")).toBe("pacman");
+  expect(duration(820)).toBe("820ms");
+  expect(duration(4_240)).toBe("4.2s");
+  expect(duration(80_000)).toBe("1m 20s");
+  expect(duration(3_723_000)).toBe("1h 2m 3s");
+});
+
+test("a settled turn folds behind how long it worked but for its answer; the one running doesn't", () => {
+  const items: Item[] = [
+    { kind: "user", id: "u1", text: "fix it", at: "2026-05-02T12:00:00Z" },
+    tool("c1", "commandExecution", "cargo test"),
+    { kind: "assistant", id: "m1", text: "Looking.", at: "2026-05-02T12:00:10Z" },
+    tool("c2", "fileChange", "a.rs"),
+    { kind: "assistant", id: "m2", text: "Fixed.", at: "2026-05-02T12:01:20Z" },
+    { kind: "user", id: "u2", text: "and the docs" },
+    tool("c3", "commandExecution", "rg docs", "running"),
+  ];
+  const rows = rowsOf(items, true, new Set());
+  expect(rows.map((r) => (r.kind === "item" ? r.item.id : r.kind))).toEqual(["u1", "fold", "m2", "u2", "working", "work"]);
+  expect(rows[1]).toMatchObject({ kind: "fold", label: "Worked for 1m 20s", open: false });
+  expect(rows[5]).toMatchObject({ kind: "work", live: true });
+  // opened, all of it in order; settled, the last turn folds too, and says it was stopped
+  const open = rowsOf(items, true, new Set(["fu1"]));
+  expect(open.map((r) => (r.kind === "item" ? r.item.id : r.kind)).slice(0, 6)).toEqual(["u1", "fold", "work", "m1", "work", "m2"]);
+  const stopped = rowsOf([...items.slice(0, 6), { ...(items[6] as WorkItem), status: "done" } as Item, { kind: "end", id: "e", ms: 4000, stopped: true }], false, new Set());
+  expect(stopped[stopped.length - 1]).toMatchObject({ kind: "fold", label: "You stopped after 4s" });
 });

@@ -72,7 +72,7 @@ export type Event =
   | { type: "message"; item: string; text: string }
   | { type: "user"; text: string }
   | { type: "toolStarted"; item: string; kind: string; title: string }
-  | { type: "toolFinished"; item: string; kind: string; title: string; status: string; output?: string }
+  | { type: "toolFinished"; item: string; kind: string; title: string; status: string; output?: string; exit?: number }
   | { type: "approval"; request: string; kind: string; title: string; detail: string; reason?: string }
   | { type: "question"; request: string; questions: Question[] }
   | { type: "resolved"; request: string }

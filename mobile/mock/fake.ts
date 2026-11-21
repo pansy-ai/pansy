@@ -227,7 +227,7 @@ export class FakeHome {
     this.devices.push({ id: "d_ipad", name: "Safari · iPad", platform: "web", scopes: ["orchestration:read"], approval: "approved", createdAt: ago(86_400 * 10), lastSeen: ago(86_400 * 3) });
     // the waiting approval of t_cost, and the turn t_sub is in
     this.emit("t_cost", { type: "turnStarted", turn: "turn_c2" });
-    this.emit("t_cost", { type: "toolStarted", item: "i_test", kind: "commandExecution", title: "要运行 cargo test -p pansy-core" });
+    this.emit("t_cost", { type: "toolStarted", item: "i_test", kind: "commandExecution", title: "cargo test -p pansy-core usage::" });
     this.emit("t_cost", { type: "approval", request: "r_test", kind: "commandExecution", title: "cargo test", detail: "cargo test -p pansy-core usage::", reason: "确认按项目汇总的改动没有改坏用量的测试。" });
     this.runs.set("t_cost", { cancel: false, approval: { request: "r_test", resolve: (d) => void this.afterTest("t_cost", d) } });
     this.emit("t_sub", { type: "turnStarted", turn: "turn_s3" });
@@ -299,7 +299,7 @@ export class FakeHome {
     this.emit(threadId, { type: "toolFinished", item: sub, kind: "subagent", title: "Explore · codex · deepseek/v4", status: "completed" });
     this.change(threadId, { diff: { add: 48, del: 6 } });
     const cmd = `i_${rand()}`;
-    this.emit(threadId, { type: "toolStarted", item: cmd, kind: "commandExecution", title: "要运行 cargo test -p pansy-core" });
+    this.emit(threadId, { type: "toolStarted", item: cmd, kind: "commandExecution", title: "cargo test -p pansy-core usage::" });
     const request = `r_${rand()}`;
     const decision = new Promise<Decision>((resolve) => (run.approval = { request, resolve }));
     this.emit(threadId, { type: "approval", request, kind: "commandExecution", title: "cargo test", detail: "cargo test -p pansy-core usage::", reason: "确认按项目汇总的改动没有改坏用量的测试。" });
@@ -335,7 +335,7 @@ export class FakeHome {
     const msg = `i_${rand()}`;
     if (d === "accept" || d === "acceptForSession") {
       await this.ms(800);
-      this.emit(threadId, { type: "toolFinished", item: cmd, kind: "commandExecution", title: "跑了 cargo test -p pansy-core", status: "completed", output: "running 42 tests\n…\ntest result: ok. 42 passed; 0 failed" });
+      this.emit(threadId, { type: "toolFinished", item: cmd, kind: "commandExecution", title: "cargo test -p pansy-core usage::", status: "completed", output: "running 42 tests\n…\ntest result: ok. 42 passed; 0 failed", exit: 0 });
       for (const chunk of ["测试都", "通过了（42 个）。", "可以提交了。"]) {
         this.emit(threadId, { type: "delta", item: msg, text: chunk });
         await this.ms(120);

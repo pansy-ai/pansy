@@ -73,6 +73,25 @@ test("the approval card answers with runtime-request.respond, and the turn goes 
   await app.waitUntil(() => !app.shows("id:approval-card"));
 });
 
+test("a turn works in the open, then folds behind how long it worked but for its answer", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_cost");
+  await app.waitFor("id:approval-card");
+  // running: the work shows, the command waiting says what it runs
+  expect(app.shows("id:turn-working")).toBe(true);
+  expect(app.texts()).toContain("Running cargo");
+  await app.press("id:approve-once");
+  await app.waitFor("text:测试都通过了（42 个）。可以提交了。");
+  await app.waitFor("id:turn-fold");
+  expect(app.texts().some((t) => t.startsWith("Worked for "))).toBe(true);
+  expect(app.texts()).not.toContain("读了 desktop/ui/Sessions.tsx");
+  // opened, the runs say what they did, and open to each call
+  await app.press("id:turn-fold");
+  await app.waitFor("text:Read 1 file, changed 1 file, and performed 1 other action");
+  await app.press("text:Read 1 file, changed 1 file, and performed 1 other action");
+  await app.waitFor("text:读了 desktop/ui/Sessions.tsx");
+});
+
 test("a line typed while an approval waits declines it with that line", async () => {
   const app = await launch();
   await app.press("id:thread-t_cost");

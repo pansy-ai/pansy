@@ -659,6 +659,7 @@ impl Reading {
                             }
                             .into(),
                             output: cut(&result_text(&b["content"])),
+                            exit: None,
                         }
                     })
                     .collect()
@@ -1001,6 +1002,7 @@ mod tests {
                 title: "ls".into(),
                 status: "completed".into(),
                 output: "a\nb".into(),
+                exit: None,
             },
             Event::Message {
                 item: "m2".into(),

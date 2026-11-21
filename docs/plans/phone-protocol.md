@@ -158,7 +158,7 @@ type Event =                  // pansy_remote::Event，tag 是 type
   | { type: "message"; item: string; text: string }
   | { type: "user"; text: string }                       // 发出去的一句（多端同步）
   | { type: "toolStarted"; item: string; kind: string; title: string }
-  | { type: "toolFinished"; item: string; kind: string; title: string; status: string; output?: string }
+  | { type: "toolFinished"; item: string; kind: string; title: string; status: string; output?: string; exit?: number }  // exit：命令的退出码（Codex 给）
   | { type: "approval"; request: string; kind: string; title: string; detail: string; reason?: string }
   | { type: "question"; request: string; questions: { question: string; header: string; multiSelect: boolean;
       options: { label: string; description: string }[] }[] }

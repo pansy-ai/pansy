@@ -12,10 +12,12 @@ export type Item =
   | { kind: "user"; id: string; text: string; at?: string; queued?: boolean }
   | { kind: "assistant"; id: string; text: string; at?: string; streaming?: boolean }
   | { kind: "reasoning"; id: string; text: string; seconds?: number }
-  | { kind: "tool"; id: string; tool: string; title: string; status: ToolStatus; input?: string; output?: string }
+  | { kind: "tool"; id: string; tool: string; title: string; status: ToolStatus; input?: string; output?: string; exit?: number }
   | { kind: "subagent"; id: string; name: string; detail: string; status: ToolStatus }
   | { kind: "notice"; id: string; text: string; tone: "danger" | "muted" }
-  | { kind: "compact"; id: string };
+  | { kind: "compact"; id: string }
+  /** A turn ended here, seen live: how long it took, whether the user stopped it. */
+  | { kind: "end"; id: string; ms?: number; stopped?: boolean };
 
 export type Approval = { request: string; kind: string; title: string; detail: string; reason?: string; questions?: Question[] };
 
@@ -76,6 +78,8 @@ export function apply(state: FeedState, event: Event, now = Date.now()): FeedSta
       return { ...state, items: [...items, { kind: "user", id: `u${now}${items.length}`, text: event.text, at: new Date(now).toISOString() }] };
     }
     case "toolStarted": {
+      // Codex's reasoning comes as an item of its own
+      if (event.kind === "reasoning") return { ...state, items: [...items, { kind: "reasoning", id: event.item, text: "" }] };
       if (SUBAGENT_KINDS.has(event.kind)) {
         const [name, ...rest] = event.title.split(" · ");
         return { ...state, items: [...items, { kind: "subagent", id: event.item, name, detail: rest.join(" · "), status: "running" }] };
@@ -87,7 +91,12 @@ export function apply(state: FeedState, event: Event, now = Date.now()): FeedSta
       if (!items.some((i) => i.id === event.item)) return apply(apply(state, { type: "toolStarted", item: event.item, kind: event.kind, title: event.title }, now), event, now);
       return {
         ...state,
-        items: replace(event.item, (i) => (i.kind === "subagent" ? { ...i, status: toolStatus(event.status) } : { ...(i as Extract<Item, { kind: "tool" }>), title: event.title || (i as { title: string }).title, status: toolStatus(event.status), output: event.output })),
+        items: replace(event.item, (i) =>
+          i.kind === "reasoning"
+            ? { ...i, text: event.output || i.text }
+            : i.kind === "subagent"
+              ? { ...i, status: toolStatus(event.status) }
+              : { ...(i as Extract<Item, { kind: "tool" }>), title: event.title || (i as { title: string }).title, status: toolStatus(event.status), output: event.output, exit: event.exit }),
       };
     }
     case "approval":
@@ -102,12 +111,9 @@ export function apply(state: FeedState, event: Event, now = Date.now()): FeedSta
       const done: Item[] = items.map((i) => (i.kind === "assistant" && i.streaming ? { ...i, streaming: false } : (i.kind === "tool" || i.kind === "subagent") && i.status === "running" ? { ...i, status: "done" as ToolStatus } : i));
       const failed = /fail|error/i.test(event.status);
       const stopped = /interrupt|cancel/i.test(event.status);
-      const notice: Item[] = failed
-        ? [{ kind: "notice", id: `n${now}`, text: event.error ?? event.status, tone: "danger" }]
-        : stopped
-          ? [{ kind: "notice", id: `n${now}`, text: "stopped", tone: "muted" }]
-          : [];
-      return { ...state, items: [...done, ...notice], running: false, startedAt: null };
+      const notice: Item[] = failed ? [{ kind: "notice", id: `n${now}`, text: event.error ?? event.status, tone: "danger" }] : [];
+      const end: Item = { kind: "end", id: `e${now}`, ms: state.startedAt ? now - state.startedAt : undefined, stopped };
+      return { ...state, items: [...done, ...notice, end], running: false, startedAt: null };
     }
     case "exited":
       return { ...state, running: false, startedAt: null, approvals: [] };

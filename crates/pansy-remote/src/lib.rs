@@ -60,6 +60,9 @@ pub enum Event {
         /// What it gave back, cut short.
         #[serde(skip_serializing_if = "String::is_empty")]
         output: String,
+        /// A command's exit code, where the agent tells it (Codex).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        exit: Option<i64>,
     },
     /// The agent waits for a yes or no ([`Decision`]).
     #[serde(rename_all = "camelCase")]
