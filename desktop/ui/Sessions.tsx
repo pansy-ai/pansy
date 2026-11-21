@@ -54,7 +54,7 @@ function dateLabel(d: Date): string {
 }
 
 /** When, from now: "just now", "5 min ago", "3 h ago", "Yesterday", "4 days ago", else the date. */
-function ago(at: string | null): string {
+export function ago(at: string | null): string {
   if (!at) return "";
   const d = new Date(at);
   const s = (Date.now() - d.getTime()) / 1000;

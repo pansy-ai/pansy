@@ -10,6 +10,7 @@ import { effect, keymap, LayoutAnimation, mount, platform, reduceMotion, Scroll,
 import { Button } from "nsh/base";
 import { currentWindow, isAvailable, Tray, Window } from "nsh/desktop";
 import { AgentModals } from "./ui/AgentModals";
+import { DeviceModals } from "./ui/Devices";
 import { PreviewDialog } from "./ui/Preview";
 import { AgentsPage } from "./ui/Agents";
 import { Brand } from "./ui/Brand";
@@ -548,6 +549,7 @@ function App() {
       </If>
       <ProviderModals />
       <AgentModals />
+      <DeviceModals />
       <PreviewDialog />
       <WhatsNewDialog />
       <QuestionDialog />

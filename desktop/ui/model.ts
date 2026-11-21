@@ -4,6 +4,7 @@
 import { batch, Notifications, signal } from "nsh";
 import { Agents, Gateway, Groups, Masking, Plugins, Prefs, Profiles, Providers, Sessions, Settings, Subscriptions, Usage } from "pansy/native";
 import { tr } from "./i18n";
+import { loadRemote } from "./Devices";
 
 export type Protocol = "anthropic" | "chat" | "responses" | "gemini";
 
@@ -1144,7 +1145,7 @@ export function loadPage(p: Page): Promise<unknown> {
     case "masking":
       return Promise.all([loadSettings(), loadMasking()]);
     case "settings":
-      return Promise.all([loadSettings(), loadGateway()]);
+      return Promise.all([loadSettings(), loadGateway(), loadRemote()]);
   }
 }
 

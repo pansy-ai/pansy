@@ -13,10 +13,14 @@
 pub mod auth;
 pub mod claude;
 pub mod codex;
+pub mod config;
 pub mod git;
+pub mod hub;
+mod notify;
 mod rpc;
 pub mod server;
-mod store;
+pub mod store;
+mod workspace;
 
 use serde::Serialize;
 

@@ -33,6 +33,7 @@ import { Badge, Dropdown, FieldButton, Icon, IconButton, Input, List, MOTION, Mo
 import { channel, hasNotes, onQuit, openNotes, setChannel, setOnQuit, UpdateControl, updateSaid, updatesOn, versionSaid, type Channel } from "./Update";
 import { FindingList, FromATerminal, HealthControl, healthSaid, RestoreAll, ResumeAll, TestControl, TestResult, testSaid } from "./Diagnostics";
 import { Menu, MenuItem } from "nsh/base";
+import { AddDevice, ApprovalSwitch, DeviceList, LanSwitch, remote, RemoteSwitch, remoteSaid, RemoteText, ServiceControl, serviceSaid } from "./Devices";
 
 /** Each page of Settings: its name and icon in the sidebar. */
 export const SETTINGS_TABS = (): { id: SettingsTab; name: string; icon: "sliders-horizontal" | "globe" | "shield" | "activity" | "info" }[] => [
@@ -503,6 +504,70 @@ const SETTINGS: Setting[] = [
     title: () => tr("Web pages that may call pansy"),
     description: () => tr("Scripts on these origins can call the gateway from a browser, each request with the gateway key. A page from any other site is refused; pages on this computer are not"),
     below: () => <ValueList values={s()?.origins ?? []} onChange={(v) => void setSetting("origins", v)} placeholder="https://app.example.com" mono testID="setting-origins" />,
+  },
+
+  // Phone and other devices (docs/plans/phone.md)
+  {
+    id: "remote",
+    tab: "network",
+    section: () => tr("Phone and other devices"),
+    title: () => tr("Control agents from other devices"),
+    description: () => remoteSaid(),
+    control: () => <RemoteSwitch />,
+  },
+  {
+    id: "remote-devices",
+    tab: "network",
+    section: () => tr("Phone and other devices"),
+    title: () => tr("Devices"),
+    description: () => tr("A paired device drives Codex and Claude Code here: threads, approvals, worktrees, commits, pushes and pull requests. Its code matches the one the device shows"),
+    control: () => <AddDevice />,
+    below: () => <DeviceList />,
+  },
+  {
+    id: "remote-approval",
+    tab: "network",
+    section: () => tr("Phone and other devices"),
+    title: () => tr("New devices wait for approval"),
+    description: () => tr("A device paired from another device can only read until it is approved here"),
+    when: () => !!remote()?.settings.enabled,
+    control: () => <ApprovalSwitch />,
+  },
+  {
+    id: "remote-lan",
+    tab: "network",
+    section: () => tr("Phone and other devices"),
+    title: () => tr("Reachable beyond this computer"),
+    description: () => tr("Devices on this computer's private networks and tailnet can reach it; off, only this computer can, as through a tunnel of your own"),
+    when: () => !!remote()?.settings.enabled,
+    control: () => <LanSwitch />,
+  },
+  {
+    id: "remote-service",
+    tab: "network",
+    section: () => tr("Phone and other devices"),
+    title: () => tr("Keep pansy running"),
+    description: () => serviceSaid(),
+    when: () => !!remote()?.settings.enabled,
+    control: () => <ServiceControl />,
+  },
+  {
+    id: "remote-webhook",
+    tab: "network",
+    section: () => tr("Phone and other devices"),
+    title: () => tr("Notify a webhook"),
+    description: () => tr("A line is posted when a thread waits for you or ends (ntfy, Bark, a chat bot): its title and what happened, never what was said"),
+    when: () => !!remote()?.settings.enabled,
+    below: () => <RemoteText field="webhook" placeholder="https://ntfy.sh/your-topic" mono />,
+  },
+  {
+    id: "remote-writer",
+    tab: "network",
+    section: () => tr("Phone and other devices"),
+    title: () => tr("Model for commit messages"),
+    description: () => tr("Writes commit messages, pull requests and branch names, through the gateway. Empty: the thread's own model"),
+    when: () => !!remote()?.settings.enabled,
+    below: () => <RemoteText field="writerModel" placeholder="deepseek/deepseek-chat" mono />,
   },
 
   // Privacy

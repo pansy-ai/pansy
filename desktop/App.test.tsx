@@ -447,6 +447,26 @@ test("finds a setting on any of Settings' pages", async () => {
   await app.waitFor("id:settings-none");
 });
 
+test("lets a phone control the agents once asked, and adds one by a link", async () => {
+  const app = await launch();
+  await app.press("id:nav-settings");
+  await app.waitFor("id:settings-nav");
+  await app.press("id:settings-tab-network");
+  await app.waitFor("text:Control agents from other devices");
+  await app.waitFor("text:Off: no other device can reach your agents.");
+  await app.press("id:setting-remote-on");
+  await app.waitFor("text:Let other devices control your agents?");
+  await app.press("id:question-confirm");
+  await app.waitFor("text:New devices wait for approval");
+  await app.waitFor("text:No device yet: Add a device, then open the link on it or scan the code.");
+  await app.press("id:remote-add");
+  await app.waitFor("id:pair");
+  expect(app.texts().some((t) => t.includes("/#pair="))).toBe(true);
+  await app.press("id:pair-done");
+  await app.press("id:setting-remote-off");
+  await app.waitFor("text:Off: no other device can reach your agents.");
+});
+
 test("opens the Plugins market, and Installed with none added yet", async () => {
   const app = await launch();
   await app.press("id:nav-plugins");

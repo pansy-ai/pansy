@@ -26,8 +26,9 @@ use serde_json::json;
 
 mod drive;
 mod plugins;
+mod remote;
 mod run;
-mod service;
+pub mod service;
 
 const HELP: &str = "pansy — every agent's model, one place
 
@@ -184,6 +185,13 @@ Profiles
 
 Gateway
   serve                               run the gateway in the foreground
+  remote [status|on|off]              let paired phones and browsers control this computer's
+                                      agents (port 7268); remote lan on|off, remote webhook
+                                      <url>|off (a line when a thread waits or ends),
+                                      remote writer <provider/model>|default (commit messages)
+  pair [read]                         a one-time link to pair a phone with (10 minutes)
+  devices [revoke|approve <id>]       the paired devices; devices approval on|off: new ones
+                                      wait to be approved here
   service install|uninstall|status    the gateway as a service of yours: started when you
                                       log in, running without the window (systemd,
                                       launchd, or a task at logon)
@@ -309,6 +317,9 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
             Ok(())
         }
         ["serve", ..] => serve(),
+        ["remote", rest @ ..] => remote::command(rest, json),
+        ["pair", rest @ ..] => remote::pair(rest),
+        ["devices", rest @ ..] => remote::devices(rest, json),
         ["service", "install"] => say(service::install()?),
         ["service", "uninstall"] => say(service::uninstall()?),
         ["service"] | ["service", "status"] => service_status(json),
@@ -772,9 +783,30 @@ fn serve() -> Result<()> {
         .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
         .init();
     let gateway = pansy_gateway::Gateway::new();
-    runtime()?.block_on(pansy_gateway::serve(gateway, async {
-        let _ = tokio::signal::ctrl_c().await;
-    }))
+    runtime()?.block_on(async {
+        // Both stop on the same Ctrl-C (or the service manager's SIGTERM).
+        let (stop, _) = tokio::sync::broadcast::channel::<()>(1);
+        let stopping = stop.clone();
+        tokio::spawn(async move {
+            stopped().await;
+            let _ = stopping.send(());
+        });
+        let (mut a, mut b) = (stop.subscribe(), stop.subscribe());
+        let remote = tokio::spawn(remote::serve(async move {
+            let _ = a.recv().await;
+        }));
+        let served = pansy_gateway::serve(gateway, async move {
+            let _ = b.recv().await;
+        })
+        .await;
+        let _ = stop.send(());
+        match remote.await {
+            Ok(Err(e)) => eprintln!("pansy: the remote interface: {e:#}"),
+            Err(e) => eprintln!("pansy: the remote interface: {e}"),
+            Ok(Ok(())) => {}
+        }
+        served
+    })
 }
 
 fn say(lines: Vec<String>) -> Result<()> {
@@ -802,6 +834,29 @@ fn service_status(json: bool) -> Result<()> {
         println!("nothing answers at {}", s.url);
     }
     Ok(())
+}
+
+/// Ctrl-C, or SIGTERM (a service manager stopping pansy).
+async fn stopped() {
+    #[cfg(unix)]
+    {
+        let mut term =
+            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+                Ok(t) => t,
+                Err(_) => {
+                    let _ = tokio::signal::ctrl_c().await;
+                    return;
+                }
+            };
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = term.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }
 
 /// Every check, a line each; fails when one does.
