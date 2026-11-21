@@ -17,7 +17,7 @@
 `GET /.well-known/pansy/environment`（不鉴权）
 
 ```json
-{"id": "m_5f2a…", "name": "家里的 Mac", "version": "0.2.0", "protocol": 1,
+{"id": "m_5f2a…", "name": "家里的 Mac", "version": "0.2.0", "os": "macos", "protocol": 1,
  "capabilities": ["codex", "claude", "git", "github"],
  "routes": [{"kind": "lan", "url": "http://192.168.1.20:7268"},
             {"kind": "tailnet", "url": "http://100.88.1.2:7268"}]}
@@ -108,6 +108,7 @@ payload `{"jti","htm","htu","iat","ath"?}`。`htu` 不带 query；`iat` 前后 6
 | `git.generate` | source-control:write | `{threadId, kind: "commit"\|"pr"}` | `{title, body}` |
 | `git.run` | source-control:write | `{threadId, action: "commit"\|"push"\|"commit_push"\|"create_pr"\|"commit_push_pr", files?, message?, pr?: {title?, body?, base?}}` | `{commit?, pr?: {number, url}}`；进度推 `git.progress` |
 | `devices.list` | access:read | `{}` | `{devices: [Device], requireApproval}` |
+| `devices.setRequireApproval` | access:write | `{requireApproval}` | `{}` |
 | `devices.revoke` / `devices.approve` | access:write | `{deviceId}` | `{}` |
 | `pair.create` | access:write | `{scopes?}` | `{secret, url, expiresAt}` |
 

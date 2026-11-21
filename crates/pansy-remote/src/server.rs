@@ -199,6 +199,7 @@ async fn descriptor(State(app): State<Arc<App>>, headers: HeaderMap) -> Response
         "id": app.auth.machine_id(),
         "name": config::machine_name(&settings),
         "version": env!("CARGO_PKG_VERSION"),
+        "os": std::env::consts::OS,
         "protocol": 1,
         "capabilities": caps,
         "routes": routes(settings.port, settings.lan, &host),
@@ -251,7 +252,8 @@ pub fn pair_hosts(port: u16, lan: bool) -> Vec<String> {
 
 /// Where the phone's web build is: `PANSY_MOBILE_WEB`, beside this
 /// program (`mobile-web`, or a package's `share/pansy/mobile-web` and
-/// `Resources/mobile-web`), else a checkout's `mobile/dist/web`.
+/// `Resources/mobile-web`), else a checkout's `mobile/dist/web/Pansy`
+/// (`nsh package --target web -o dist/web`).
 pub fn web_dir() -> Option<PathBuf> {
     let index = |d: &PathBuf| d.join("index.html").is_file();
     if let Some(d) = std::env::var_os("PANSY_MOBILE_WEB").map(PathBuf::from) {
@@ -273,7 +275,7 @@ pub fn web_dir() -> Option<PathBuf> {
     }
     Some(PathBuf::from(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../mobile/dist/web"
+        "/../../mobile/dist/web/Pansy"
     )))
     .filter(index)
 }
@@ -432,7 +434,7 @@ async fn socket(
 }
 
 /// The phone's web build: a file under it, else its `index.html`.
-async fn files(State(app): State<Arc<App>>, uri: Uri) -> Response {
+async fn files(State(app): State<Arc<App>>, uri: Uri, headers: HeaderMap) -> Response {
     let Some(root) = app.web.as_ref() else {
         return (
             StatusCode::NOT_FOUND,
@@ -450,25 +452,52 @@ async fn files(State(app): State<Arc<App>>, uri: Uri) -> Response {
     if !path.is_file() {
         path = root.join("index.html");
     }
-    match tokio::fs::read(&path).await {
+    // The build's own compressed copies, when the browser takes them.
+    let accepts = header_str(&headers, "accept-encoding").unwrap_or_default();
+    let mut encoding = None;
+    let mut file = path.clone();
+    for (enc, ext) in [("br", "br"), ("gzip", "gz")] {
+        let packed = PathBuf::from(format!("{}.{ext}", path.display()));
+        if accepts.split(',').any(|a| a.trim().starts_with(enc)) && packed.is_file() {
+            (encoding, file) = (Some(enc), packed);
+            break;
+        }
+    }
+    match tokio::fs::read(&file).await {
         Ok(bytes) => {
             let mut r = Response::new(Body::from(bytes));
-            r.headers_mut().insert(
+            let h = r.headers_mut();
+            h.insert(
                 header::CONTENT_TYPE,
                 HeaderValue::from_static(content_type(&path)),
             );
-            r.headers_mut().insert(
+            if let Some(enc) = encoding {
+                h.insert(header::CONTENT_ENCODING, HeaderValue::from_static(enc));
+                h.insert(header::VARY, HeaderValue::from_static("accept-encoding"));
+            }
+            h.insert(
                 header::CACHE_CONTROL,
-                HeaderValue::from_static(if path.ends_with("index.html") {
-                    "no-cache"
-                } else {
+                HeaderValue::from_static(if hashed(&path) {
                     "public, max-age=31536000, immutable"
+                } else {
+                    "no-cache"
                 }),
             );
             r
         }
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
+}
+
+/// A file named with its content's hash (`app.ad850b0d51.js`), or in a
+/// folder so named: it never changes.
+fn hashed(path: &Path) -> bool {
+    path.components().any(|c| {
+        c.as_os_str().to_str().is_some_and(|n| {
+            n.split('.')
+                .any(|p| p.len() == 10 && p.bytes().all(|b| b.is_ascii_hexdigit()))
+        })
+    })
 }
 
 fn content_type(path: &Path) -> &'static str {
@@ -486,6 +515,8 @@ fn content_type(path: &Path) -> &'static str {
         "png" => "image/png",
         "ico" => "image/x-icon",
         "ttf" => "font/ttf",
+        "bin" => "application/octet-stream",
+        "jpg" | "jpeg" => "image/jpeg",
         "woff2" => "font/woff2",
         _ => "application/octet-stream",
     }
@@ -624,9 +655,11 @@ fn scope_of(method: &str) -> Option<Scope> {
         | "thread.delete" => Scope::OrchestrationOperate,
         "git.generate" | "git.run" => Scope::SourceControlWrite,
         "devices.list" => Scope::AccessRead,
-        "devices.revoke" | "devices.approve" | "devices.requireApproval" | "pair.create" => {
-            Scope::AccessWrite
-        }
+        "devices.revoke"
+        | "devices.approve"
+        | "devices.requireApproval"
+        | "devices.setRequireApproval"
+        | "pair.create" => Scope::AccessWrite,
         _ => return None,
     })
 }
@@ -800,9 +833,12 @@ async fn call(app: &App, p: &Principal, method: &str, params: Value) -> Result<V
                 .approve(&s("deviceId").ok_or_else(|| bad("deviceId is missing"))?)?;
             json!({})
         }
-        "devices.requireApproval" => {
-            app.auth
-                .set_require_approval(params["on"].as_bool().unwrap_or(false))?;
+        "devices.requireApproval" | "devices.setRequireApproval" => {
+            let on = params["requireApproval"]
+                .as_bool()
+                .or(params["on"].as_bool())
+                .unwrap_or(false);
+            app.auth.set_require_approval(on)?;
             json!({})
         }
         "pair.create" => {
