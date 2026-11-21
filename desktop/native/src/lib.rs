@@ -1456,10 +1456,11 @@ impl Remote {
             });
             let (secret, expires) =
                 auth.create_pairing(scopes.as_deref(), pansy_remote::auth::PAIRING_TTL)?;
-            let mut urls: Vec<String> = pansy_remote::server::pair_hosts(settings.port, settings.lan)
-                .iter()
-                .map(|h| format!("http://{h}/#pair={secret}"))
-                .collect();
+            let mut urls: Vec<String> =
+                pansy_remote::server::pair_hosts(settings.port, settings.lan)
+                    .iter()
+                    .map(|h| format!("http://{h}/#pair={secret}"))
+                    .collect();
             if urls.is_empty() {
                 urls.push(format!("http://127.0.0.1:{}/#pair={secret}", settings.port));
             }
