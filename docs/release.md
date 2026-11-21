@@ -35,12 +35,29 @@ an installer, which `packaging/installers.sh` makes on each system from what
 | Windows | `-setup.exe` (Inno Setup, `packaging/pansy.iss`): a Start menu entry, `pansy` on PATH (a choice), an uninstaller | `%LOCALAPPDATA%\Programs\Pansy`, for this user, no administrator | the updater: it swaps every entry of that directory, so the uninstaller is beside it (`Pansy Uninstall`), not in it |
 | Linux | `.deb`: `/opt/pansy`, `/usr/bin/pansy`, the desktop entry | the system's | a newer `.deb`: the window cannot write there and sends its user to the download page |
 | Linux | `.AppImage`: one file, run as it is | wherever it is | a newer AppImage, the same way (an AppImage is read only) |
+| Arch Linux, Omarchy | `pansy-bin` on the AUR (`yay -S pansy-bin`, `omarchy pkg aur add pansy-bin`): the archive in `/opt/pansy`, as the `.deb` | the system's | `yay -Syu`; the window sends its user to the download page, as from the `.deb` |
 
 The `.deb` and the AppImage take GTK 4 from the system, as the
 archive does. The AppImage is made with appimagetool 1.9.1, which
 `installers.sh` downloads once and checks against its hash. A Windows
 installer needs Inno Setup 6 (`winget install JRSoftware.InnoSetup`); the
 workflow installs it where the runner has none.
+
+## The AUR
+
+`pansy-bin` is `packaging/aur/PKGBUILD`: it downloads the release's Linux
+archive from the bucket and puts it where the `.deb` does. `packaging/aur.sh`
+writes its version and the archives' checksums (from `dist/`, or the feed's)
+and its `.SRCINFO` into `dist/aur`; with `PANSY_AUR_KEY`, a private SSH key
+of the AUR account that keeps `pansy-bin`, it pushes them to the AUR. The
+workflow does that after a release of pansy itself, never a beta, when the
+`release` environment has the secret `PANSY_AUR_KEY`. The same version with
+the PKGBUILD changed goes up as the next `pkgrel`. To try it here:
+`packaging/aur.sh && cd ../dist/aur && makepkg -si`.
+
+`omarchy install app` installs from pacman's repositories alone (Arch's
+and Omarchy's own, which Omarchy keeps); an AUR package is
+`omarchy pkg aur add`.
 
 ## Two kinds of release
 
@@ -137,6 +154,7 @@ packaging/publish.sh                          # or `publish.sh ui`
 | `keys/root.secret` | the release key's certificate (`packaging/release.cert`, a year) | offline |
 | `keys/release.secret` | the window's packages | the workflow's `PANSY_RELEASE_KEY` |
 | `keys/update.secret` | `latest.json` | the workflow's `PANSY_UPDATE_KEY` |
+| `keys/aur` | pushes to `pansy-bin` on the AUR (an SSH key; `aur.pub` is in the AUR account) | the workflow's `PANSY_AUR_KEY` |
 
 `nsh.json` holds what every pansy trusts: the update key for the feed
 (`publicKey`) and the root for packages (`packages.roots`). They cannot be
@@ -159,7 +177,8 @@ a pansy will (`nsh verify`, against `nsh.json`'s roots) before it goes up.
 4. In the GitHub repository, an environment `release` with the secrets
    `PANSY_RELEASE_KEY`, `PANSY_UPDATE_KEY`, `CLOUDFLARE_API_TOKEN` and
    `CLOUDFLARE_ACCOUNT_ID`
-   (and the variable `PANSY_RELEASE_BUCKET` for another bucket name).
+   (and the variable `PANSY_RELEASE_BUCKET` for another bucket name), and
+   `PANSY_AUR_KEY` for the AUR.
 5. R2 serves no index for `/`: link to `https://releases.pansyai.dev/index.html`,
    or add a redirect rule from `/` to it.
 

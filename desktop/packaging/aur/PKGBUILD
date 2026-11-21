@@ -1,0 +1,34 @@
+# pansy-bin, pansy for Arch Linux and Omarchy from the AUR (docs/release.md).
+# The release's Linux archive in /opt/pansy, as the .deb has it. pkgver,
+# pkgrel and the checksums are written by packaging/aur.sh for each release.
+# Maintainer: pansy <https://github.com/pansy-ai/pansy>
+pkgname=pansy-bin
+pkgver=0.1.5
+pkgrel=1
+pkgdesc="Every agent's model, one place: a local gateway for coding agents, with a window"
+arch=('x86_64' 'aarch64')
+url="https://github.com/pansy-ai/pansy"
+license=('MIT')
+# what the program links (readelf -d)
+depends=('cairo' 'fontconfig' 'gcc-libs' 'glib2' 'glibc' 'graphene' 'gtk4' 'harfbuzz' 'pango')
+provides=('pansy')
+conflicts=('pansy')
+options=('!strip' '!debug')
+source=('LICENSE')
+source_x86_64=("https://releases.pansyai.dev/v$pkgver/pansy-$pkgver-linux-x86_64.tar.gz")
+source_aarch64=("https://releases.pansyai.dev/v$pkgver/pansy-$pkgver-linux-aarch64.tar.gz")
+sha256sums=('b360f87abcfac9aefe8ded6f6d8f16d568346d594a195ab769fd00ceb592be30')
+sha256sums_x86_64=('211c006d880b67cac0ea09a880c64ba9eee94d062ad79c4bb136548236567e6d')
+sha256sums_aarch64=('6244827f98002cf68d46c7c95847f168d3a96499c8e494ee5f1a474babab7c5b')
+
+package() {
+  install -d "$pkgdir/opt" "$pkgdir/usr/bin"
+  cp -a pansy "$pkgdir/opt/pansy"
+  # install.sh is for an archive unpacked in a home folder
+  rm -f "$pkgdir/opt/pansy/install.sh"
+  chmod -R u=rwX,go=rX "$pkgdir/opt/pansy"
+  ln -s /opt/pansy/pansy "$pkgdir/usr/bin/pansy"
+  sed 's|{root}|/opt/pansy|g' pansy/share/applications/dev.pansy.app.desktop |
+    install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/dev.pansy.app.desktop"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
