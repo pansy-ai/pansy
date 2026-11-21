@@ -529,7 +529,7 @@ const SETTINGS: Setting[] = [
     tab: "network",
     section: () => tr("Phone and other devices"),
     title: () => tr("New devices wait for approval"),
-    description: () => tr("A device paired from another device can only read until it is approved here"),
+    description: () => tr("A device paired from another device can do nothing until it is approved here"),
     when: () => !!remote()?.settings.enabled,
     control: () => <ApprovalSwitch />,
   },

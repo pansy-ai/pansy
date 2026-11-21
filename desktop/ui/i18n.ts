@@ -1341,7 +1341,7 @@ const ZH_HANS = {
   "Read only": "只读",
   "seen %s": "%s 使用过",
   "New devices wait for approval": "新设备需要批准",
-  "A device paired from another device can only read until it is approved here": "由其他设备配对的新设备在这里批准前只能查看",
+  "A device paired from another device can do nothing until it is approved here": "由其他设备配对的新设备在这里批准前不能使用",
   "Reachable beyond this computer": "允许本机以外访问",
   "Devices on this computer's private networks and tailnet can reach it; off, only this computer can, as through a tunnel of your own": "私有网络和 tailnet 上的设备可以访问；关闭后只有本机可以访问，例如通过你自己的隧道",
   "Keep pansy running": "保持 pansy 运行",
