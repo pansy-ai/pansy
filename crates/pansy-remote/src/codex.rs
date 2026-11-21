@@ -24,36 +24,24 @@ use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, mpsc};
 
 use crate::rpc::{Incoming, Rpc};
-use crate::{Decision, Event};
+use crate::{Decision, Event, Mode};
 
 /// The longest tool output an event carries.
 const OUTPUT: usize = 4000;
 
-/// Who may write where, and when to ask: Codex's own two settings.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Mode {
-    /// Ask before commands and edits (T3's Supervised).
-    Ask,
-    /// Edits in the folder, commands asked (Auto-accept edits).
-    Edits,
-    /// Never ask (Full access).
-    Full,
+/// Codex's two settings for a [`Mode`].
+fn approval_policy(mode: Mode) -> &'static str {
+    match mode {
+        Mode::Ask => "untrusted",
+        Mode::Edits | Mode::Auto => "on-request",
+        Mode::Full => "never",
+    }
 }
 
-impl Mode {
-    fn approval(self) -> &'static str {
-        match self {
-            Mode::Ask => "untrusted",
-            Mode::Edits => "on-request",
-            Mode::Full => "never",
-        }
-    }
-
-    fn sandbox(self) -> &'static str {
-        match self {
-            Mode::Ask | Mode::Edits => "workspace-write",
-            Mode::Full => "danger-full-access",
-        }
+fn sandbox(mode: Mode) -> &'static str {
+    match mode {
+        Mode::Ask | Mode::Edits | Mode::Auto => "workspace-write",
+        Mode::Full => "danger-full-access",
     }
 }
 
@@ -121,7 +109,7 @@ impl Codex {
             Some(id) => {
                 rpc.request(
                     "thread/resume",
-                    json!({"threadId": id, "approvalPolicy": mode.approval(), "sandbox": mode.sandbox()}),
+                    json!({"threadId": id, "approvalPolicy": approval_policy(mode), "sandbox": sandbox(mode)}),
                 )
                 .await?
             }
@@ -130,8 +118,8 @@ impl Codex {
                     "thread/start",
                     json!({
                         "cwd": folder.to_string_lossy(),
-                        "approvalPolicy": mode.approval(),
-                        "sandbox": mode.sandbox(),
+                        "approvalPolicy": approval_policy(mode),
+                        "sandbox": sandbox(mode),
                     }),
                 )
                 .await?

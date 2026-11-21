@@ -10,8 +10,13 @@
 //! SDK on pansy's Bun) comes next; when it does, what both share becomes a
 //! trait.
 
+pub mod auth;
+pub mod claude;
 pub mod codex;
+pub mod git;
 mod rpc;
+pub mod server;
+mod store;
 
 use serde::Serialize;
 
@@ -24,6 +29,9 @@ pub enum Event {
     Thread { thread: String, model: String },
     #[serde(rename_all = "camelCase")]
     TurnStarted { turn: String },
+    /// What the user sent, so every device shows it.
+    #[serde(rename_all = "camelCase")]
+    User { text: String },
     /// A piece of the reply as it streams.
     #[serde(rename_all = "camelCase")]
     Delta { item: String, text: String },
@@ -74,6 +82,22 @@ pub enum Event {
     },
     /// The agent's process ended.
     Exited { code: Option<i32> },
+}
+
+/// How freely the agent works, as T3 Code names the modes; an agent that
+/// lacks one runs in [`Mode::Ask`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Mode {
+    /// Ask before commands and edits (Supervised).
+    Ask,
+    /// Edits go ahead, commands are asked (Auto-accept edits).
+    Edits,
+    /// The agent's own review decides (Auto).
+    Auto,
+    /// Never ask (Full access): new threads start here, as in T3.
+    #[default]
+    Full,
 }
 
 /// An answer to an [`Event::Approval`], named as T3 Code names them.

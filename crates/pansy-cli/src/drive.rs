@@ -7,7 +7,8 @@ use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{Result, anyhow, bail};
-use pansy_remote::codex::{Codex, Mode};
+use pansy_remote::Mode;
+use pansy_remote::codex::Codex;
 use pansy_remote::{Decision, Event};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
@@ -42,6 +43,7 @@ fn parse(args: &[String]) -> Result<Options> {
                 mode = match value()?.as_str() {
                     "ask" => Mode::Ask,
                     "edits" => Mode::Edits,
+                    "auto" => Mode::Auto,
                     "full" => Mode::Full,
                     other => bail!("no mode {other}: ask, edits or full"),
                 }
@@ -101,6 +103,7 @@ async fn drive(o: Options, launch: pansy_agents::run::Launch) -> Result<()> {
             match o.mode {
                 Mode::Ask => "asks before commands and edits",
                 Mode::Edits => "asks before commands",
+                Mode::Auto => "the agent's own review decides",
                 Mode::Full => "full access",
             }
         );
@@ -182,7 +185,7 @@ fn show(event: &Event, json: bool) -> Result<()> {
     }
     match event {
         Event::Thread { thread, model } => writeln!(out, "· thread {thread} on {model}")?,
-        Event::TurnStarted { .. } => {}
+        Event::TurnStarted { .. } | Event::User { .. } => {}
         Event::Delta { text, .. } => {
             write!(out, "{text}")?;
             out.flush()?;
