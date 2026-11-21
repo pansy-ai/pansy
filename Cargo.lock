@@ -1011,6 +1011,7 @@ dependencies = [
  "pansy-gateway",
  "pansy-mask",
  "pansy-plugins",
+ "pansy-remote",
  "serde",
  "serde_json",
  "tokio",
@@ -1098,6 +1099,18 @@ dependencies = [
  "tracing",
  "uuid",
  "zip",
+]
+
+[[package]]
+name = "pansy-remote"
+version = "0.1.6"
+dependencies = [
+ "anyhow",
+ "pansy-agents",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

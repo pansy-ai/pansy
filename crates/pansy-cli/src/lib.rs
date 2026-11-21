@@ -24,8 +24,10 @@ use pansy_core::subscription;
 use pansy_core::usage;
 use serde_json::json;
 
+mod drive;
 mod plugins;
 mod run;
+mod service;
 
 const HELP: &str = "pansy — every agent's model, one place
 
@@ -81,6 +83,9 @@ Agents
   project init [folder]               write one from the connected agents' models
   project trust|forget [folder]       say yes to the file as it is now (one that came with
                                       a repository is not used before), or take it back
+  drive [--model <provider/model>] [--resume <thread>] [--mode ask|edits|full] codex [folder]
+                                      drive an agent as the phone will (Codex for now):
+                                      type to send or steer, answer approvals, /stop
   doctor                              whether the gateway, providers and agents work
   test [provider/model]               send one short message through the gateway, as an
                                       agent would (the first model without one)
@@ -179,6 +184,9 @@ Profiles
 
 Gateway
   serve                               run the gateway in the foreground
+  service install|uninstall|status    the gateway as a service of yours: started when you
+                                      log in, running without the window (systemd,
+                                      launchd, or a task at logon)
   status                              the gateway, providers and agents at a glance
   usage [days=7]                      requests and tokens through the gateway, by day,
                                       provider, model, agent and project (pansy run's)
@@ -226,6 +234,15 @@ pub fn run(args: Vec<String>) -> ExitCode {
     // What follows `pansy run <agent>` is the agent's own, `--json` too.
     if args.first().is_some_and(|a| a == "run") {
         return run::command(&args[1..]);
+    }
+    if args.first().is_some_and(|a| a == "drive") {
+        return match drive::command(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("pansy: {error:#}");
+                ExitCode::FAILURE
+            }
+        };
     }
     let json = args.iter().any(|a| a == "--json");
     let args: Vec<String> = args.into_iter().filter(|a| a != "--json").collect();
@@ -292,6 +309,9 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
             Ok(())
         }
         ["serve", ..] => serve(),
+        ["service", "install"] => say(service::install()?),
+        ["service", "uninstall"] => say(service::uninstall()?),
+        ["service"] | ["service", "status"] => service_status(json),
         ["status"] => status(json),
         ["agents"] => agents(json),
         ["agents", "versions"] => agent_versions(json),
@@ -755,6 +775,33 @@ fn serve() -> Result<()> {
     runtime()?.block_on(pansy_gateway::serve(gateway, async {
         let _ = tokio::signal::ctrl_c().await;
     }))
+}
+
+fn say(lines: Vec<String>) -> Result<()> {
+    for line in lines {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+fn service_status(json: bool) -> Result<()> {
+    let s = service::status()?;
+    if json {
+        return print_json(&json!({
+            "installed": s.installed, "file": s.file, "answering": s.answering, "url": s.url,
+        }));
+    }
+    match (s.installed, &s.file) {
+        (true, Some(file)) => println!("installed: {}", file.display()),
+        (true, None) => println!("installed: a task at logon"),
+        (false, _) => println!("not installed (pansy service install)"),
+    }
+    if s.answering {
+        println!("a pansy answers at {}", s.url);
+    } else {
+        println!("nothing answers at {}", s.url);
+    }
+    Ok(())
 }
 
 /// Every check, a line each; fails when one does.

@@ -120,7 +120,7 @@ fn ask(file: &ProjectFile) -> Result<bool> {
 /// The project file for `folder`, once the user said yes to it: asked now
 /// at a terminal, taken with `--yes`, and otherwise an error that says how.
 /// A file that would give this run nothing isn't asked about.
-fn file_for(
+pub(crate) fn file_for(
     folder: &Path,
     asked: &Asked,
     agent: &pansy_agents::agent::Agent,

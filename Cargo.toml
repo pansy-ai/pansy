@@ -18,6 +18,7 @@ pansy-gateway = { path = "crates/pansy-gateway" }
 pansy-cli = { path = "crates/pansy-cli" }
 pansy-mask = { path = "crates/pansy-mask" }
 pansy-plugins = { path = "crates/pansy-plugins" }
+pansy-remote = { path = "crates/pansy-remote" }
 anyhow = "1"
 async-stream = "0.3"
 axum = "0.8"
