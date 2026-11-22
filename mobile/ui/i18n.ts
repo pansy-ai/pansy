@@ -334,6 +334,13 @@ const ZH_HANS = {
   "%dm %ds": "%d 分 %d 秒",
   "%dh %dm %ds": "%d 小时 %d 分 %d 秒",
   "%dh %ds": "%d 小时 %d 秒",
+  // Tool calls in chat, T3's
+  "Tool calls in chat": "聊天中的工具调用",
+  "Show all": "全部显示",
+  "Hide successful": "隐藏成功的调用",
+  "Hide all": "全部隐藏",
+  "Zen": "专注模式",
+  "Hide the commands, edits, and searches agents run. Hide successful keeps failures. Zen shows only final answers. Approvals, questions, and errors always show.": "隐藏 agent 执行的命令、编辑和搜索。“隐藏成功的调用”仍保留失败项；“专注模式”仅显示最终回答。审批、提问和错误始终显示。",
 };
 
 export type Message = keyof typeof ZH_HANS;

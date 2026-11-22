@@ -585,6 +585,8 @@ struct Reading {
     tools: HashMap<String, (String, String)>,
     /// The message the deltas are of.
     item: String,
+    /// The thoughts seen, to name each its own item.
+    thoughts: usize,
 }
 
 impl Reading {
@@ -617,23 +619,43 @@ impl Reading {
                     .unwrap_or_default();
                 blocks
                     .iter()
-                    .filter_map(|b| match b["type"].as_str()? {
-                        "text" => Some(Event::Message {
+                    .flat_map(|b| match b["type"].as_str().unwrap_or_default() {
+                        "text" => vec![Event::Message {
                             item: item.clone(),
                             text: s(&b["text"]),
-                        }),
+                        }],
+                        // a thought, whole as it comes: begun and done at once
+                        "thinking" if !s(&b["thinking"]).trim().is_empty() => {
+                            self.thoughts += 1;
+                            let id = format!("{item}:thought{}", self.thoughts);
+                            vec![
+                                Event::ToolStarted {
+                                    item: id.clone(),
+                                    kind: "reasoning".into(),
+                                    title: "Thinking".into(),
+                                },
+                                Event::ToolFinished {
+                                    item: id,
+                                    kind: "reasoning".into(),
+                                    title: "Thinking".into(),
+                                    status: "completed".into(),
+                                    output: cut(s(&b["thinking"]).trim()),
+                                    exit: None,
+                                },
+                            ]
+                        }
                         "tool_use" => {
                             let kind = s(&b["name"]);
                             let title = summary(&kind, &b["input"]);
                             self.tools
                                 .insert(s(&b["id"]), (kind.clone(), title.clone()));
-                            Some(Event::ToolStarted {
+                            vec![Event::ToolStarted {
                                 item: s(&b["id"]),
                                 kind,
                                 title,
-                            })
+                            }]
                         }
-                        _ => None,
+                        _ => Vec::new(),
                     })
                     .collect()
             }
@@ -927,7 +949,7 @@ mod tests {
                                 json!({"type": "assistant", "parent_tool_use_id": "t9", "message": {"id": "x", "content": [{"type": "text", "text": "a subagent's"}]}}),
                             ),
                             message(
-                                json!({"type": "assistant", "parent_tool_use_id": null, "message": {"id": "m2", "content": [{"type": "text", "text": "done"}]}}),
+                                json!({"type": "assistant", "parent_tool_use_id": null, "message": {"id": "m2", "content": [{"type": "thinking", "thinking": "**Wrapping up** now."}, {"type": "text", "text": "done"}]}}),
                             ),
                             message(
                                 json!({"type": "result", "subtype": "success", "is_error": false, "result": "done", "user_message_uuids": [uuid]}),
@@ -1002,6 +1024,20 @@ mod tests {
                 title: "ls".into(),
                 status: "completed".into(),
                 output: "a\nb".into(),
+                exit: None,
+            },
+            // a thought, begun and done at once
+            Event::ToolStarted {
+                item: "m2:thought1".into(),
+                kind: "reasoning".into(),
+                title: "Thinking".into(),
+            },
+            Event::ToolFinished {
+                item: "m2:thought1".into(),
+                kind: "reasoning".into(),
+                title: "Thinking".into(),
+                status: "completed".into(),
+                output: "**Wrapping up** now.".into(),
                 exit: None,
             },
             Event::Message {

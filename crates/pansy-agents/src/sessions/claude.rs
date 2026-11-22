@@ -408,6 +408,16 @@ pub(super) fn transcript(path: &Path, main: bool, keep: Keep) -> Result<Vec<Turn
                     Said::Nothing => return,
                 };
                 reply.clear();
+                // Claude Code writes no end of a turn but this one
+                if keep.ends && text.starts_with("[Request interrupted by user") {
+                    turns.push(Turn {
+                        role: "end",
+                        status: "stopped",
+                        at,
+                        ..Turn::default()
+                    });
+                    return;
+                }
                 turns.push(Turn {
                     role: "user",
                     text: cut(&text, keep.text),

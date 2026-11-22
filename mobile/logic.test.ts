@@ -10,7 +10,7 @@ import { monogram, monogramHue } from "./ui/parts";
 import { connectionTitle } from "./ui/Threads";
 import { since } from "./ui/time";
 import { compact, top } from "./ui/Usage";
-import { duration, program, rowsOf, summary as workSummary, type WorkItem } from "./ui/work";
+import { duration, latestThought, program, rowsOf, summary as workSummary, thoughtLine, type WorkItem } from "./ui/work";
 import type { Item } from "./state/thread";
 
 test("reads a pairing link's address and secret from #pair=", () => {
@@ -51,7 +51,7 @@ test("folds a turn's events into the feed", () => {
   s = apply(s, { type: "turnFinished", turn: "t1", status: "completed" });
   expect(s.running).toBe(false);
   expect(s.items.map((i) => i.kind)).toEqual(["user", "assistant", "tool", "end"]);
-  expect(s.items[2]).toEqual({ kind: "tool", id: "c1", tool: "commandExecution", title: "ran cargo test", status: "done", output: "ok", exit: undefined });
+  expect(s.items[2]).toMatchObject({ kind: "tool", id: "c1", tool: "commandExecution", title: "ran cargo test", status: "done", output: "ok" });
   // the turn's end keeps how long it took from its start
   expect(s.items[3]).toMatchObject({ kind: "end", stopped: false });
   expect(typeof (s.items[3] as { ms?: number }).ms).toBe("number");
@@ -138,4 +138,46 @@ test("a settled turn folds behind how long it worked but for its answer; the one
   expect(open.map((r) => (r.kind === "item" ? r.item.id : r.kind)).slice(0, 6)).toEqual(["u1", "fold", "work", "m1", "work", "m2"]);
   const stopped = rowsOf([...items.slice(0, 6), { ...(items[6] as WorkItem), status: "done" } as Item, { kind: "end", id: "e", ms: 4000, stopped: true }], false, new Set());
   expect(stopped[stopped.length - 1]).toMatchObject({ kind: "fold", label: "You stopped after 4s" });
+});
+
+test("a thought in a line, as T3's: its heading, else its first sentence", () => {
+  expect(thoughtLine("**Checking the usage file**\n\nIt has a project field.")).toBe("Checking the usage file");
+  expect(thoughtLine("Look at `run.rs` first. Then the docs.")).toBe("Look at run.rs first.");
+  expect(thoughtLine("先看 run.rs。再看文档。")).toBe("先看 run.rs。");
+  expect(latestThought([{ kind: "reasoning", id: "a", text: "Old." }, tool("b", "Bash", "ls"), { kind: "reasoning", id: "c", text: "" }])).toBe("Old.");
+});
+
+test("a turn's time as its agent wrote it, and where the user stopped it", () => {
+  const items = fromHistory([
+    { role: "user", text: "go", at: "2026-05-02T12:00:00Z" },
+    { role: "tool", name: "shell", text: "ls", status: "done", at: "2026-05-02T12:00:05Z" },
+    { role: "assistant", text: "Done.", at: "2026-05-02T12:00:09Z" },
+    { role: "end", text: "", ms: 12_000, at: "2026-05-02T12:00:12Z" },
+    { role: "user", text: "more", at: "2026-05-02T12:01:00Z" },
+    { role: "tool", name: "Bash", text: "cargo test", at: "2026-05-02T12:01:30Z" },
+    { role: "end", text: "", status: "stopped", at: "2026-05-02T12:01:42Z" },
+  ]);
+  const folds = rowsOf(items, false, new Set()).filter((r) => r.kind === "fold");
+  // Codex's own count; Claude Code's stop, from the prompt to it
+  expect(folds.map((r) => (r as { label: string }).label)).toEqual(["Worked for 12s", "You stopped after 42s"]);
+});
+
+test("the tool calls setting hides calls, the failed kept, or keeps only the answers", () => {
+  const items: Item[] = [
+    { kind: "user", id: "u", text: "go" },
+    tool("a", "Bash", "ls"),
+    tool("b", "Bash", "cargo test", "failed"),
+    { kind: "reasoning", id: "r", text: "Hm." },
+    { kind: "assistant", id: "m1", text: "Trying." },
+    { kind: "assistant", id: "m2", text: "Done." },
+  ];
+  const calls = (rows: ReturnType<typeof rowsOf>) => rows.flatMap((r) => (r.kind === "work" ? r.items.map((i) => i.id) : []));
+  const open = new Set(["fu"]);
+  expect(calls(rowsOf(items, false, open, false, "showAll"))).toEqual(["a", "b", "r"]);
+  expect(calls(rowsOf(items, false, open, false, "hideSuccessful"))).toEqual(["b", "r"]);
+  expect(calls(rowsOf(items, false, open, false, "hideAll"))).toEqual(["r"]);
+  const zen = rowsOf(items, true, open, false, "zen");
+  // what was said, and "Thinking" while nothing comes; never a fold
+  expect(zen.map((r) => (r.kind === "item" ? r.item.id : r.kind))).toEqual(["u", "m1", "m2", "thinking"]);
+  expect(rowsOf(items, false, open, false, "zen").map((r) => (r.kind === "item" ? r.item.id : r.kind))).toEqual(["u", "m1", "m2"]);
 });

@@ -11,13 +11,13 @@ export type ToolStatus = "running" | "done" | "failed" | "declined" | "waiting";
 export type Item =
   | { kind: "user"; id: string; text: string; at?: string; queued?: boolean }
   | { kind: "assistant"; id: string; text: string; at?: string; streaming?: boolean }
-  | { kind: "reasoning"; id: string; text: string; seconds?: number }
-  | { kind: "tool"; id: string; tool: string; title: string; status: ToolStatus; input?: string; output?: string; exit?: number }
+  | { kind: "reasoning"; id: string; text: string; at?: string }
+  | { kind: "tool"; id: string; tool: string; title: string; status: ToolStatus; input?: string; output?: string; exit?: number; at?: string }
   | { kind: "subagent"; id: string; name: string; detail: string; status: ToolStatus }
   | { kind: "notice"; id: string; text: string; tone: "danger" | "muted" }
   | { kind: "compact"; id: string }
-  /** A turn ended here, seen live: how long it took, whether the user stopped it. */
-  | { kind: "end"; id: string; ms?: number; stopped?: boolean };
+  /** A turn ended here, live or as the agent's file says: how long it took (where known), whether the user stopped it. */
+  | { kind: "end"; id: string; ms?: number; stopped?: boolean; at?: string };
 
 export type Approval = { request: string; kind: string; title: string; detail: string; reason?: string; questions?: Question[] };
 
@@ -42,12 +42,14 @@ export function fromHistory(turns: Turn[]): Item[] {
       case "assistant":
         return { kind: "assistant", id, text: t.text, at: t.at };
       case "reasoning":
-        return { kind: "reasoning", id, text: t.text };
+        return { kind: "reasoning", id, text: t.text, at: t.at };
       case "compact":
         return { kind: "compact", id };
+      case "end":
+        return { kind: "end", id, ms: t.ms, stopped: t.status === "stopped", at: t.at };
       default:
         if (t.name && SUBAGENT_KINDS.has(t.name.toLowerCase())) return { kind: "subagent", id, name: t.text || t.name, detail: t.input ?? "", status: toolStatus(t.status) };
-        return { kind: "tool", id, tool: t.name ?? "tool", title: t.text || t.name || "", status: toolStatus(t.status), input: t.input, output: t.output };
+        return { kind: "tool", id, tool: t.name ?? "tool", title: t.text || t.name || "", status: toolStatus(t.status), input: t.input, output: t.output, at: t.at };
     }
   });
 }
@@ -79,12 +81,12 @@ export function apply(state: FeedState, event: Event, now = Date.now()): FeedSta
     }
     case "toolStarted": {
       // Codex's reasoning comes as an item of its own
-      if (event.kind === "reasoning") return { ...state, items: [...items, { kind: "reasoning", id: event.item, text: "" }] };
+      if (event.kind === "reasoning") return { ...state, items: [...items, { kind: "reasoning", id: event.item, text: "", at: new Date(now).toISOString() }] };
       if (SUBAGENT_KINDS.has(event.kind)) {
         const [name, ...rest] = event.title.split(" · ");
         return { ...state, items: [...items, { kind: "subagent", id: event.item, name, detail: rest.join(" · "), status: "running" }] };
       }
-      return { ...state, items: [...items, { kind: "tool", id: event.item, tool: event.kind, title: event.title, status: "running" }] };
+      return { ...state, items: [...items, { kind: "tool", id: event.item, tool: event.kind, title: event.title, status: "running", at: new Date(now).toISOString() }] };
     }
     case "toolFinished": {
       // finished before this phone saw it start (it subscribed in between)
@@ -112,7 +114,7 @@ export function apply(state: FeedState, event: Event, now = Date.now()): FeedSta
       const failed = /fail|error/i.test(event.status);
       const stopped = /interrupt|cancel/i.test(event.status);
       const notice: Item[] = failed ? [{ kind: "notice", id: `n${now}`, text: event.error ?? event.status, tone: "danger" }] : [];
-      const end: Item = { kind: "end", id: `e${now}`, ms: state.startedAt ? now - state.startedAt : undefined, stopped };
+      const end: Item = { kind: "end", id: `e${now}`, ms: state.startedAt ? now - state.startedAt : undefined, stopped, at: new Date(now).toISOString() };
       return { ...state, items: [...done, ...notice, end], running: false, startedAt: null };
     }
     case "exited":

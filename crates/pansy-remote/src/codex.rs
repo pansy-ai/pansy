@@ -362,7 +362,7 @@ fn notification(method: &str, p: &Value) -> Option<Event> {
                     kind,
                     title,
                     status: item["status"].as_str().unwrap_or("completed").to_owned(),
-                    output: cut(item["aggregatedOutput"].as_str().unwrap_or_default()),
+                    output: cut(&output_of(item)),
                     exit: item["exitCode"].as_i64(),
                 }
             }
@@ -377,6 +377,34 @@ fn notification(method: &str, p: &Value) -> Option<Event> {
         },
         _ => return None,
     })
+}
+
+/// What an item gave back: a command's output, a thought's summary.
+fn output_of(item: &Value) -> String {
+    if item["type"] == "reasoning" {
+        let parts = |k: &str| -> Vec<String> {
+            item[k]
+                .as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|p| p.as_str())
+                        .map(str::to_owned)
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let summary = parts("summary");
+        return if summary.is_empty() {
+            parts("content")
+        } else {
+            summary
+        }
+        .join("\n\n");
+    }
+    item["aggregatedOutput"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned()
 }
 
 /// A line for what an item does.

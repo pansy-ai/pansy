@@ -452,7 +452,7 @@ impl Hub {
                 .into_iter()
                 .find(|s| s.id == id)
                 .ok_or_else(|| coded("not_found", format!("no session {session}")))?;
-            let history = sessions::transcript(agent, session, "").unwrap_or_default();
+            let history = sessions::timed_transcript(agent, session).unwrap_or_default();
             return Ok((summary, history, Vec::new(), 0));
         }
         let thread = self
@@ -1161,7 +1161,7 @@ impl Hub {
 fn history_of(t: &Thread) -> Vec<sessions::Turn> {
     t.session
         .as_deref()
-        .and_then(|s| sessions::transcript(&t.agent, s, "").ok())
+        .and_then(|s| sessions::timed_transcript(&t.agent, s).ok())
         .unwrap_or_default()
 }
 

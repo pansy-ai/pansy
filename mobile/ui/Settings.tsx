@@ -1,13 +1,13 @@
 // 设置 (phone-ui.md "12. 设置"): the machines, each with its routes in the
 // order they are tried, what this phone may do there, device approval and
-// the other devices (devices.*), and removing it; the appearance, the
-// language; about.
+// the other devices (devices.*), and removing it; the appearance, the tool
+// calls a thread shows (T3's), the language; about.
 import { appInfo, effect, resource, Scroll, signal, Text, View, type JSX } from "nsh";
 import { AlertDialog, NavPage } from "nsh/base";
 import type { Machine } from "../net/client";
 import { normalizeAddress } from "../net/pair";
 import type { Device } from "../net/types";
-import { appearance, setAppearance, type Appearance } from "../state/prefs";
+import { appearance, setAppearance, setToolCalls, toolCalls, type Appearance, type ToolCalls } from "../state/prefs";
 import { conn, connState, machine, machines, online, removeMachine, setRoutes } from "../state/store";
 import { language, setLanguage, tr, type Choice } from "./i18n";
 import { pairOpen, settingsNav } from "./nav";
@@ -85,6 +85,29 @@ export function SettingsRoot() {
           { value: "dark", label: tr("Dark") },
         ]}
       />
+      <GroupHead text={tr("Tool calls in chat")} />
+      <Group testID="tool-calls">
+        <Each
+          of={[
+            { value: "showAll" as ToolCalls, label: tr("Show all") },
+            { value: "hideSuccessful" as ToolCalls, label: tr("Hide successful") },
+            { value: "hideAll" as ToolCalls, label: tr("Hide all") },
+            { value: "zen" as ToolCalls, label: tr("Zen") },
+          ]}
+          key={(o) => o.value}
+        >
+          {(o, i) => (
+            <GroupRow
+              first={i() === 0}
+              title={o().label}
+              trailing={<If when={toolCalls() === o().value}><Icon name="check" color="primary" size={18} /></If>}
+              onPress={() => setToolCalls(o().value)}
+              testID={`tool-calls-${o().value}`}
+            />
+          )}
+        </Each>
+      </Group>
+      <Text class="px-4 text-[13px] text-fg-3">{tr("Hide the commands, edits, and searches agents run. Hide successful keeps failures. Zen shows only final answers. Approvals, questions, and errors always show.")}</Text>
       <GroupHead text={tr("Language")} />
       <Seg<Choice>
         testID="language"

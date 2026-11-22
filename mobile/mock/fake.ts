@@ -284,6 +284,9 @@ export class FakeHome {
     this.emit(threadId, { type: "toolFinished", item: read, kind: "read", title: "读了 desktop/ui/Sessions.tsx", status: "completed", output: "desktop/ui/Sessions.tsx · 1–220 行" });
     const sub = `i_${rand()}`;
     this.emit(threadId, { type: "toolStarted", item: sub, kind: "subagent", title: "Explore · codex · deepseek/v4" });
+    const thought = `i_${rand()}`;
+    this.emit(threadId, { type: "toolStarted", item: thought, kind: "reasoning", title: "Thinking" });
+    this.emit(threadId, { type: "toolFinished", item: thought, kind: "reasoning", title: "Thinking", status: "completed", output: "**找 project 字段从哪来**\n\nusage/<day>.jsonl 里有 project，只有 pansy run 发出的请求才带。" });
     const grep = `i_${rand()}`;
     this.emit(threadId, { type: "toolStarted", item: grep, kind: "search", title: '搜 "project"' });
     await this.ms(600);

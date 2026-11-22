@@ -379,6 +379,7 @@ impl State {
             output,
             status,
             at,
+            ms: None,
         }
     }
 }

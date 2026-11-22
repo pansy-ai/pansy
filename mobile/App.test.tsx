@@ -92,6 +92,19 @@ test("a turn works in the open, then folds behind how long it worked but for its
   await app.waitFor("text:读了 desktop/ui/Sessions.tsx");
 });
 
+test("Zen in settings leaves a thread its answers, the approval still asking", async () => {
+  const app = await launch();
+  await app.press("id:tab-settings");
+  await app.press("id:tool-calls-zen");
+  await app.waitUntil(() => app.storage()["pansy.toolCalls"] === "zen");
+  await app.press("id:tab-chats");
+  await app.press("id:thread-t_cost");
+  await app.waitFor("id:approval-card");
+  expect(app.shows("id:work-fold")).toBe(false);
+  expect(app.shows("id:turn-working")).toBe(false);
+  expect(app.texts().some((t) => t.includes("by_project"))).toBe(true);
+});
+
 test("a line typed while an approval waits declines it with that line", async () => {
   const app = await launch();
   await app.press("id:thread-t_cost");
@@ -130,6 +143,9 @@ test("a new message streams in, asks for approval and finishes", async () => {
   await app.waitUntil(() => called(app, "message.dispatch", (p) => p.dispatchMode === "start"));
   await app.waitFor("id:approval-card", { timeout: 15_000 });
   expect(app.texts().some((t) => t.includes("by_project"))).toBe(true);
+  // a call done while the turn goes on says so, spinning no more
+  expect(app.texts()).toContain("读了 desktop/ui/Sessions.tsx");
+  expect(app.texts()).not.toContain("读 desktop/ui/Sessions.tsx");
   await app.press("id:approve-session");
   await app.waitUntil(() => called(app, "runtime-request.respond", (p) => p.decision === "acceptForSession"));
   await app.waitFor("text:测试都通过了（42 个）。可以提交了。", { timeout: 15_000 });

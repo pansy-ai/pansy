@@ -56,13 +56,15 @@ export type ThreadSummary = {
 };
 
 export type Turn = {
-  role: "user" | "assistant" | "reasoning" | "tool" | "compact";
+  /** `end`: a turn ended here, `ms` it took where the agent wrote it, `status` `stopped` when the user stopped it. */
+  role: "user" | "assistant" | "reasoning" | "tool" | "compact" | "end";
   name?: string;
   text: string;
   input?: string;
   output?: string;
   status?: string;
   at?: string;
+  ms?: number;
 };
 
 export type Event =

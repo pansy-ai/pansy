@@ -7,6 +7,7 @@ import { Menu, MenuItem, NavPage } from "nsh/base";
 import { Haptics } from "nsh/mobile";
 import type { Decision, GitStatus, Mode, Question, ThreadSummary } from "../net/types";
 import { connState, machine, summary } from "../state/store";
+import { toolCalls } from "../state/prefs";
 import { ThreadView, type Approval, type Item } from "../state/thread";
 import { archive, copyLink, renaming } from "./actions";
 import { Accessory, Composer, type SendMode } from "./Composer";
@@ -19,7 +20,7 @@ import { ModeSheet } from "./ModeSheet";
 import { chats } from "./nav";
 import { AddDel, BLUR, Btn, GLASS, GlassButton, Icon, Loading, Note, SHADOW, Spinner, toast, type Color, type IconName } from "./parts";
 import { clock, now, tick, timer } from "./time";
-import { actionOf, duration, firstLine, leadAction, liveLabel, rowsOf, summary as workSummary, type Action, type Row, type WorkItem } from "./work";
+import { actionOf, duration, latestThought, leadAction, liveLabel, rowsOf, thoughtLine, summary as workSummary, type Action, type Row, type WorkItem } from "./work";
 
 const project = (t: ThreadSummary | undefined | null) => (t ? (t.folder.split(/[\\/]/).filter(Boolean).pop() ?? t.folder) : "");
 
@@ -133,10 +134,17 @@ function SubagentItem(props: { item: Extract<Item, { kind: "subagent" }> }) {
   );
 }
 
+/** A call or a thought; read from `props` where it shows, as the run it is in changes under it. */
 function WorkItemView(props: { item: WorkItem; live?: boolean }) {
-  const it = props.item;
-  if (it.kind === "tool") return <ToolItem item={it} />;
-  return <WorkRow icon="brain" color="fg-2" text={props.live ? liveLabel(it) : firstLine(it.text) || tr("Thought")} live={props.live} detail={it.text || undefined} tall={384} />;
+  const thought = () => props.item as Extract<WorkItem, { kind: "reasoning" }>;
+  return (
+    <If
+      when={props.item.kind === "tool"}
+      else={<WorkRow icon="brain" color="fg-2" text={props.live ? liveLabel(thought()) : thoughtLine(thought().text) || tr("Thought")} live={props.live} detail={thought().text || undefined} tall={384} />}
+    >
+      <ToolItem item={props.item as Extract<WorkItem, { kind: "tool" }>} />
+    </If>
+  );
 }
 
 /** A run of work: one call as its row; more under one line saying what they did, the running one's in the present. */
@@ -148,13 +156,24 @@ function Work(props: { items: WorkItem[]; live: boolean }) {
     const lead = leadAction(props.items);
     return lead === "thought" ? "brain" : ACTION_ICONS[lead];
   };
+  // going on and folded: the latest thought over the line, as T3's
+  const thought = () => (props.live && !open() ? latestThought(props.items) : "");
+  const line = () => (!props.live || open() ? workSummary(props.items) : thought() && latest().kind === "reasoning" ? tr("Thinking") : liveLabel(latest()));
   return (
     <If when={props.items.length > 1} else={<WorkItemView item={props.items[0]} live={props.live && latest().kind === "reasoning"} />}>
+      <If when={thought()}>
+        <View testID="work-thought" class="flex-row gap-1 py-[2px]">
+          <View class="h-6 w-6 items-center justify-center">
+            <Icon name="brain" color="fg-3" size={14} />
+          </View>
+          <Text class="min-w-0 flex-1 py-[2px] text-[14px] leading-[19px] text-fg-3 line-clamp-4">{thought()}</Text>
+        </View>
+      </If>
       <WorkRow
         testID="work-fold"
         icon={failed() ? "circle-x" : icon()}
         color={failed() ? "danger" : "fg-2"}
-        text={props.live && !open() ? liveLabel(latest()) : workSummary(props.items)}
+        text={line()}
         live={props.live && !open()}
         open={open()}
         onPress={() => open.set(!open())}
@@ -628,7 +647,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
               <If when={t()?.source === "terminal" && !view.items().some((i) => i.kind === "user" && i.id.startsWith("local"))}>
                 <Note tone="warning" icon="terminal" text={tr("Opened in a terminal: what you send first takes the session over")} />
               </If>
-              <Each of={rowsOf(view.items(), view.running(), opened(), view.approvals().length > 0)} key={(r) => (r.kind === "item" ? r.item.id : r.id)}>
+              <Each of={rowsOf(view.items(), view.running(), opened(), view.approvals().length > 0, toolCalls())} key={(r) => (r.kind === "item" ? r.item.id : r.id)}>
                 {(r) => <FeedRow row={r()} startedAt={view.startedAt()} onFold={fold} />}
               </Each>
             </If>

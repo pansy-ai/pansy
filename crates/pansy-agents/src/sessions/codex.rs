@@ -12,6 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::Value;
 use serde_json::value::RawValue;
@@ -488,6 +489,34 @@ fn reasoning(item: &Item) -> String {
     parts.join("\n\n")
 }
 
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct TaskEvent<'a> {
+    #[serde(rename = "type")]
+    kind: &'a str,
+    duration_ms: Option<u64>,
+    reason: &'a str,
+}
+
+/// A turn's end (`task_complete`, `turn_aborted`), how long it took as
+/// Codex wrote it.
+fn turn_end(payload: Option<&RawValue>, at: Option<DateTime<Utc>>) -> Option<Turn> {
+    let e = serde_json::from_str::<TaskEvent>(payload?.get()).ok()?;
+    let status = match e.kind {
+        "task_complete" => "",
+        "turn_aborted" if e.reason == "interrupted" => "stopped",
+        "turn_aborted" => "",
+        _ => return None,
+    };
+    Some(Turn {
+        role: "end",
+        status,
+        ms: e.duration_ms,
+        at,
+        ..Turn::default()
+    })
+}
+
 /// What was said in a rollout file.
 pub(super) fn transcript(path: &Path, keep: Keep) -> Result<Vec<Turn>> {
     let mut turns: Vec<Turn> = Vec::new();
@@ -504,6 +533,12 @@ pub(super) fn transcript(path: &Path, keep: Keep) -> Result<Vec<Turn>> {
                 at,
                 ..Turn::default()
             });
+            return;
+        }
+        if line.kind == "event_msg" && keep.ends {
+            if let Some(end) = turn_end(line.payload, at) {
+                turns.push(end);
+            }
             return;
         }
         if line.kind != "response_item" {

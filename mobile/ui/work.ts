@@ -3,7 +3,9 @@
 // the feed, each settled one folded behind "Worked for 1m 20s" but for its
 // answer; within a turn, adjacent tool calls under one line that says what
 // they did ("Ran 2 commands and changed 3 files"), the running one's line
-// in the present ("Running cargo"). Plain functions, so the tests read them.
+// in the present ("Running cargo") under the latest thought; and T3's
+// setting for which calls show. Plain functions, so the tests read them.
+import type { ToolCalls } from "../state/prefs";
 import type { Item } from "../state/thread";
 import { tr, trn } from "./i18n";
 
@@ -94,7 +96,7 @@ export function program(command: string): string | null {
 
 /** A running call's line, in the present: "Running cargo"; else what it works on. */
 export function liveLabel(item: WorkItem): string {
-  if (item.kind === "reasoning") return firstLine(item.text) || tr("Thinking");
+  if (item.kind === "reasoning") return thoughtLine(item.text) || tr("Thinking");
   if (actionOf(item.tool) === "command") {
     const p = program(item.title);
     return p ? tr("Running %s", p) : tr("Running command");
@@ -102,9 +104,26 @@ export function liveLabel(item: WorkItem): string {
   return item.title;
 }
 
-/** A thought's first line, for its row. */
-export function firstLine(text: string): string {
-  return text.trim().split("\n")[0]?.replace(/^[#*\s]+|\*+$/g, "").trim() ?? "";
+/** A thought in a line (T3's `liveThoughtLine`): its bold heading, else its first sentence, without Markdown. */
+export function thoughtLine(markdown: string): string {
+  const heading = /^\s*\*\*([^*\r\n]+)\*\*[ \t]*\r?(?:\n|$)/.exec(markdown)?.[1];
+  const text = (heading ?? markdown)
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^[ \t]*(?:#{1,6}|[-*+]|\d+\.)[ \t]+/gm, "")
+    .replace(/`+|\*\*|~~/g, "")
+    .replace(/(^|[^\w*])[*_]([^*_\n]+)[*_](?![\w*])/g, "$1$2")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (heading !== undefined) return text;
+  // CJK sentences end in full-width marks with no space after them
+  const end = /[.?!]["'”’)]?(?=\s)|[。！？]["'”’）」』]?/.exec(text);
+  return end ? text.slice(0, end.index + end[0].length) : text;
+}
+
+/** The latest thought of a run going on, to show over its line; none when nothing was thought in words. */
+export function latestThought(items: WorkItem[]): string {
+  const t = [...items].reverse().find((i): i is Extract<WorkItem, { kind: "reasoning" }> => i.kind === "reasoning" && !!i.text.trim());
+  return t ? thoughtLine(t.text) : "";
 }
 
 /** T3's durations: "820ms", "4.2s", "42s", "1m 20s", "1h 2m 3s". */
@@ -132,7 +151,7 @@ export type Row =
 
 const isWork = (i: Item): i is WorkItem => i.kind === "tool" || i.kind === "reasoning";
 
-/** How long a settled turn took: as it was seen to end, else from its prompt to its last timed item. */
+/** How long a settled turn took: as it was seen to end or its agent wrote it, else from its prompt to where it ended or its last entry. */
 function took(prompt: Item | undefined, turn: Item[]): number | undefined {
   const end = turn.find((i) => i.kind === "end") as Extract<Item, { kind: "end" }> | undefined;
   if (end?.ms !== undefined) return end.ms;
@@ -142,8 +161,19 @@ function took(prompt: Item | undefined, turn: Item[]): number | undefined {
   return Number.isFinite(from) && Number.isFinite(to) && to > from ? to - from : undefined;
 }
 
-/** `items` as rows: work gathered into runs, each settled turn folded unless `opened` has its fold; while an approval `waiting`, no "Thinking". */
-export function rowsOf(items: Item[], running: boolean, opened: ReadonlySet<string>, waiting = false): Row[] {
+/** Whether `visibility` leaves a call out: T3 hides commands, edits and searches, the failed kept by "Hide successful". */
+function left(item: Item, visibility: ToolCalls): boolean {
+  if (item.kind !== "tool" || visibility === "showAll") return false;
+  return visibility === "hideSuccessful" ? item.status === "done" : true;
+}
+
+/**
+ * `items` as rows: work gathered into runs, each settled turn folded unless
+ * `opened` has its fold; while an approval `waiting`, no "Thinking". With
+ * `visibility` the calls it hides are left out; "zen" keeps what was said
+ * and what went wrong alone, and never folds (T3 hides no message).
+ */
+export function rowsOf(items: Item[], running: boolean, opened: ReadonlySet<string>, waiting = false, visibility: ToolCalls = "showAll"): Row[] {
   // the turns: each from a prompt to the next
   const turns: { prompt?: Item; items: Item[] }[] = [];
   for (const item of items) {
@@ -154,7 +184,7 @@ export function rowsOf(items: Item[], running: boolean, opened: ReadonlySet<stri
   const out: Row[] = [];
   const shown = (list: Item[], live: boolean) => {
     for (const item of list) {
-      if (item.kind === "end") continue;
+      if (item.kind === "end" || left(item, visibility)) continue;
       if (isWork(item)) {
         const last = out[out.length - 1];
         if (last?.kind === "work") last.items.push(item);
@@ -168,10 +198,21 @@ export function rowsOf(items: Item[], running: boolean, opened: ReadonlySet<stri
   turns.forEach((turn, n) => {
     if (turn.prompt) out.push({ kind: "item", item: turn.prompt });
     const key = `f${turn.prompt?.id ?? "start"}`;
-    if (running && n === turns.length - 1) {
+    const live = running && n === turns.length - 1;
+    const last = turn.items.filter((i) => i.kind !== "end").pop();
+    if (visibility === "zen") {
+      // what it said and what went wrong; none of its work, nothing folded
+      shown(
+        turn.items.filter((i) => i.kind === "assistant" || i.kind === "notice" || i.kind === "compact"),
+        false,
+      );
+      const streaming = last?.kind === "assistant" && !!last.streaming;
+      if (live && !waiting && !streaming) out.push({ kind: "thinking", id: `t${key}` });
+      return;
+    }
+    if (live) {
       out.push({ kind: "working", id: `r${key}` });
       shown(turn.items, true);
-      const last = turn.items[turn.items.length - 1];
       const busy = waiting || turn.items.some((i) => (i.kind === "tool" || i.kind === "subagent") && i.status === "running") || (last?.kind === "assistant" && !!last.streaming);
       if (!busy) out.push({ kind: "thinking", id: `t${key}` });
       return;
@@ -179,7 +220,7 @@ export function rowsOf(items: Item[], running: boolean, opened: ReadonlySet<stri
     // settled: its last answer and what went wrong stay; the rest folds
     const answer = [...turn.items].reverse().find((i) => i.kind === "assistant");
     const stays = (i: Item) => i === answer || i.kind === "notice" || i.kind === "compact";
-    const hidden = turn.items.filter((i) => !stays(i) && i.kind !== "end");
+    const hidden = turn.items.filter((i) => !stays(i) && i.kind !== "end" && !left(i, visibility));
     const end = turn.items.find((i) => i.kind === "end") as Extract<Item, { kind: "end" }> | undefined;
     if (hidden.length || end?.stopped) {
       const ms = took(turn.prompt, turn.items);

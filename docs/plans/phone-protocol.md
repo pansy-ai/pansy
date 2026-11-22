@@ -146,10 +146,11 @@ type ThreadSummary = {
   queue?: number;
 };
 
-type Turn = {                 // 历史：pansy_agents::sessions::Turn 原样
-  role: "user" | "assistant" | "reasoning" | "tool" | "compact";
+type Turn = {                 // 历史：pansy_agents::sessions::timed_transcript
+  role: "user" | "assistant" | "reasoning" | "tool" | "compact" | "end";
   name?: string; text: string; input?: string; output?: string; status?: string; at?: string;
-};
+  ms?: number;                // end：回合用时，agent 写了才有（Codex 的 task_complete / turn_aborted）
+};                            // end 的 status 是 "stopped" 时是用户停的（Claude Code 只写这一种）
 
 type Event =                  // pansy_remote::Event，tag 是 type
   | { type: "thread"; thread: string; model: string }
