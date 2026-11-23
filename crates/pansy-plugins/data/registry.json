@@ -569,15 +569,6 @@
    "icon": "https://github.com/Kilo-Org.png"
   },
   {
-   "package": "@magpie-community/middleware-antigravity-cloak",
-   "name": "Antigravity Cloak",
-   "kind": "middleware",
-   "summary": {
-    "en": "Claude Code and Claude Desktop on an Antigravity account: the words Antigravity refuses their system prompt for are broken up, in what Antigravity alone is sent.",
-    "zh": "让 Claude Code 和 Claude Desktop 能用 Antigravity 账号：只在发给 Antigravity 的请求里拆开它据以拒绝系统提示词的那几个词。"
-   }
-  },
-  {
    "package": "@magpie-community/middleware-fovea",
    "name": "Fovea",
    "kind": "middleware",
