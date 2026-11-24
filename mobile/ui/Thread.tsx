@@ -10,7 +10,7 @@ import { connState, machine, summary } from "../state/store";
 import { toolCalls } from "../state/prefs";
 import { ThreadView, type Approval, type Change, type Item } from "../state/thread";
 import { archive, copyLink, renaming } from "./actions";
-import { Accessory, Composer, type SendMode } from "./Composer";
+import { Composer, type SendMode } from "./Composer";
 import { DiffView } from "./Diff";
 import { CommitSheet, GitSheet, type Way } from "./Git";
 import { tr, trn } from "./i18n";
@@ -619,10 +619,10 @@ export function ThreadPage(props: { machine: string; thread: string }) {
     view.approvals()[approvalAt()]?.questions
       ? tr("Or type your own answer")
       : view.approvals().length
-        ? tr("Decline with a line telling the agent what to do")
+        ? tr("Or tell it what to do instead")
         : view.running()
           ? tr("Steer it…")
-          : tr("Ask it to do something");
+          : tr("Ask anything");
 
   const toBottom = (animated = true) => scroller?.scrollTo({ y: Math.max(0, contentHeight), animated });
   // new content follows while the user is at the bottom
@@ -810,7 +810,6 @@ export function ThreadPage(props: { machine: string; thread: string }) {
             onStop={(force) => void call("run.interrupt", force ? { force: true } : {}).catch(() => {})}
             onModel={() => sheet.set("model")}
             onFocusChange={typing.set}
-            accessory={<Accessory mode={t()?.mode ?? "full"} onMode={() => sheet.set("mode")} />}
           />
         </View>
       </View>
@@ -823,6 +822,8 @@ export function ThreadPage(props: { machine: string; thread: string }) {
         effort={t()?.effort}
         thread
         onPick={(model, effort) => void update({ model, ...(effort ? { effort } : {}) })}
+        mode={t()?.mode ?? "full"}
+        onMode={(mode: Mode) => void update({ mode })}
       />
       <ModeSheet
         open={sheet() === "mode"}

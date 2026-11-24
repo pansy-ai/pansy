@@ -298,6 +298,17 @@ test("the model sheet lists groups and providers and changes the thread's model"
   await app.waitFor("text:cheap");
 });
 
+test("the model sheet opens on the thread's permission mode and changes it", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_relay");
+  await app.press("id:model-pill");
+  await app.waitFor("id:permission-full");
+  expect(app.texts()).toContain("Nothing asks. The agent runs commands and changes files.");
+  await app.press("id:permission-ask");
+  await app.waitUntil(() => called(app, "thread.update", (p) => p.mode === "ask"));
+  await app.waitFor("text:Commands and file changes wait for your approval.");
+});
+
 test("commits and pushes from the Git sheet, step by step", async () => {
   const app = await launch();
   await app.press("id:thread-t_cost");
