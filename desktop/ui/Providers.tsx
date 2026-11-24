@@ -895,6 +895,15 @@ function SignIns(props: { provider: Provider }) {
   );
 }
 
+/** What Gemini Code Assist risks: pansy calls it as Gemini CLI, not through Google's own program. */
+function GeminiRisk() {
+  return (
+    <Text testID="gemini-risk" class="rounded-[8px] bg-warning-soft px-3 py-2 text-[12px] leading-[18px] text-warning">
+      {tr("pansy calls Code Assist's API itself, as Gemini CLI, and serves it to your other agents; it doesn't run Google's own program. Google may count that against Gemini CLI's terms and suspend the account: use it at your own risk.")}
+    </Text>
+  );
+}
+
 /** Signs in to an account of a subscription: its page in the browser, or a code typed on it, while pansy waits. */
 function SignInModal(props: { kind: SubscriptionKind }) {
   const sub = () => subscriptionOf(props.kind);
@@ -973,6 +982,9 @@ function SignInModal(props: { kind: SubscriptionKind }) {
         <Text class="text-[12px] text-muted-foreground">
           {tr("pansy keeps the account in its logins.json, readable by you alone, and serves its plan's models as %s/…. An account %s is signed in to already is used as it is.", props.kind, AGENT_OF[props.kind])}
         </Text>
+        <If when={props.kind === "gemini-cli"}>
+          <GeminiRisk />
+        </If>
       </If>
       <If when={waiting()}>
         <If when={flow()!.code}>
@@ -1253,6 +1265,9 @@ function Editor(props: { provider: Provider }) {
       </If>
       <If when={sub()}>
         <FormRow label={tr("Accounts")} top hint={tr("Tried in order; the next one takes over when one runs out.")}>
+          <If when={sub() === "gemini-cli"}>
+            <GeminiRisk />
+          </If>
           <SignIns provider={p()} />
         </FormRow>
       </If>
