@@ -247,6 +247,19 @@ test("typing shrinks the card to what it asks; sending lets the keyboard go and 
   expect(answers(app)).toBe(undefined);
 });
 
+test("the thread's ⋯ renames it, and opens its settings", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_relay");
+  await app.waitFor("text:把 relay 的部署整理一下，现在一个脚本又建 Worker 又发证书");
+  await app.press("id:thread-more >> nth=0");
+  await app.press("id:more-rename");
+  await app.waitFor("id:rename-sheet");
+  await app.press("id:sheet-close");
+  await app.press("id:thread-more >> nth=0");
+  await app.press("id:more-settings");
+  await app.waitFor("id:mode-sheet");
+});
+
 test("a subagent opens on what it reported back", async () => {
   const app = await launch();
   await app.press("id:thread-t_relay");

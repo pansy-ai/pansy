@@ -2,7 +2,7 @@
 // answers flat in Markdown, its work folded into rows, subagents, the
 // approval card docked over the composer, the status capsule; the header's
 // Git, changes and more. History and live events come from state/thread.ts.
-import { cleanup, Clipboard, createAnimatedValue, effect, Scroll, signal, Text, token, View, type JSX, type ScrollRef } from "nsh";
+import { cleanup, Clipboard, createAnimatedValue, effect, Scroll, signal, Text, token, View, type HeaderItem, type JSX, type ScrollRef } from "nsh";
 import { Menu, MenuItem, NavPage } from "nsh/base";
 import { Haptics } from "nsh/mobile";
 import type { Decision, GitStatus, Mode, Question, ThreadSummary } from "../net/types";
@@ -554,18 +554,23 @@ function Capsule(props: { view: ThreadView; queue: number; onBottom: () => void;
   );
 }
 
-/** Git, the changes, more: a glass capsule of their own, or `bare` in the system's header, which draws its own around them (iOS 26's Liquid Glass). */
-function HeaderButtons(props: { t: ThreadSummary | null; onGit: () => void; onDiff: () => void; menu: JSX.Element; bare?: boolean }) {
+/** A hairline between two of the header's buttons, so three read as three. */
+const Divider = () => <View class="h-4 w-px bg-line" />;
+
+/** Git, the changes, more, in a glass capsule with a line between each: the desktops', the web's and Android's (iOS has UIKit's own, `headerItems`). */
+function HeaderButtons(props: { t: ThreadSummary | null; onGit: () => void; onDiff: () => void; menu: JSX.Element }) {
   return (
-    <View class={`flex-row items-center rounded-full ${props.bare ? "" : GLASS}`} style={props.bare ? undefined : { ...BLUR, boxShadow: SHADOW.small() }}>
+    <View class={`flex-row items-center rounded-full ${GLASS}`} style={{ ...BLUR, boxShadow: SHADOW.small() }}>
       <View role="button" testID="open-git" accessibilityLabel={tr("Git")} onPress={props.onGit} class="h-9 w-[38px] items-center justify-center active:opacity-50">
         <Icon name="git-branch" size={18} />
       </View>
+      <Divider />
       <View role="button" testID="open-diff" accessibilityLabel={tr("Changes")} onPress={props.onDiff} class="h-9 min-w-[38px] items-center justify-center px-2 active:opacity-50">
         <If when={props.t?.diff && (props.t.diff.add || props.t.diff.del)} else={<Icon name="file-diff" size={18} />}>
           <AddDel add={props.t?.diff?.add ?? 0} del={props.t?.diff?.del ?? 0} size={12} />
         </If>
       </View>
+      <Divider />
       {props.menu}
     </View>
   );
@@ -689,6 +694,23 @@ export function ThreadPage(props: { machine: string; thread: string }) {
     }
   };
 
+  // ⋯: what else a thread does, for the native menu (iOS) and the app's own (elsewhere)
+  const more = () => [
+    { id: "rename", label: tr("Rename"), icon: "pencil" as IconName, symbol: "pencil", run: () => t() && renaming.set({ machine: props.machine, thread: t()! }) },
+    { id: "settings", label: tr("Thread settings"), icon: "sliders-horizontal" as IconName, symbol: "slider.horizontal.3", run: () => sheet.set("mode") },
+    { id: "copy", label: tr("Copy link"), icon: "link" as IconName, symbol: "link", run: () => t() && void copyLink(props.machine, t()!) },
+    { id: "archive", label: tr("Settle"), icon: "archive" as IconName, symbol: "archivebox", run: () => t() && void archive(props.machine, t()!).then(() => chats.pop()) },
+  ];
+  // iOS: UIKit's own bar buttons, each its own symbol and press, ⋯ the system's menu (first at the trailing edge)
+  const headerItems = (): HeaderItem[] => {
+    const d = t()?.diff;
+    const counts = d && (d.add || d.del) ? `+${d.add} −${d.del}` : "";
+    return [
+      { key: "more", symbol: "ellipsis", label: tr("More"), menu: more().map((x) => ({ label: x.label, symbol: x.symbol, onSelect: x.run })) },
+      counts ? { key: "diff", label: counts, onPress: () => diffOpen.set(true) } : { key: "diff", symbol: "plus.forwardslash.minus", label: tr("Changes"), onPress: () => diffOpen.set(true) },
+      { key: "git", symbol: "arrow.triangle.branch", label: tr("Git"), onPress: () => sheet.set("git") },
+    ];
+  };
   const moreMenu = () => (
     <Menu
       placement="bottom"
@@ -701,15 +723,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
       popupClass="min-w-[240px] rounded-[14px] border border-border bg-glass p-1"
       popupStyle={BLUR}
     >
-      <Each
-        of={[
-          { id: "rename", label: tr("Rename"), icon: "pencil" as IconName, run: () => t() && renaming.set({ machine: props.machine, thread: t()! }) },
-          { id: "settings", label: tr("Thread settings"), icon: "sliders-horizontal" as IconName, run: () => sheet.set("mode") },
-          { id: "copy", label: tr("Copy link"), icon: "link" as IconName, run: () => t() && void copyLink(props.machine, t()!) },
-          { id: "archive", label: tr("Settle"), icon: "archive" as IconName, run: () => t() && void archive(props.machine, t()!).then(() => chats.pop()) },
-        ]}
-        key={(x) => x.id}
-      >
+      <Each of={more()} key={(x) => x.id}>
         {(x) => (
           <MenuItem onSelect={x().run} testID={`more-${x().id}`} class="min-h-11 flex-row items-center gap-3 rounded-[10px] px-4 focus:bg-line active:bg-line">
             <Text class="flex-1 text-[16px] text-fg">{x().label}</Text>
@@ -739,7 +753,8 @@ export function ThreadPage(props: { machine: string; thread: string }) {
     <NavPage
       title={t()?.title ?? ""}
       header={header}
-      headerRight={<HeaderButtons t={t()} onGit={() => sheet.set("git")} onDiff={() => diffOpen.set(true)} menu={moreMenu()} bare />}
+      headerRight={<HeaderButtons t={t()} onGit={() => sheet.set("git")} onDiff={() => diffOpen.set(true)} menu={moreMenu()} />}
+      ios={{ headerRightItems: headerItems() }}
       hidesBottomBarWhenPushed
     >
       <View class="flex-1 bg-screen">
