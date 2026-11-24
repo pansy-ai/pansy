@@ -23,6 +23,37 @@ pub struct PullRequest {
     pub state: String,
 }
 
+/// What one turn of a worktree thread changed: its checkpoint against the
+/// one before. Paths and counts only; the lines are read again from the
+/// checkpoints when the diff is opened.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TurnChange {
+    /// The turn's number: its checkpoint's.
+    pub turn: u32,
+    /// When it finished, to find its prompt in the agent's history.
+    pub at: DateTime<Utc>,
+    pub add: u32,
+    pub del: u32,
+    /// The files, [`TurnChange::FILES`] at most.
+    pub files: Vec<ChangedFile>,
+}
+
+impl TurnChange {
+    /// The files one turn's record keeps.
+    pub const FILES: usize = 100;
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangedFile {
+    pub path: String,
+    /// `added`, `modified`, `deleted` or `renamed`.
+    pub status: String,
+    pub add: u32,
+    pub del: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Thread {
@@ -68,6 +99,9 @@ pub struct Thread {
     /// Turns finished: the next checkpoint's number.
     #[serde(default)]
     pub turns: u32,
+    /// What each turn that changed something changed (worktree threads).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changes: Vec<TurnChange>,
     /// The branch was named after the first prompt already.
     #[serde(default)]
     pub named: bool,

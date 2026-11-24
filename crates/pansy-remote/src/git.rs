@@ -98,6 +98,9 @@ pub enum Scope {
     Base(String),
     /// Between two commits (checkpoints).
     Range { from: String, to: String },
+    /// The folder as it is against a commit (the turn going on, from the
+    /// last checkpoint).
+    Since(String),
 }
 
 /// A worktree pansy made.
@@ -436,6 +439,85 @@ pub fn checkpoint(dir: &Path, thread: &str, n: u32) -> Result<String> {
     Ok(commit)
 }
 
+/// What a thread's turn `n` changed: its checkpoint against the one before,
+/// as paths and counts (exact however long the diff; a binary file counts
+/// no lines). `None` when the turn changed nothing.
+pub fn turn_change(dir: &Path, thread: &str, n: u32) -> Result<Option<crate::store::TurnChange>> {
+    use crate::store::{ChangedFile, TurnChange};
+    if n == 0 {
+        return Ok(None);
+    }
+    let (from, to) = (checkpoint_ref(thread, n - 1), checkpoint_ref(thread, n));
+    let range = |kind: &str| {
+        run(
+            dir,
+            [
+                "diff",
+                "--no-ext-diff",
+                "--find-renames",
+                "-z",
+                kind,
+                &from,
+                &to,
+            ],
+        )
+    };
+    // `M\0path\0`, or `R100\0old\0new\0`
+    let mut status: HashMap<String, String> = HashMap::new();
+    let names = range("--name-status")?;
+    let mut parts = names.split('\0').filter(|p| !p.is_empty());
+    while let Some(code) = parts.next() {
+        let renamed = code.starts_with('R') || code.starts_with('C');
+        let path = if renamed { parts.nth(1) } else { parts.next() };
+        let Some(path) = path else { break };
+        let word = match code.chars().next() {
+            Some('A') => "added",
+            Some('D') => "deleted",
+            Some('R') => "renamed",
+            _ => "modified",
+        };
+        status.insert(path.to_owned(), word.into());
+    }
+    // `add\tdel\tpath\0`, or `add\tdel\t\0old\0new\0`; `-` for a binary file
+    let mut files = Vec::new();
+    let counts = range("--numstat")?;
+    let mut parts = counts.split('\0').filter(|p| !p.is_empty());
+    while let Some(head) = parts.next() {
+        let mut cols = head.splitn(3, '\t');
+        let (Some(add), Some(del), Some(path)) = (cols.next(), cols.next(), cols.next()) else {
+            break;
+        };
+        let path = if path.is_empty() {
+            match parts.nth(1) {
+                Some(new) => new.to_owned(),
+                None => break,
+            }
+        } else {
+            path.to_owned()
+        };
+        files.push(ChangedFile {
+            status: status.remove(&path).unwrap_or_else(|| "modified".into()),
+            path,
+            add: add.parse().unwrap_or(0),
+            del: del.parse().unwrap_or(0),
+        });
+    }
+    if files.is_empty() {
+        return Ok(None);
+    }
+    let (add, del) = files
+        .iter()
+        .fold((0, 0), |(a, d), f| (a + f.add, d + f.del));
+    files.truncate(TurnChange::FILES);
+    Ok(Some(TurnChange {
+        turn: n,
+        at: chrono::Utc::now(),
+        add,
+        del,
+        files,
+    }))
+}
+
 // --- Diffs ------------------------------------------------------------------------
 
 /// What changed in `scope`.
@@ -457,6 +539,7 @@ pub fn diff(dir: &Path, scope: &Scope) -> Result<Diff> {
             (from, snapshot(dir)?)
         }
         Scope::Range { from, to } => (from.clone(), to.clone()),
+        Scope::Since(from) => (from.clone(), snapshot(dir)?),
     };
     let patch = run(
         dir,
@@ -1036,6 +1119,44 @@ mod tests {
         run(d, ["add", "."]).unwrap();
         run(d, ["commit", "--quiet", "-m", "first"]).unwrap();
         dir
+    }
+
+    #[test]
+    fn a_turns_change_is_its_checkpoints_paths_and_counts() {
+        let dir = repo();
+        let d = dir.path();
+        std::fs::write(d.join("b.txt"), "a long line that stays put\nand another\n").unwrap();
+        std::fs::write(d.join("gone.txt"), "x\ny\n").unwrap();
+        run(d, ["add", "."]).unwrap();
+        run(d, ["commit", "--quiet", "-m", "more"]).unwrap();
+        checkpoint(d, "t_1", 0).unwrap();
+        assert_eq!(turn_change(d, "t_1", 0).unwrap(), None);
+        std::fs::write(d.join("a.txt"), "one\n2\nthree\nfour\n").unwrap();
+        std::fs::rename(d.join("b.txt"), d.join("moved b.txt")).unwrap();
+        std::fs::remove_file(d.join("gone.txt")).unwrap();
+        std::fs::write(d.join("new.txt"), "hello\n").unwrap();
+        checkpoint(d, "t_1", 1).unwrap();
+        let c = turn_change(d, "t_1", 1).unwrap().unwrap();
+        assert_eq!(c.turn, 1);
+        let mut files: Vec<_> = c
+            .files
+            .iter()
+            .map(|f| (f.path.as_str(), f.status.as_str(), f.add, f.del))
+            .collect();
+        files.sort();
+        assert_eq!(
+            files,
+            [
+                ("a.txt", "modified", 2, 1),
+                ("gone.txt", "deleted", 0, 2),
+                ("moved b.txt", "renamed", 0, 0),
+                ("new.txt", "added", 1, 0),
+            ]
+        );
+        assert_eq!((c.add, c.del), (3, 3));
+        // a turn that changed nothing has nothing to show
+        checkpoint(d, "t_1", 2).unwrap();
+        assert_eq!(turn_change(d, "t_1", 2).unwrap(), None);
     }
 
     #[test]

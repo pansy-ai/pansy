@@ -82,6 +82,42 @@ test("the approval card answers with runtime-request.respond, and the turn goes 
   await app.waitUntil(() => called(app, "runtime-request.respond", (p) => p.threadId === "t_cost" && p.requestId === "r_test" && p.decision === "accept"));
   await app.waitFor("text:测试都通过了（42 个）。可以提交了。");
   await app.waitUntil(() => !app.shows("id:approval-card"));
+  // a worktree's turn: what it changed comes under its answer once it ends
+  await app.waitFor("id:changes-1");
+  expect(app.texts()).toContain("Changed 2 files");
+  expect(app.texts()).toContain("crates/pansy-core/src/usage.rs");
+});
+
+test("a settled turn's changes card lists its files and opens that turn's diff", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_ojbk");
+  await app.waitFor("id:changes-1");
+  expect(app.texts()).toContain("Changed 7 files");
+  expect(app.texts()).toContain("backtest/spread.py");
+  // five, then the rest on asking
+  expect(app.texts()).not.toContain("pyproject.toml");
+  await app.press("text:Show all 7 files");
+  await app.waitFor("text:pyproject.toml");
+  await app.press("text:Changed 7 files");
+  await app.waitFor("id:diff-view");
+  await app.waitUntil(() => called(app, "git.diff", (p) => p.threadId === "t_ojbk" && p.scope === "turn" && p.turn === 1));
+  expect(app.texts()).toContain("Turn 1");
+  // another scope leaves the turn
+  await app.press("text:Uncommitted");
+  await app.waitUntil(() => called(app, "git.diff", (p) => p.threadId === "t_ojbk" && p.scope === "uncommitted"));
+  expect(app.texts()).toContain("This turn");
+});
+
+test("outside pansy's worktrees the diff has no turns to offer", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_relay");
+  await app.waitFor("text:把 relay 的部署整理一下，现在一个脚本又建 Worker 又发证书");
+  expect(app.shows("id:changes-1")).toBe(false);
+  await app.press("id:open-diff >> nth=0");
+  await app.waitFor("id:diff-view");
+  await app.waitUntil(() => called(app, "git.diff", (p) => p.threadId === "t_relay" && p.scope === "uncommitted"));
+  expect(app.texts()).not.toContain("This turn");
+  expect(app.texts()).not.toContain("Last turn");
 });
 
 test("a turn works in the open, then folds behind how long it worked but for its answer", async () => {

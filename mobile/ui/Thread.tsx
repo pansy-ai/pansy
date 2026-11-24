@@ -8,7 +8,7 @@ import { Haptics } from "nsh/mobile";
 import type { Decision, GitStatus, Mode, Question, ThreadSummary } from "../net/types";
 import { connState, machine, summary } from "../state/store";
 import { toolCalls } from "../state/prefs";
-import { ThreadView, type Approval, type Item } from "../state/thread";
+import { ThreadView, type Approval, type Change, type Item } from "../state/thread";
 import { archive, copyLink, renaming } from "./actions";
 import { Accessory, Composer, type SendMode } from "./Composer";
 import { DiffView } from "./Diff";
@@ -20,7 +20,7 @@ import { ModeSheet } from "./ModeSheet";
 import { chats } from "./nav";
 import { AddDel, BLUR, Btn, Field, GLASS, GlassButton, Icon, Loading, Note, SHADOW, Spinner, toast, type Color, type IconName } from "./parts";
 import { clock, now, tick, timer } from "./time";
-import { actionOf, duration, latestThought, leadAction, liveLabel, rowsOf, thoughtLine, summary as workSummary, type Action, type Row, type WorkItem } from "./work";
+import { actionOf, changesByPrompt, duration, latestThought, leadAction, liveLabel, rowsOf, thoughtLine, summary as workSummary, type Action, type Row, type WorkItem } from "./work";
 
 const project = (t: ThreadSummary | undefined | null) => (t ? (t.folder.split(/[\\/]/).filter(Boolean).pop() ?? t.folder) : "");
 
@@ -263,9 +263,48 @@ function Answer(props: { item: Extract<Item, { kind: "assistant" }> }) {
 }
 
 /** A row of the feed; its kind stays for its key, its content changes (props are read where they show). */
-function FeedRow(props: { row: Row; startedAt: number | null; onFold: (id: string) => void }) {
+/** Files a changes card lists before "Show all". */
+const CARD_FILES = 5;
+
+/** What a settled turn changed, under its answer (T3's changed-files card): the files with their counts; each opens the turn's diff. */
+function ChangesCard(props: { change: Change; onOpen: (turn: number) => void }) {
+  const all = signal(false);
+  const files = () => (all() ? props.change.files : props.change.files.slice(0, CARD_FILES));
+  const n = () => props.change.files.length;
+  const open = () => {
+    Haptics.selection();
+    props.onOpen(props.change.turn);
+  };
+  return (
+    <View testID={`changes-${props.change.turn}`} class="overflow-hidden rounded-2xl border border-border">
+      <View role="button" accessibilityLabel={tr("Open this turn's changes")} onPress={open} class="min-h-11 flex-row items-center gap-2 bg-grouped px-3 active:opacity-70">
+        <Icon name="file-diff" color="fg-2" size={15} />
+        <Text class="flex-1 text-[14px] font-medium text-fg">{trn(n(), "Changed 1 file", "Changed %d files", n())}</Text>
+        <AddDel add={props.change.add} del={props.change.del} size={13} mono />
+        <Icon name="chevron-right" color="fg-3" size={12} />
+      </View>
+      <Each of={files()} key={(f) => f.path}>
+        {(f) => (
+          <View role="button" accessibilityLabel={f().path} onPress={open} class="min-h-9 flex-row items-center gap-2 border-t border-line px-3 active:bg-line">
+            <Text class={`min-w-0 flex-1 font-mono text-[12px] line-clamp-1 ${f().status === "deleted" ? "text-fg-3 line-through" : "text-fg"}`}>{f().path}</Text>
+            <AddDel add={f().add} del={f().del} size={12} mono />
+          </View>
+        )}
+      </Each>
+      <If when={!all() && n() > CARD_FILES}>
+        <View role="button" testID={`changes-more-${props.change.turn}`} onPress={() => all.set(true)} class="min-h-9 justify-center border-t border-line px-3 active:bg-line">
+          <Text class="text-[13px] text-fg-2">{tr("Show all %d files", n())}</Text>
+        </View>
+      </If>
+    </View>
+  );
+}
+
+function FeedRow(props: { row: Row; startedAt: number | null; onFold: (id: string) => void; onTurnDiff: (turn: number) => void }) {
   const row = <K extends Row["kind"]>() => props.row as Extract<Row, { kind: K }>;
   switch (props.row.kind) {
+    case "changes":
+      return <ChangesCard change={row<"changes">().change} onOpen={props.onTurnDiff} />;
     case "work":
       return <Work items={row<"work">().items} live={row<"work">().live} />;
     case "fold":
@@ -537,6 +576,12 @@ export function ThreadPage(props: { machine: string; thread: string }) {
   const setAnswers = (a: Approval, answers: Answers) => questionAnswers.set({ ...questionAnswers(), [a.request]: answers });
   const sheet = signal<"model" | "mode" | "git" | "commit" | null>(null);
   const diffOpen = signal(false);
+  // the turn a changes card opened the diff on (else the diff's own scopes)
+  const diffTurn = signal<number | undefined>(undefined);
+  const openTurn = (turn: number) => {
+    diffTurn.set(turn);
+    diffOpen.set(true);
+  };
   const commitWay = signal<Way>("commit_push");
   const commitStatus = signal<GitStatus | null>(null);
   const atBottom = signal(true);
@@ -710,8 +755,8 @@ export function ThreadPage(props: { machine: string; thread: string }) {
               <If when={t()?.source === "terminal" && !view.items().some((i) => i.kind === "user" && i.id.startsWith("local"))}>
                 <Note tone="warning" icon="terminal" text={tr("Opened in a terminal: what you send first takes the session over")} />
               </If>
-              <Each of={rowsOf(view.items(), view.running(), opened(), view.approvals().length > 0, toolCalls())} key={(r) => (r.kind === "item" ? r.item.id : r.id)}>
-                {(r) => <FeedRow row={r()} startedAt={view.startedAt()} onFold={fold} />}
+              <Each of={rowsOf(view.items(), view.running(), opened(), view.approvals().length > 0, toolCalls(), changesByPrompt(view.items(), view.changes()))} key={(r) => (r.kind === "item" ? r.item.id : r.id)}>
+                {(r) => <FeedRow row={r()} startedAt={view.startedAt()} onFold={fold} onTurnDiff={openTurn} />}
               </Each>
             </If>
           </View>
@@ -775,9 +820,14 @@ export function ThreadPage(props: { machine: string; thread: string }) {
       <CommitSheet open={sheet() === "commit"} onClose={() => sheet.set(null)} machine={props.machine} thread={props.thread} model={t()?.model ?? ""} way={commitWay()} status={commitStatus()} />
       <DiffView
         open={diffOpen()}
-        onClose={() => diffOpen.set(false)}
+        onClose={() => {
+          diffOpen.set(false);
+          diffTurn.set(undefined);
+        }}
         machine={props.machine}
         thread={props.thread}
+        worktree={!!t()?.worktree}
+        turn={diffTurn()}
         onComment={(text) => draft.set(text + draft())}
       />
     </NavPage>

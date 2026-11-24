@@ -6,7 +6,7 @@
 // in the present ("Running cargo") under the latest thought; and T3's
 // setting for which calls show. Plain functions, so the tests read them.
 import type { ToolCalls } from "../state/prefs";
-import type { Item } from "../state/thread";
+import type { Change, Item } from "../state/thread";
 import { tr, trn } from "./i18n";
 
 export type WorkItem = Extract<Item, { kind: "tool" | "reasoning" }>;
@@ -147,7 +147,27 @@ export type Row =
   | { kind: "work"; id: string; items: WorkItem[]; live: boolean }
   | { kind: "fold"; id: string; label: string; open: boolean; foldable: boolean }
   | { kind: "working"; id: string }
-  | { kind: "thinking"; id: string };
+  | { kind: "thinking"; id: string }
+  | { kind: "changes"; id: string; change: Change };
+
+/**
+ * Each change by its turn's prompt: the one it came under live, else the
+ * last prompt before it finished (the history's times and the change's are
+ * both the computer's). A later change of the same prompt wins.
+ */
+export function changesByPrompt(items: Item[], changes: readonly Change[]): Map<string, Change> {
+  const prompts = items.filter((i): i is Extract<Item, { kind: "user" }> => i.kind === "user");
+  const out = new Map<string, Change>();
+  for (const c of [...changes].sort((a, b) => a.turn - b.turn)) {
+    let id = c.prompt && prompts.some((p) => p.id === c.prompt) ? c.prompt : undefined;
+    if (!id) {
+      const done = Date.parse(c.at);
+      id = [...prompts].reverse().find((p) => p.at && Date.parse(p.at) <= done)?.id;
+    }
+    if (id) out.set(id, c);
+  }
+  return out;
+}
 
 const isWork = (i: Item): i is WorkItem => i.kind === "tool" || i.kind === "reasoning";
 
@@ -173,7 +193,7 @@ function left(item: Item, visibility: ToolCalls): boolean {
  * `visibility` the calls it hides are left out; "zen" keeps what was said
  * and what went wrong alone, and never folds (T3 hides no message).
  */
-export function rowsOf(items: Item[], running: boolean, opened: ReadonlySet<string>, waiting = false, visibility: ToolCalls = "showAll"): Row[] {
+export function rowsOf(items: Item[], running: boolean, opened: ReadonlySet<string>, waiting = false, visibility: ToolCalls = "showAll", changes: ReadonlyMap<string, Change> = new Map()): Row[] {
   // the turns: each from a prompt to the next
   const turns: { prompt?: Item; items: Item[] }[] = [];
   for (const item of items) {
@@ -195,6 +215,11 @@ export function rowsOf(items: Item[], running: boolean, opened: ReadonlySet<stri
     const last = out[out.length - 1];
     if (live && last?.kind === "work") last.live = true;
   };
+  // under a settled turn's answer: what it changed (T3's changed-files card)
+  const changed = (prompt: Item | undefined) => {
+    const change = prompt && changes.get(prompt.id);
+    if (change) out.push({ kind: "changes", id: `c${prompt.id}`, change });
+  };
   turns.forEach((turn, n) => {
     if (turn.prompt) out.push({ kind: "item", item: turn.prompt });
     const key = `f${turn.prompt?.id ?? "start"}`;
@@ -208,6 +233,7 @@ export function rowsOf(items: Item[], running: boolean, opened: ReadonlySet<stri
       );
       const streaming = last?.kind === "assistant" && !!last.streaming;
       if (live && !waiting && !streaming) out.push({ kind: "thinking", id: `t${key}` });
+      else if (!live) changed(turn.prompt);
       return;
     }
     if (live) {
@@ -235,6 +261,7 @@ export function rowsOf(items: Item[], running: boolean, opened: ReadonlySet<stri
       out.push({ kind: "fold", id: key, label, open, foldable: hidden.length > 0 });
       shown(open ? turn.items : turn.items.filter(stays), false);
     } else shown(turn.items, false);
+    changed(turn.prompt);
   });
   return out;
 }

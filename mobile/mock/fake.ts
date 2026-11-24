@@ -5,7 +5,7 @@
 // WebSocket (Bun), test/harness.tsx puts it behind the app's transport.
 // It checks no DPoP proof and no token: a stand-in to try the app with.
 import type { Socket } from "../net/transport";
-import type { Decision, Device, Diff, DiffFile, Environment, Event, GitStatus, Models, Project, Seq, ThreadSummary, Totals, Turn, Usage } from "../net/types";
+import type { ChangedFile, Decision, Device, Diff, DiffFile, Environment, Event, GitStatus, Models, Project, Seq, ThreadSummary, Totals, Turn, TurnChange, Usage } from "../net/types";
 
 export type Client = { send(msg: unknown): void; shell: boolean; threads: Set<string>; deviceId: string };
 export type HttpResult = { status: number; body?: unknown; headers?: Record<string, string> };
@@ -131,7 +131,7 @@ function seedThreads(): ThreadSummary[] {
     t({ id: "t_sub", title: "修复 Codex 子 agent 的模型头", folder: "/home/me/pansy", agent: "codex", model: "group/daily", effort: "medium", status: "working", branch: "main", startedAt: ago(192), updatedAt: ago(5), queue: 1, diff: { add: 18, del: 3 } }),
     t({ id: "t_relay", title: "relay 的部署脚本要不要拆成两步？", folder: "/home/me/umiro", agent: "codex", model: "kimi/k3", status: "idle", branch: "dev", updatedAt: ago(1800) }),
     t({ id: "t_aur", title: "AUR 包的 PKGBUILD 校验和", folder: "/home/me/pansy", agent: "codex", model: "deepseek/v4", status: "failed", error: "cargo test：3 个测试失败（pansy-agents）", branch: "aur", updatedAt: ago(3600) }),
-    t({ id: "t_ojbk", title: "ojbk：港股开盘的价差回测", folder: "/home/me/ojbk", agent: "claude-code", model: "deepseek/v4", status: "done", unread: true, pr: { number: 16, url: "https://github.com/example/ojbk/pull/16", state: "open" }, diff: { add: 214, del: 37 }, branch: "spread-backtest", updatedAt: ago(7200) }),
+    t({ id: "t_ojbk", title: "ojbk：港股开盘的价差回测", folder: "/home/me/ojbk", workdir: "/home/me/.pansy/worktrees/ojbk/spread-backtest-7c1e", agent: "claude-code", model: "deepseek/v4", status: "done", unread: true, pr: { number: 16, url: "https://github.com/example/ojbk/pull/16", state: "open" }, diff: { add: 214, del: 37 }, branch: "spread-backtest", worktree: true, base: "main", updatedAt: ago(7200) }),
     t({ id: "s:claude-code:9f1e", title: "README 的截图换成深色", folder: "/home/me/pansy", agent: "claude-code", model: "claude-sonnet-5.5", status: "idle", source: "terminal", session: "9f1e", updatedAt: ago(86_400 + 3600) }),
     t({ id: "t_nsh", title: "NSH 0.6.1 的升级", folder: "/home/me/pansy", agent: "codex", model: "group/daily", status: "idle", archived: true, updatedAt: ago(86_400 * 3) }),
     t({ id: "t_dl", title: "下载页只给安装包", folder: "/home/me/pansy", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 3) }),
@@ -146,6 +146,28 @@ function seedThreads(): ThreadSummary[] {
     t({ id: "t_s8", title: "Web 新增插件模块", folder: "/home/me/pansy-site", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 9) }),
     t({ id: "t_s9", title: "umiro 的中继压测", folder: "/home/me/umiro", agent: "codex", model: "deepseek/v4", status: "idle", archived: true, updatedAt: ago(86_400 * 10) }),
   ];
+}
+
+/** A change's files as a turn's record keeps them: paths and counts. */
+const changed = (files: DiffFile[]): ChangedFile[] => files.map((f) => ({ path: f.path, status: f.status as ChangedFile["status"], add: f.add, del: f.del }));
+const turnChange = (turn: number, at: string, files: ChangedFile[]): TurnChange => ({ turn, at, add: files.reduce((n, f) => n + f.add, 0), del: files.reduce((n, f) => n + f.del, 0), files });
+
+/** What the worktree threads' settled turns changed: t_ojbk's backtest, seven files. */
+function seedChanges(): Record<string, TurnChange[]> {
+  const f = (path: string, status: ChangedFile["status"], add: number, del: number): ChangedFile => ({ path, status, add, del });
+  return {
+    t_ojbk: [
+      turnChange(1, ago(7200), [
+        f("backtest/spread.py", "added", 132, 0),
+        f("backtest/fees.py", "added", 41, 0),
+        f("backtest/data.py", "modified", 18, 9),
+        f("tests/test_spread.py", "added", 12, 0),
+        f("README.md", "modified", 8, 3),
+        f("notebooks/old_spread.ipynb", "deleted", 0, 25),
+        f("pyproject.toml", "modified", 3, 0),
+      ]),
+    ],
+  };
 }
 
 function seedHistory(): Record<string, Turn[]> {
@@ -196,6 +218,8 @@ export class FakeHome {
   readonly history = new Map<string, Turn[]>();
   readonly live = new Map<string, Seq<Event>[]>();
   readonly seqs = new Map<string, number>();
+  /** What each worktree thread's turns changed (thread.subscribe's `changes`). */
+  readonly changes = new Map<string, TurnChange[]>();
   readonly devices: Device[] = [];
   readonly clients = new Set<Client>();
   readonly queued = new Map<string, string[]>();
@@ -223,6 +247,7 @@ export class FakeHome {
     };
     for (const t of seedThreads()) this.threads.set(t.id, t);
     for (const [id, h] of Object.entries(seedHistory())) this.history.set(id, h);
+    for (const [id, c] of Object.entries(seedChanges())) this.changes.set(id, c);
     this.devices.push({ id: "d_phone", name: "iPhone", platform: "ios", scopes: SCOPES, approval: "approved", createdAt: ago(86_400 * 2), lastSeen: ago(30) });
     this.devices.push({ id: "d_ipad", name: "Safari · iPad", platform: "web", scopes: ["orchestration:read"], approval: "approved", createdAt: ago(86_400 * 10), lastSeen: ago(86_400 * 3) });
     // the waiting approval of t_cost, and the turn t_sub is in
@@ -356,6 +381,13 @@ export class FakeHome {
 
   private finish(threadId: string, turn: string, status: string) {
     this.emit(threadId, { type: "turnFinished", turn, status });
+    // a worktree's turn checkpointed: what the scripted turn changed (Sessions.tsx and usage.rs), as pansy's hub sends it
+    if (this.threads.get(threadId)?.worktree && status === "completed") {
+      const all = this.changes.get(threadId) ?? [];
+      const change = turnChange(all.length + 1, new Date().toISOString(), changed([SESSIONS, USAGE]));
+      this.changes.set(threadId, [...all, change]);
+      this.emit(threadId, { type: "turnChanges", ...change });
+    }
     this.runs.delete(threadId);
     const next = this.queued.get(threadId)?.shift();
     this.change(threadId, { status: status === "completed" ? "done" : "idle", startedAt: undefined, unread: true, queue: this.queued.get(threadId)?.length ?? 0 });
@@ -463,7 +495,7 @@ export class FakeHome {
         const again = typeof p.after === "number";
         const after = again ? (p.after as number) : 0;
         const live = (this.live.get(t.id) ?? []).filter((e) => e.seq > after);
-        return { thread: t, history: again ? [] : (this.history.get(t.id) ?? []), live, seq: this.seqs.get(t.id) ?? 0 };
+        return { thread: t, history: again ? [] : (this.history.get(t.id) ?? []), live, seq: this.seqs.get(t.id) ?? 0, changes: this.changes.get(t.id) ?? [] };
       }
       case "thread.unsubscribe":
         client.threads.delete(String(p.threadId));
@@ -588,6 +620,13 @@ export class FakeHome {
       }
       case "git.diff": {
         this.thread(p);
+        // a turn asked for by number: its record's files, the lines of those the mock has
+        if (typeof p.turn === "number") {
+          const change = (this.changes.get(String(p.threadId)) ?? []).find((c) => c.turn === p.turn);
+          if (!change) throw err("bad_request", `no turn ${p.turn} in this thread`);
+          const known = [SESSIONS, USAGE, I18N];
+          return { files: change.files.map((f) => known.find((k) => k.path === f.path) ?? { ...f, hunks: [] }) } satisfies Diff;
+        }
         const files = ({ turn: [SESSIONS, USAGE], lastTurn: [USAGE], uncommitted: [SESSIONS, USAGE, I18N], base: [SESSIONS, USAGE, I18N] } as Record<string, DiffFile[]>)[String(p.scope)] ?? [];
         return { files } satisfies Diff;
       }

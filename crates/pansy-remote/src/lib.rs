@@ -103,6 +103,10 @@ pub enum Event {
     },
     /// The agent's process ended.
     Exited { code: Option<i32> },
+    /// What the turn just finished changed, after its `turnFinished`: a
+    /// worktree thread's, when it changed something. Sent by the hub, not
+    /// the agent.
+    TurnChanges(store::TurnChange),
 }
 
 /// How freely the agent works, as T3 Code names the modes; an agent that

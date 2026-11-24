@@ -1,9 +1,11 @@
 // 改动 (phone-ui.md "8. 改动"): a full-screen diff of four scopes
-// (git.diff): this turn, the last turn, uncommitted, all against the base.
+// (git.diff): this turn, the last turn, uncommitted, all against the base;
+// the turns' only in pansy's worktrees (the checkpoints are there alone).
+// A changes card opens it on its own turn.
 // Files can be folded; lines are 22pt with a 46pt gutter in T3's colors,
 // scrolling sideways. Hold a line to select, tap more, and "Comment" puts
 // them in the composer.
-import { resource, Scroll, signal, Text, token, View } from "nsh";
+import { effect, resource, Scroll, signal, Text, token, View } from "nsh";
 import { Dialog } from "nsh/base";
 import { Haptics } from "nsh/mobile";
 import type { Diff, DiffFile, DiffLine, DiffScope } from "../net/types";
@@ -115,15 +117,33 @@ function quote(diff: Diff, sel: Set<string>): string {
   return out.join("\n\n") + "\n\n";
 }
 
-export function DiffView(props: { open: boolean; onClose: () => void; machine: string; thread: string; onComment: (text: string) => void; scope?: DiffScope }) {
-  const scope = signal<DiffScope>(props.scope ?? "turn");
+export function DiffView(props: { open: boolean; onClose: () => void; machine: string; thread: string; onComment: (text: string) => void; worktree: boolean; turn?: number; scope?: DiffScope }) {
+  const first = (): DiffScope => (props.turn !== undefined ? "turn" : (props.scope ?? (props.worktree ? "turn" : "uncommitted")));
+  const scope = signal<DiffScope>(first());
+  // the turn a changes card asked for, until another scope is chosen
+  const pinned = signal<number | undefined>(props.turn);
+  effect(() => {
+    if (!props.open) return;
+    scope.set(first());
+    pinned.set(props.turn);
+  });
   const folded = signal<Set<string>>(new Set());
   const list = signal(true);
   const selected = signal<Set<string>>(new Set());
   const diff = resource(
-    () => (props.open ? { s: scope(), m: props.machine, t: props.thread } : null),
-    async (src) => conn(src.m)!.call<Diff>("git.diff", { threadId: src.t, scope: src.s }),
+    () => (props.open ? { s: scope(), n: scope() === "turn" ? pinned() : undefined, m: props.machine, t: props.thread } : null),
+    async (src) => conn(src.m)!.call<Diff>("git.diff", { threadId: src.t, scope: src.s, ...(src.n !== undefined ? { turn: src.n } : {}) }),
   );
+  const scopes = () => [
+    ...(props.worktree
+      ? [
+          { value: "turn" as const, label: pinned() !== undefined ? tr("Turn %d", pinned()!) : tr("This turn") },
+          { value: "lastTurn" as const, label: tr("Last turn") },
+        ]
+      : []),
+    { value: "uncommitted" as const, label: tr("Uncommitted") },
+    { value: "base" as const, label: tr("All") },
+  ];
   const add = () => (diff()?.files ?? []).reduce((n, f) => n + f.add, 0);
   const del = () => (diff()?.files ?? []).reduce((n, f) => n + f.del, 0);
   const select = (s: Sel) => {
@@ -153,14 +173,10 @@ export function DiffView(props: { open: boolean; onClose: () => void; machine: s
             value={scope()}
             onChange={(s) => {
               selected.set(new Set());
+              pinned.set(undefined);
               scope.set(s);
             }}
-            options={[
-              { value: "turn", label: tr("This turn") },
-              { value: "lastTurn", label: tr("Last turn") },
-              { value: "uncommitted", label: tr("Uncommitted") },
-              { value: "base", label: tr("All") },
-            ]}
+            options={scopes()}
           />
         </View>
         <Scroll class="flex-1">

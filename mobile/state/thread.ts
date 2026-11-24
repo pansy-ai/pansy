@@ -3,7 +3,7 @@
 // turn runs; subscribed again with `after` (the last seq) on reconnect.
 import { signal } from "nsh";
 import type { Connection } from "../net/client";
-import type { Event, Question, Seq, Subscribed, ThreadSummary, Turn } from "../net/types";
+import type { Event, Question, Seq, Subscribed, ThreadSummary, Turn, TurnChange } from "../net/types";
 import { conn, putSummary } from "./store";
 
 export type ToolStatus = "running" | "done" | "failed" | "declined" | "waiting";
@@ -64,7 +64,10 @@ export function fromHistory(turns: Turn[]): Item[] {
   });
 }
 
-export type FeedState = { items: Item[]; approvals: Approval[]; running: boolean; startedAt: number | null };
+/** A turn's changes, with the prompt it came under when it came live (else its time finds it). */
+export type Change = TurnChange & { prompt?: string };
+
+export type FeedState = { items: Item[]; approvals: Approval[]; running: boolean; startedAt: number | null; changes?: Change[] };
 
 /** The turn going on, ended: the reply done streaming, the calls still running as `running`, then `notice` and the end. */
 function close(state: FeedState, running: ToolStatus, notice: Item[], stopped: boolean, now: number): FeedState {
@@ -129,6 +132,12 @@ export function apply(state: FeedState, event: Event, now = Date.now()): FeedSta
       const notice: Item[] = failed ? [{ kind: "notice", id: `n${now}`, text: event.error ?? event.status, tone: "danger" }] : [];
       return { ...close(state, "done", notice, stopped, now), approvals: state.approvals };
     }
+    case "turnChanges": {
+      // after its turnFinished: the turn whose prompt came last; once per turn (the subscription's list and the log both bring it)
+      const { type: _, ...change } = event;
+      const prompt = [...items].reverse().find((i) => i.kind === "user")?.id;
+      return { ...state, changes: [...(state.changes ?? []).filter((c) => c.turn !== change.turn), { ...change, prompt }] };
+    }
     case "exited":
       // quit while it worked: what was running never finishes, so the turn ends here, saying so
       if (state.running) return close(state, "failed", [{ kind: "notice", id: `n${now}`, text: "", tone: "danger", exited: { code: event.code } }], false, now);
@@ -144,6 +153,7 @@ export class ThreadView {
   readonly approvals = signal<Approval[]>([]);
   readonly running = signal(false);
   readonly startedAt = signal<number | null>(null);
+  readonly changes = signal<Change[]>([]);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   private lastSeq = 0;
@@ -160,7 +170,7 @@ export class ThreadView {
   }
 
   private state(): FeedState {
-    return { items: this.items(), approvals: this.approvals(), running: this.running(), startedAt: this.startedAt() };
+    return { items: this.items(), approvals: this.approvals(), running: this.running(), startedAt: this.startedAt(), changes: this.changes() };
   }
 
   private set(s: FeedState) {
@@ -168,6 +178,7 @@ export class ThreadView {
     this.approvals.set(s.approvals);
     this.running.set(s.running);
     this.startedAt.set(s.startedAt);
+    this.changes.set(s.changes ?? []);
   }
 
   private take(e: Seq<Event>) {
@@ -200,7 +211,7 @@ export class ThreadView {
       this.local.set(r.thread);
       if (!again) {
         const t = r.thread;
-        this.set({ items: fromHistory(r.history), approvals: [], running: t.status === "working" || t.status === "approval", startedAt: t.startedAt ? Date.parse(t.startedAt) : null });
+        this.set({ items: fromHistory(r.history), approvals: [], running: t.status === "working" || t.status === "approval", startedAt: t.startedAt ? Date.parse(t.startedAt) : null, changes: r.changes ?? [] });
       }
       for (const e of r.live) this.take(e);
       this.lastSeq = Math.max(this.lastSeq, r.seq);

@@ -229,6 +229,14 @@ fn show(event: &Event, json: bool) -> Result<()> {
             "· codex ended{}",
             code.map(|c| format!(" ({c})")).unwrap_or_default()
         )?,
+        // the hub's, after a worktree thread's turn; a drive here has none
+        Event::TurnChanges(c) => writeln!(
+            out,
+            "· changed {} files +{} -{}",
+            c.files.len(),
+            c.add,
+            c.del
+        )?,
     }
     Ok(())
 }

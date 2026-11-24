@@ -79,14 +79,19 @@ export type Event =
   | { type: "question"; request: string; questions: Question[] }
   | { type: "resolved"; request: string }
   | { type: "turnFinished"; turn: string; status: string; error?: string }
-  | { type: "exited"; code?: number };
+  | { type: "exited"; code?: number }
+  | ({ type: "turnChanges" } & TurnChange);
+
+/** What one turn of a worktree thread changed: its checkpoint against the one before. */
+export type TurnChange = { turn: number; at: string; add: number; del: number; files: ChangedFile[] };
+export type ChangedFile = { path: string; status: "added" | "modified" | "deleted" | "renamed"; add: number; del: number };
 
 /** One of a question's choices (Claude Code's AskUserQuestion). */
 export type Question = { question: string; header: string; multiSelect: boolean; options: { label: string; description: string }[] };
 
 export type Seq<T> = { seq: number; event: T };
 
-export type Subscribed = { thread: ThreadSummary; history: Turn[]; live: Seq<Event>[]; seq: number };
+export type Subscribed = { thread: ThreadSummary; history: Turn[]; live: Seq<Event>[]; seq: number; changes?: TurnChange[] };
 
 export type Group = { id: string; name: string; members: number; routing: string };
 export type Model = { id: string; name: string; context?: number; reasoning?: boolean; vision?: boolean };

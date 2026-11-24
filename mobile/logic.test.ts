@@ -11,7 +11,7 @@ import { answersOf, typedAnswer } from "./ui/Thread";
 import { connectionTitle } from "./ui/Threads";
 import { since } from "./ui/time";
 import { compact, top } from "./ui/Usage";
-import { duration, latestThought, program, rowsOf, summary as workSummary, thoughtLine, type WorkItem } from "./ui/work";
+import { changesByPrompt, duration, latestThought, program, rowsOf, summary as workSummary, thoughtLine, type WorkItem } from "./ui/work";
 import type { Item } from "./state/thread";
 
 test("reads a pairing link's address and secret from #pair=", () => {
@@ -171,6 +171,38 @@ test("a command's program, and T3's durations", () => {
   expect(duration(4_240)).toBe("4.2s");
   expect(duration(80_000)).toBe("1m 20s");
   expect(duration(3_723_000)).toBe("1h 2m 3s");
+});
+
+test("a turn's changes find its prompt, live by the prompt, from history by time", () => {
+  const items: Item[] = [
+    { kind: "user", id: "p1", text: "first", at: "2026-11-24T10:00:00Z" },
+    { kind: "assistant", id: "a1", text: "done", at: "2026-11-24T10:02:00Z" },
+    { kind: "user", id: "p2", text: "second", at: "2026-11-24T10:05:00Z" },
+    { kind: "assistant", id: "a2", text: "done too", at: "2026-11-24T10:09:00Z" },
+  ];
+  const change = (turn: number, at: string, prompt?: string) => ({ turn, at, add: 1, del: 0, files: [{ path: `f${turn}`, status: "added" as const, add: 1, del: 0 }], prompt });
+  const byPrompt = changesByPrompt(items, [change(2, "2026-11-24T10:09:30Z"), change(1, "2026-11-24T10:02:10Z"), change(0, "2026-11-24T09:00:00Z")]);
+  expect(byPrompt.get("p1")?.turn).toBe(1);
+  expect(byPrompt.get("p2")?.turn).toBe(2);
+  // before any prompt: nowhere to show it
+  expect(byPrompt.size).toBe(2);
+  // live, the prompt it came under, whatever the phone's clock said
+  expect(changesByPrompt(items, [change(3, "2026-11-24T09:00:00Z", "p2")]).get("p2")?.turn).toBe(3);
+  // under each settled turn, after its answer; a turn running has none yet
+  const rows = rowsOf(items, true, new Set(), false, "showAll", byPrompt);
+  expect(rows.map((r) => (r.kind === "item" ? r.item.id : r.kind))).toEqual(["p1", "a1", "changes", "p2", "working", "a2", "thinking"]);
+  expect(rowsOf(items, false, new Set(), false, "zen", byPrompt).filter((r) => r.kind === "changes").length).toBe(2);
+});
+
+test("a turn's changes come after its end, once, under its prompt", () => {
+  let s: FeedState = { items: fromHistory([{ role: "user", text: "go" }]), approvals: [], running: true, startedAt: 0, changes: [{ turn: 1, at: "2026-11-24T10:00:00Z", add: 1, del: 0, files: [] }] };
+  const event = { type: "turnChanges" as const, turn: 2, at: "2026-11-24T10:10:00Z", add: 3, del: 1, files: [{ path: "a.rs", status: "modified" as const, add: 3, del: 1 }] };
+  s = apply(s, event);
+  s = apply(s, event);
+  expect(s.changes?.map((c) => [c.turn, c.prompt])).toEqual([
+    [1, undefined],
+    [2, "h0"],
+  ]);
 });
 
 test("a settled turn folds behind how long it worked but for its answer; the one running doesn't", () => {
