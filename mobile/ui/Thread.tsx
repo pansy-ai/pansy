@@ -2,8 +2,8 @@
 // answers flat in Markdown, its work folded into rows, subagents, the
 // approval card docked over the composer, the status capsule; the header's
 // Git, changes and more. History and live events come from state/thread.ts.
-import { cleanup, Clipboard, createAnimatedValue, effect, Scroll, signal, Text, token, View, type HeaderItem, type JSX, type ScrollRef } from "nsh";
-import { Menu, MenuItem, NavPage } from "nsh/base";
+import { cleanup, Clipboard, createAnimatedValue, effect, platform, Scroll, signal, Text, token, View, type JSX, type ScrollRef } from "nsh";
+import { Menu, MenuButton, MenuItem, NavPage } from "nsh/base";
 import { Haptics } from "nsh/mobile";
 import type { Decision, GitStatus, Mode, Question, ThreadSummary } from "../net/types";
 import { connState, machine, summary } from "../state/store";
@@ -557,10 +557,10 @@ function Capsule(props: { view: ThreadView; queue: number; onBottom: () => void;
 /** A hairline between two of the header's buttons, so three read as three. */
 const Divider = () => <View class="h-4 w-px bg-line" />;
 
-/** Git, the changes, more, in a glass capsule with a line between each: the desktops', the web's and Android's (iOS has UIKit's own, `headerItems`). */
-function HeaderButtons(props: { t: ThreadSummary | null; onGit: () => void; onDiff: () => void; menu: JSX.Element }) {
+/** Git, the changes, more, a line between each: a glass capsule of their own, or `bare` in the system's header, which draws its own around them (iOS 26's Liquid Glass). */
+function HeaderButtons(props: { t: ThreadSummary | null; onGit: () => void; onDiff: () => void; menu: JSX.Element; bare?: boolean }) {
   return (
-    <View class={`flex-row items-center rounded-full ${GLASS}`} style={{ ...BLUR, boxShadow: SHADOW.small() }}>
+    <View class={`flex-row items-center rounded-full ${props.bare ? "" : GLASS}`} style={props.bare ? undefined : { ...BLUR, boxShadow: SHADOW.small() }}>
       <View role="button" testID="open-git" accessibilityLabel={tr("Git")} onPress={props.onGit} class="h-9 w-[38px] items-center justify-center active:opacity-50">
         <Icon name="git-branch" size={18} />
       </View>
@@ -701,17 +701,20 @@ export function ThreadPage(props: { machine: string; thread: string }) {
     { id: "copy", label: tr("Copy link"), icon: "link" as IconName, symbol: "link", run: () => t() && void copyLink(props.machine, t()!) },
     { id: "archive", label: tr("Settle"), icon: "archive" as IconName, symbol: "archivebox", run: () => t() && void archive(props.machine, t()!).then(() => chats.pop()) },
   ];
-  // iOS: UIKit's own bar buttons, each its own symbol and press, ⋯ the system's menu (first at the trailing edge)
-  const headerItems = (): HeaderItem[] => {
-    const d = t()?.diff;
-    const counts = d && (d.add || d.del) ? `+${d.add} −${d.del}` : "";
-    return [
-      { key: "more", symbol: "ellipsis", label: tr("More"), menu: more().map((x) => ({ label: x.label, symbol: x.symbol, onSelect: x.run })) },
-      counts ? { key: "diff", label: counts, onPress: () => diffOpen.set(true) } : { key: "diff", symbol: "plus.forwardslash.minus", label: tr("Changes"), onPress: () => diffOpen.set(true) },
-      { key: "git", symbol: "arrow.triangle.branch", label: tr("Git"), onPress: () => sheet.set("git") },
-    ];
-  };
-  const moreMenu = () => (
+  // iOS: the system's own pull-down menu around the app's ⋯; Android and the web have none for a view, so the app's own
+  const moreMenu = () =>
+    platform.os === "ios" ? (
+      <MenuButton
+        testID="thread-more"
+        accessibilityLabel={tr("More")}
+        items={more().map((x) => ({ id: x.id, label: x.label, icon: x.symbol }))}
+        onSelect={({ id }) => more().find((x) => x.id === id)?.run()}
+      >
+        <View class="h-9 w-[38px] items-center justify-center">
+          <Icon name="ellipsis" size={18} />
+        </View>
+      </MenuButton>
+    ) : (
     <Menu
       placement="bottom"
       align="end"
@@ -732,7 +735,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
         )}
       </Each>
     </Menu>
-  );
+    );
 
   const header = (
     <View class="h-[52px] flex-row items-center gap-2 bg-screen px-4">
@@ -753,8 +756,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
     <NavPage
       title={t()?.title ?? ""}
       header={header}
-      headerRight={<HeaderButtons t={t()} onGit={() => sheet.set("git")} onDiff={() => diffOpen.set(true)} menu={moreMenu()} />}
-      ios={{ headerRightItems: headerItems() }}
+      headerRight={<HeaderButtons t={t()} onGit={() => sheet.set("git")} onDiff={() => diffOpen.set(true)} menu={moreMenu()} bare />}
       hidesBottomBarWhenPushed
     >
       <View class="flex-1 bg-screen">
