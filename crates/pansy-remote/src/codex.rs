@@ -25,7 +25,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, mpsc};
 
 use crate::rpc::{Incoming, Rpc};
-use crate::{Decision, Event, Mode};
+use crate::{Decision, Event, Mode, SUBAGENT};
 
 /// The longest tool output an event carries.
 const OUTPUT: usize = 4000;
@@ -350,6 +350,11 @@ fn notification(method: &str, p: &Value) -> Option<Event> {
                 return None;
             }
             let title = item_title(item);
+            let kind = if kind == "collabAgentToolCall" && item["tool"] == "spawnAgent" {
+                SUBAGENT.to_owned()
+            } else {
+                kind
+            };
             if method == "item/started" {
                 Event::ToolStarted {
                     item: id,
@@ -401,6 +406,24 @@ fn output_of(item: &Value) -> String {
         }
         .join("\n\n");
     }
+    match item["type"].as_str().unwrap_or_default() {
+        "plan" => return item["text"].as_str().unwrap_or_default().to_owned(),
+        // what the agents it spoke to said back
+        "collabAgentToolCall" => {
+            return item["agentsStates"]
+                .as_object()
+                .map(|states| {
+                    states
+                        .values()
+                        .filter_map(|a| a["message"].as_str())
+                        .filter(|m| !m.trim().is_empty())
+                        .collect::<Vec<_>>()
+                        .join("\n\n")
+                })
+                .unwrap_or_default();
+        }
+        _ => {}
+    }
     item["aggregatedOutput"]
         .as_str()
         .unwrap_or_default()
@@ -423,10 +446,42 @@ fn item_title(item: &Value) -> String {
         "dynamicToolCall" => s(&item["tool"]),
         "webSearch" => s(&item["query"]),
         "reasoning" => "Thinking".into(),
-        "plan" => "Plan".into(),
-        "collabAgentToolCall" => s(&item["prompt"]),
+        // its first line, once it has one (it comes whole on completion)
+        "plan" => first_line(&s(&item["text"])).unwrap_or_else(|| "Plan".into()),
+        // a subagent started: what it was told, then `codex · model`
+        "collabAgentToolCall" if item["tool"] == "spawnAgent" => {
+            let task = first_line(&s(&item["prompt"])).unwrap_or_else(|| "Subagent".into());
+            [
+                Some(task),
+                Some("codex".into()),
+                item["model"].as_str().map(str::to_owned),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · ")
+        }
+        // waiting on, writing to or closing one: the verb, then what it sent
+        "collabAgentToolCall" => [
+            s(&item["tool"]),
+            first_line(&s(&item["prompt"])).unwrap_or_default(),
+        ]
+        .into_iter()
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join(" "),
         other => other.to_owned(),
     }
+}
+
+/// A text's first line that says something, kept to a title's length.
+fn first_line(text: &str) -> Option<String> {
+    let line = text.lines().map(str::trim).find(|l| !l.is_empty())?;
+    Some(if line.chars().count() > 80 {
+        line.chars().take(80).collect::<String>() + "…"
+    } else {
+        line.to_owned()
+    })
 }
 
 fn cut(text: &str) -> String {
@@ -665,5 +720,44 @@ mod tests {
             Some(Event::Message { text, .. }) if text == "done"
         ));
         assert_eq!(cut(&"x".repeat(OUTPUT + 5)).chars().count(), OUTPUT + 1);
+    }
+
+    #[test]
+    fn a_spawned_agent_is_a_subagent_and_a_plan_has_its_text() {
+        let spawn = json!({"item": {
+            "type": "collabAgentToolCall", "id": "c1", "tool": "spawnAgent",
+            "prompt": "Explore the gateway\nand report back", "model": "deepseek/v4",
+            "senderThreadId": "t", "receiverThreadIds": ["t2"], "status": "inProgress",
+            "agentsStates": {"t2": {"status": "running", "message": null}}
+        }});
+        assert_eq!(
+            notification("item/started", &spawn),
+            Some(Event::ToolStarted {
+                item: "c1".into(),
+                kind: SUBAGENT.into(),
+                title: "Explore the gateway · codex · deepseek/v4".into(),
+            })
+        );
+        // waiting on it is a call of its own, saying what came back
+        let wait = json!({"item": {
+            "type": "collabAgentToolCall", "id": "c2", "tool": "wait",
+            "senderThreadId": "t", "receiverThreadIds": ["t2"], "status": "completed",
+            "agentsStates": {"t2": {"status": "completed", "message": "Found it in proxy.rs"}}
+        }});
+        assert!(matches!(
+            notification("item/completed", &wait),
+            Some(Event::ToolFinished { kind, title, output, .. })
+                if kind == "collabAgentToolCall" && title == "wait" && output == "Found it in proxy.rs"
+        ));
+        let plan = json!({"item": {"type": "plan", "id": "p", "text": "\n1. Read the config\n2. Fix the header"}});
+        assert!(matches!(
+            notification("item/completed", &plan),
+            Some(Event::ToolFinished { kind, title, output, .. })
+                if kind == "plan" && title == "1. Read the config" && output.starts_with("\n1. Read")
+        ));
+        assert!(matches!(
+            notification("item/started", &json!({"item": {"type": "plan", "id": "p", "text": ""}})),
+            Some(Event::ToolStarted { title, .. }) if title == "Plan"
+        ));
     }
 }

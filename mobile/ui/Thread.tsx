@@ -18,7 +18,7 @@ import { Markdown } from "./Markdown";
 import { ModelSheet } from "./ModelSheet";
 import { ModeSheet } from "./ModeSheet";
 import { chats } from "./nav";
-import { AddDel, BLUR, Btn, GLASS, GlassButton, Icon, Loading, Note, SHADOW, Spinner, toast, type Color, type IconName } from "./parts";
+import { AddDel, BLUR, Btn, Field, GLASS, GlassButton, Icon, Loading, Note, SHADOW, Spinner, toast, type Color, type IconName } from "./parts";
 import { clock, now, tick, timer } from "./time";
 import { actionOf, duration, latestThought, leadAction, liveLabel, rowsOf, thoughtLine, summary as workSummary, type Action, type Row, type WorkItem } from "./work";
 
@@ -122,14 +122,37 @@ function ToolItem(props: { item: Extract<Item, { kind: "tool" }> }) {
   );
 }
 
+/** A subagent: its dot, what it was told, `agent · model`; opens on what it reported back, once it has. */
 function SubagentItem(props: { item: Extract<Item, { kind: "subagent" }> }) {
+  const open = signal(false);
   const dot = () => (props.item.status === "running" ? "bg-sky" : props.item.status === "failed" ? "bg-danger" : "bg-emerald");
+  const report = () => props.item.output?.trim() ?? "";
   return (
-    <View testID={`subagent-${props.item.id}`} class="flex-row items-center gap-2 py-[6px]">
-      <View class={`h-[6px] w-[6px] rounded-full ${dot()}`} />
-      <Text class="text-[14px] font-medium text-fg">{props.item.name}</Text>
-      <Text class="flex-1 text-[13px] text-fg-2 line-clamp-1">{props.item.detail}</Text>
-      <Icon name="chevron-right" color="fg-3" size={12} />
+    <View>
+      <View
+        role="button"
+        testID={`subagent-${props.item.id}`}
+        onPress={() => {
+          if (!report()) return;
+          open.set(!open());
+          Haptics.selection();
+        }}
+        class="flex-row items-center gap-2 py-[6px]"
+      >
+        <View class={`h-[6px] w-[6px] rounded-full ${dot()}`} />
+        <Text class="shrink text-[14px] font-medium text-fg line-clamp-1">{props.item.name}</Text>
+        <Text class="flex-1 text-[13px] text-fg-2 line-clamp-1">{props.item.detail}</Text>
+        <If when={report()}>
+          <View class="transition-transform duration-180" style={{ transform: [{ rotate: open() ? "90deg" : "0deg" }] }}>
+            <Icon name="chevron-right" color="fg-3" size={12} />
+          </View>
+        </If>
+      </View>
+      <If when={open() && report()}>
+        <Scroll testID={`subagent-report-${props.item.id}`} class="ml-[14px] rounded-lg bg-grouped px-[10px] py-2" style={{ maxHeight: 240 }}>
+          <Markdown text={report()} />
+        </Scroll>
+      </If>
     </View>
   );
 }
@@ -181,7 +204,8 @@ function Work(props: { items: WorkItem[]; live: boolean }) {
         <If when={open()}>
           <Scroll style={{ maxHeight: 256 }}>
             <View class="gap-px">
-              <Each of={props.items} key={(i) => `${i.id}:${JSON.stringify(i)}`}>
+              {/* kept by id: a call that changes updates its row, which stays open if it was */}
+              <Each of={props.items} key={(i) => i.id}>
                 {(i) => <WorkItemView item={i()} live={props.live && i() === latest() && i().kind === "reasoning"} />}
               </Each>
             </View>
@@ -273,7 +297,9 @@ function FeedRow(props: { row: Row; startedAt: number | null; onFold: (id: strin
       return (
         <View class="flex-row items-center gap-2 px-1">
           <Icon name="circle-alert" color="danger" size={14} />
-          <Text class="flex-1 text-[14px] text-danger">{it.text}</Text>
+          <Text class="flex-1 text-[14px] text-danger">
+            {it.exited ? (it.exited.code !== undefined && it.exited.code !== null ? tr("The agent quit (exit code %d)", it.exited.code) : tr("The agent quit")) : it.text}
+          </Text>
         </View>
       );
     case "compact":
@@ -301,26 +327,42 @@ function approvalTitle(a: Approval): string {
   return a.title;
 }
 
-/** A question's choices: one, or several when it says so; Send once each has one. */
-function QuestionCard(props: { approval: Approval; onChoose: (a: Approval, answers: Record<string, string>) => void; onAnswer: (a: Approval, d: Decision) => void }) {
-  const picks = signal<Record<string, string[]>>({});
+/** A question's answer so far: the options picked, and a line of the user's own. */
+export type Picked = { picks: string[]; other: string };
+/** Each question's answer so far, by the question. */
+export type Answers = Record<string, Picked>;
+
+const answered = (p: Picked | undefined) => !!p && (p.picks.length > 0 || !!p.other.trim());
+
+/** What is sent for each question: its picks, then its own line. */
+export function answersOf(questions: Question[], answers: Answers): Record<string, string> {
+  return Object.fromEntries(questions.map((q) => [q.question, [...(answers[q.question]?.picks ?? []), answers[q.question]?.other.trim() ?? ""].filter(Boolean).join(", ")]));
+}
+
+/** A line typed in the composer while questions wait: the first unanswered one takes it as its own (the first one, when all are answered); `send` once every one is. */
+export function typedAnswer(questions: Question[], answers: Answers, text: string): { answers: Answers; send: Record<string, string> | null } {
+  const q = questions.find((q) => !answered(answers[q.question])) ?? questions[0];
+  if (!q) return { answers, send: null };
+  const next = { ...answers, [q.question]: { picks: answers[q.question]?.picks ?? [], other: text } };
+  return { answers: next, send: questions.every((q) => answered(next[q.question])) ? answersOf(questions, next) : null };
+}
+
+/** A question's choices: one, or several when it says so, and a line of the user's own; Send once each has an answer. */
+function QuestionCard(props: { approval: Approval; answers: Answers; onAnswers: (a: Answers) => void; onChoose: (a: Approval, answers: Record<string, string>) => void; onAnswer: (a: Approval, d: Decision) => void }) {
   const qs = (): Question[] => props.approval.questions ?? [];
+  const at = (q: Question): Picked => props.answers[q.question] ?? { picks: [], other: "" };
   const toggle = (q: Question, label: string) => {
-    const now = picks()[q.question] ?? [];
+    const now = at(q).picks;
     const next = q.multiSelect ? (now.includes(label) ? now.filter((l) => l !== label) : [...now, label]) : [label];
-    picks.set({ ...picks(), [q.question]: next });
+    props.onAnswers({ ...props.answers, [q.question]: { ...at(q), picks: next } });
     Haptics.selection();
   };
-  const ready = () => qs().every((q) => (picks()[q.question] ?? []).length > 0);
-  const send = () => {
-    const answers: Record<string, string> = {};
-    for (const q of qs()) answers[q.question] = (picks()[q.question] ?? []).join(", ");
-    props.onChoose(props.approval, answers);
-  };
+  const ready = () => qs().every((q) => answered(props.answers[q.question]));
+  const send = () => props.onChoose(props.approval, answersOf(qs(), props.answers));
   return (
     <View class="gap-[12px]">
       <Each of={qs()} key={(q) => q.question}>
-        {(q) => (
+        {(q, n) => (
           <View class="gap-[6px]">
             <If when={q().header}>
               <Text class="text-[12px] font-bold uppercase tracking-[1.1px] text-fg-2">{q().header}</Text>
@@ -329,7 +371,7 @@ function QuestionCard(props: { approval: Approval; onChoose: (a: Approval, answe
             <View class="overflow-hidden rounded-xl bg-grouped">
               <Each of={q().options} key={(o) => o.label}>
                 {(o, i) => {
-                  const on = () => (picks()[q().question] ?? []).includes(o().label);
+                  const on = () => at(q()).picks.includes(o().label);
                   return (
                     <View
                       role="button"
@@ -350,6 +392,13 @@ function QuestionCard(props: { approval: Approval; onChoose: (a: Approval, answe
                 }}
               </Each>
             </View>
+            {/* each question its own "Other", as T3's */}
+            <Field
+              value={at(q()).other}
+              onChange={(other) => props.onAnswers({ ...props.answers, [q().question]: { ...at(q()), other } })}
+              placeholder={tr("Other answer")}
+              testID={`question-other-${n()}`}
+            />
           </View>
         )}
       </Each>
@@ -362,7 +411,15 @@ function QuestionCard(props: { approval: Approval; onChoose: (a: Approval, answe
 }
 
 /** 需要批准: docked over the composer, not in the feed; several go 1 / N. */
-function ApprovalCard(props: { approvals: Approval[]; index: number; onIndex: (i: number) => void; onAnswer: (a: Approval, d: Decision) => void; onChoose: (a: Approval, answers: Record<string, string>) => void }) {
+function ApprovalCard(props: {
+  approvals: Approval[];
+  index: number;
+  onIndex: (i: number) => void;
+  onAnswer: (a: Approval, d: Decision) => void;
+  onChoose: (a: Approval, answers: Record<string, string>) => void;
+  answers: (a: Approval) => Answers;
+  onAnswers: (a: Approval, answers: Answers) => void;
+}) {
   const a = () => props.approvals[Math.min(props.index, props.approvals.length - 1)];
   const long = signal(false);
   const lines = () => a()?.detail.split("\n") ?? [];
@@ -383,7 +440,7 @@ function ApprovalCard(props: { approvals: Approval[]; index: number; onIndex: (i
         </If>
       </View>
       <If when={a()?.questions}>
-        <QuestionCard approval={a()!} onChoose={props.onChoose} onAnswer={props.onAnswer} />
+        <QuestionCard approval={a()!} answers={props.answers(a()!)} onAnswers={(x) => props.onAnswers(a()!, x)} onChoose={props.onChoose} onAnswer={props.onAnswer} />
       </If>
       <If when={!a()?.questions}>
       <Text class="text-[18px] font-bold leading-[23px] text-fg">{a() ? approvalTitle(a()!) : ""}</Text>
@@ -474,6 +531,10 @@ export function ThreadPage(props: { machine: string; thread: string }) {
   const m = () => machine(props.machine);
   const draft = signal("");
   const approvalAt = signal(0);
+  // the questions' answers so far, by request: the card and the composer both fill them
+  const questionAnswers = signal<Record<string, Answers>>({});
+  const answersFor = (a: Approval): Answers => questionAnswers()[a.request] ?? {};
+  const setAnswers = (a: Approval, answers: Answers) => questionAnswers.set({ ...questionAnswers(), [a.request]: answers });
   const sheet = signal<"model" | "mode" | "git" | "commit" | null>(null);
   const diffOpen = signal(false);
   const commitWay = signal<Way>("commit_push");
@@ -538,8 +599,10 @@ export function ThreadPage(props: { machine: string; thread: string }) {
     const pending = view.approvals()[approvalAt()];
     draft.set("");
     if (pending?.questions) {
-      // typed: the answer to each of its questions
-      await choose(pending, Object.fromEntries(pending.questions.map((q) => [q.question, text])));
+      // typed: the answer to the first question still open; sent once each has one
+      const typed = typedAnswer(pending.questions, answersFor(pending), text);
+      setAnswers(pending, typed.answers);
+      if (typed.send) await choose(pending, typed.send);
       return;
     }
     if (pending) {
@@ -659,7 +722,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
         >
           <Capsule view={view} queue={t()?.queue ?? 0} showBottom={!atBottom()} onBottom={() => { atBottom.set(true); toBottom(); }} />
           <If when={view.approvals().length > 0}>
-            <ApprovalCard approvals={view.approvals()} index={approvalAt()} onIndex={approvalAt.set} onAnswer={(a, d) => void answer(a, d)} onChoose={(a, c) => void choose(a, c)} />
+            <ApprovalCard approvals={view.approvals()} index={approvalAt()} onIndex={approvalAt.set} onAnswer={(a, d) => void answer(a, d)} onChoose={(a, c) => void choose(a, c)} answers={answersFor} onAnswers={setAnswers} />
           </If>
           <Composer
             text={draft()}

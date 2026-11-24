@@ -299,7 +299,7 @@ export class FakeHome {
       await this.ms(60);
     }
     this.emit(threadId, { type: "message", item: msg, text: ANSWER });
-    this.emit(threadId, { type: "toolFinished", item: sub, kind: "subagent", title: "Explore · codex · deepseek/v4", status: "completed" });
+    this.emit(threadId, { type: "toolFinished", item: sub, kind: "subagent", title: "Explore · codex · deepseek/v4", status: "completed", output: "**project 的来源**\n\n`usage/<day>.jsonl` 每行有 `project`，只有 `pansy run` 发出的请求才带；其余是空的，算在「其他」里。" });
     this.change(threadId, { diff: { add: 48, del: 6 } });
     const cmd = `i_${rand()}`;
     this.emit(threadId, { type: "toolStarted", item: cmd, kind: "commandExecution", title: "cargo test -p pansy-core usage::" });
@@ -319,7 +319,10 @@ export class FakeHome {
     this.emit(threadId, {
       type: "question",
       request,
-      questions: [{ question: "Which database?", header: "Storage", multiSelect: false, options: [{ label: "SQLite", description: "One file, nothing to run" }, { label: "Postgres", description: "A server" }] }],
+      questions: [
+        { question: "Which database?", header: "Storage", multiSelect: false, options: [{ label: "SQLite", description: "One file, nothing to run" }, { label: "Postgres", description: "A server" }] },
+        { question: "Where do the deploy scripts go?", header: "Layout", multiSelect: false, options: [{ label: "scripts/", description: "Next to the code" }, { label: "ops/", description: "A folder of their own" }] },
+      ],
     });
     this.change(threadId, { status: "approval" });
     const answers = await answered;

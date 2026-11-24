@@ -34,7 +34,7 @@ use tokio::process::{Child, Command};
 use tokio::sync::{Mutex, Notify, mpsc};
 
 use crate::rpc::{Incoming, Rpc};
-use crate::{Decision, Event, Mode};
+use crate::{Decision, Event, Mode, SUBAGENT};
 
 /// The Agent SDK installed, the one this driver was tried on.
 pub const SDK_VERSION: &str = "0.3.330";
@@ -645,8 +645,11 @@ impl Reading {
                             ]
                         }
                         "tool_use" => {
-                            let kind = s(&b["name"]);
-                            let title = summary(&kind, &b["input"]);
+                            let name = s(&b["name"]);
+                            let (kind, title) = match subagent(&name, &b["input"]) {
+                                Some(title) => (SUBAGENT.to_owned(), title),
+                                None => (name.clone(), summary(&name, &b["input"])),
+                            };
                             self.tools
                                 .insert(s(&b["id"]), (kind.clone(), title.clone()));
                             vec![Event::ToolStarted {
@@ -808,6 +811,29 @@ fn approval(id: &Value, p: &Value) -> Event {
         detail,
         reason: p["reason"].as_str().unwrap_or_default().to_owned(),
     }
+}
+
+/// A subagent's call (`Task`, or `Agent` in newer Claude Codes) as the
+/// phone's [`SUBAGENT`] title: what it was given to do, then its type and
+/// model where the call names them.
+fn subagent(tool: &str, input: &Value) -> Option<String> {
+    if !matches!(tool, "Task" | "Agent") {
+        return None;
+    }
+    let field = |k: &str| input[k].as_str().map(str::trim).filter(|v| !v.is_empty());
+    let mut parts: Vec<&str> = Vec::new();
+    for part in [field("description"), field("subagent_type"), field("model")]
+        .into_iter()
+        .flatten()
+    {
+        if !parts.contains(&part) {
+            parts.push(part);
+        }
+    }
+    if parts.is_empty() {
+        parts.push(tool);
+    }
+    Some(parts.join(" · "))
 }
 
 /// A line for what a tool call does.
@@ -1304,6 +1330,55 @@ mod tests {
             "a\nb"
         );
         assert_eq!(cut(&"x".repeat(OUTPUT + 5)).chars().count(), OUTPUT + 1);
+    }
+
+    #[test]
+    fn a_task_is_a_subagent_from_start_to_report() {
+        let mut reading = Reading::default();
+        let mut open = VecDeque::new();
+        let call = |id: &str, name: &str, input: Value| {
+            json!({"type": "assistant", "parent_tool_use_id": null, "message": {"id": "m1", "content": [
+                {"type": "tool_use", "id": id, "name": name, "input": input}
+            ]}})
+        };
+        let started = reading.message(
+            &call("t1", "Task", json!({"description": "Find the model header", "subagent_type": "Explore", "prompt": "…"})),
+            &mut open,
+        );
+        assert_eq!(
+            started,
+            [Event::ToolStarted {
+                item: "t1".into(),
+                kind: SUBAGENT.into(),
+                title: "Find the model header · Explore".into(),
+            }]
+        );
+        // its own work stays its own; its report finishes it
+        let inner = json!({"type": "assistant", "parent_tool_use_id": "t1", "message": {"id": "m2", "content": [{"type": "text", "text": "looking"}]}});
+        assert!(reading.message(&inner, &mut open).is_empty());
+        let report = json!({"type": "user", "parent_tool_use_id": null, "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": [{"type": "text", "text": "In proxy.rs"}]}
+        ]}});
+        assert_eq!(
+            reading.message(&report, &mut open),
+            [Event::ToolFinished {
+                item: "t1".into(),
+                kind: SUBAGENT.into(),
+                title: "Find the model header · Explore".into(),
+                status: "completed".into(),
+                output: "In proxy.rs".into(),
+                exit: None,
+            }]
+        );
+        // a newer Claude Code's Agent, its type alone
+        assert!(matches!(
+            &reading.message(&call("t2", "Agent", json!({"subagent_type": "general-purpose", "model": "haiku"})), &mut open)[..],
+            [Event::ToolStarted { kind, title, .. }] if kind == SUBAGENT && title == "general-purpose · haiku"
+        ));
+        assert!(matches!(
+            &reading.message(&call("t3", "Bash", json!({"command": "ls"})), &mut open)[..],
+            [Event::ToolStarted { kind, title, .. }] if kind == "Bash" && title == "ls"
+        ));
     }
 
     #[test]

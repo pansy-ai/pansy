@@ -7,6 +7,7 @@ import { formatCode, normalizeAddress, parsePairUrl } from "./net/pair";
 import { apply, fromHistory, type FeedState } from "./state/thread";
 import { blocks, spans } from "./ui/Markdown";
 import { monogram, monogramHue } from "./ui/parts";
+import { answersOf, typedAnswer } from "./ui/Thread";
 import { connectionTitle } from "./ui/Threads";
 import { since } from "./ui/time";
 import { compact, top } from "./ui/Usage";
@@ -63,6 +64,51 @@ test("folds a turn's events into the feed", () => {
   // the turn's end keeps how long it took from its start
   expect(s.items[3]).toMatchObject({ kind: "end", stopped: false });
   expect(typeof (s.items[3] as { ms?: number }).ms).toBe("number");
+});
+
+test("a subagent is one whatever the agent calls it, and keeps what it reported", () => {
+  let s: FeedState = { items: [], approvals: [], running: true, startedAt: 0 };
+  s = apply(s, { type: "toolStarted", item: "a1", kind: "subagent", title: "Find the header · Explore" });
+  // an older pansy passed Claude Code's own word through
+  s = apply(s, { type: "toolStarted", item: "a2", kind: "Task", title: "Check the docs" });
+  expect(s.items.map((i) => i.kind)).toEqual(["subagent", "subagent"]);
+  expect(s.items[0]).toMatchObject({ name: "Find the header", detail: "Explore", status: "running" });
+  s = apply(s, { type: "toolFinished", item: "a1", kind: "subagent", title: "Find the header · Explore", status: "completed", output: "In proxy.rs" });
+  expect(s.items[0]).toMatchObject({ name: "Find the header", detail: "Explore", status: "done", output: "In proxy.rs" });
+  // Codex's history names it spawn_agent
+  expect(fromHistory([{ role: "tool", name: "spawn_agent", text: "Explore the gateway", output: "done" }])[0]).toMatchObject({ kind: "subagent", name: "Explore the gateway", output: "done" });
+});
+
+test("an agent that quits mid-turn ends the turn, its calls failed, saying so", () => {
+  let s: FeedState = { items: fromHistory([{ role: "user", text: "go" }]), approvals: [], running: false, startedAt: null };
+  s = apply(s, { type: "turnStarted", turn: "t1" }, 1000);
+  s = apply(s, { type: "delta", item: "m1", text: "Look" }, 1000);
+  s = apply(s, { type: "toolStarted", item: "c1", kind: "commandExecution", title: "cargo test" });
+  s = apply(s, { type: "toolStarted", item: "a1", kind: "subagent", title: "Explore" });
+  s = apply(s, { type: "approval", request: "r1", kind: "commandExecution", title: "cargo test", detail: "cargo test" });
+  s = apply(s, { type: "exited", code: 137 }, 4000);
+  expect(s.running).toBe(false);
+  expect(s.approvals).toEqual([]);
+  expect(s.items.map((i) => i.kind)).toEqual(["user", "assistant", "tool", "subagent", "notice", "end"]);
+  expect(s.items[1]).toMatchObject({ streaming: false });
+  expect(s.items[2]).toMatchObject({ status: "failed" });
+  expect(s.items[3]).toMatchObject({ status: "failed" });
+  expect(s.items[4]).toMatchObject({ kind: "notice", tone: "danger", exited: { code: 137 } });
+  expect(s.items[5]).toMatchObject({ kind: "end", ms: 3000, stopped: false });
+  // quitting between turns adds nothing
+  expect(apply(s, { type: "exited" }).items.length).toBe(s.items.length);
+});
+
+test("a typed line answers the first open question; all answered, it sends", () => {
+  const qs = ["Which database?", "Where?"].map((question) => ({ question, header: "", multiSelect: false, options: [] }));
+  const one = typedAnswer(qs, { "Where?": { picks: ["ops/"], other: "" } }, "Postgres");
+  expect(one.answers["Which database?"]).toEqual({ picks: [], other: "Postgres" });
+  expect(one.send).toEqual({ "Which database?": "Postgres", "Where?": "ops/" });
+  const first = typedAnswer(qs, {}, "SQLite");
+  expect(first.send).toBe(null);
+  expect(typedAnswer(qs, first.answers, "scripts/").send).toEqual({ "Which database?": "SQLite", "Where?": "scripts/" });
+  // a choice and a line of its own go together
+  expect(answersOf(qs, { "Which database?": { picks: ["SQLite"], other: " in WAL mode " } })["Which database?"]).toBe("SQLite, in WAL mode");
 });
 
 test("a question waits like an approval, with its choices", () => {

@@ -160,6 +160,8 @@ type Event =                  // pansy_remote::Event，tag 是 type
   | { type: "user"; text: string }                       // 发出去的一句（多端同步）
   | { type: "toolStarted"; item: string; kind: string; title: string }
   | { type: "toolFinished"; item: string; kind: string; title: string; status: string; output?: string; exit?: number }  // exit：命令的退出码（Codex 给）
+      // kind 是 agent 自己的词，只有一个统一："subagent"（Claude Code 的 Task / Agent、Codex 的 spawnAgent），
+      // title 是"名字 · 类型或 agent · 模型"，output 是它交回来的报告；Codex 的 plan 的 output 是计划全文
   | { type: "approval"; request: string; kind: string; title: string; detail: string; reason?: string }
   | { type: "question"; request: string; questions: { question: string; header: string; multiSelect: boolean;
       options: { label: string; description: string }[] }[] }

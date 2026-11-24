@@ -162,18 +162,51 @@ test("a new message streams in, asks for approval and finishes", async () => {
   await app.waitFor("text:测试都通过了（42 个）。可以提交了。", { timeout: 15_000 });
 });
 
-test("a question is answered with the choice made", async () => {
+const ask = async () => {
   const app = await launch();
   await app.press("id:thread-t_relay");
   await app.waitFor("text:把 relay 的部署整理一下，现在一个脚本又建 Worker 又发证书");
   await app.type("id:composer-input", "问我用哪个数据库");
   await app.press("id:send");
   await app.waitFor("text:Which database?", { timeout: 10_000 });
+  return app;
+};
+const answers = (app: App) => calls(app).find((c) => c.method === "runtime-request.respond")?.params.answers as Record<string, string> | undefined;
+
+test("each question is answered on its own: a choice, or a line of the user's own", async () => {
+  const app = await ask();
   expect(app.texts()).toContain("A QUESTION FOR YOU");
+  expect(app.texts()).toContain("Where do the deploy scripts go?");
   await app.press("id:question-option-SQLite");
+  expect(app.enabled("id:question-send")).toBe(false);
+  await app.type("id:question-other-1", "infra/deploy");
   await app.press("id:question-send");
-  await app.waitUntil(() => called(app, "runtime-request.respond", (p) => (p.answers as Record<string, string>)?.["Which database?"] === "SQLite"));
-  await app.waitFor("text:Going with SQLite.");
+  await app.waitUntil(() => !!answers(app));
+  expect(answers(app)).toEqual({ "Which database?": "SQLite", "Where do the deploy scripts go?": "infra/deploy" });
+  await app.waitFor("text:Going with SQLite, infra/deploy.");
+});
+
+test("a line typed in the composer answers the first open question, and sends once all are", async () => {
+  const app = await ask();
+  await app.press("id:question-option-ops/");
+  // the database is still open: the line goes there, and every question has its answer
+  await app.type("id:composer-input", "Postgres, with a pool");
+  await app.press("id:send");
+  await app.waitUntil(() => !!answers(app));
+  expect(answers(app)).toEqual({ "Which database?": "Postgres, with a pool", "Where do the deploy scripts go?": "ops/" });
+});
+
+test("a subagent opens on what it reported back", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_relay");
+  await app.waitFor("text:把 relay 的部署整理一下，现在一个脚本又建 Worker 又发证书");
+  await app.type("id:composer-input", "看看用量按项目怎么分");
+  await app.press("id:send");
+  // it reports back just before the test command asks for approval
+  await app.waitFor("text:Run a command", { timeout: 15_000 });
+  expect(app.shows("text:project 的来源")).toBe(false);
+  await app.press("text:Explore");
+  await app.waitFor("text:project 的来源");
 });
 
 test("pulls the upstream from the Git sheet", async () => {

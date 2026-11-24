@@ -196,6 +196,8 @@ const ZH_HANS = {
   "Queued": "排队中",
   "Stopped": "已停止",
   "Earlier turns compacted": "更早的回合已压缩",
+  "The agent quit": "agent 退出了",
+  "The agent quit (exit code %d)": "agent 退出了（退出码 %d）",
   "Run a command": "运行命令",
   "Change 1 file": "修改 1 个文件",
   "Change %d files": "修改 %d 个文件",
@@ -277,6 +279,7 @@ const ZH_HANS = {
   "Commit %d files": "提交 %d 个文件",
   // Questions and pull
   "Send answer": "发送回答",
+  "Other answer": "其他回答",
   "Don't answer": "不回答",
   "A question for you": "有个问题问你",
   "Or type your own answer": "或者自己写一个回答",

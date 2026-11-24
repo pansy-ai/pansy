@@ -24,6 +24,12 @@ mod workspace;
 
 use serde::Serialize;
 
+/// The tool kind of a subagent the agent started (Claude Code's `Task` or
+/// `Agent`, Codex's `spawnAgent`): one word for every agent, its title
+/// `name · detail` (what it was given to do, then its type or agent and
+/// model), its output what it reported back.
+pub const SUBAGENT: &str = "subagent";
+
 /// What happened in a driven agent, as the phone is told it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
