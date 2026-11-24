@@ -61,6 +61,17 @@ test("filters the list by agent", async () => {
   expect(app.shows("id:filter-reset")).toBe(false);
 });
 
+test("search opens a field over the list, and closing it clears the query", async () => {
+  const app = await launch();
+  await app.waitFor("text:给 Sessions 页加按项目的花费");
+  expect(app.shows("id:search-field")).toBe(false);
+  await app.press("id:threads-search");
+  await app.waitFor("id:search-field");
+  await app.press("id:threads-search");
+  await app.waitUntil(() => !app.shows("id:search-field"));
+  expect(app.texts()).toContain("给 Sessions 页加按项目的花费");
+});
+
 test("the approval card answers with runtime-request.respond, and the turn goes on", async () => {
   const app = await launch();
   await app.press("id:thread-t_cost");
@@ -298,28 +309,36 @@ test("with nothing paired, it asks to connect a computer and pairs by address an
       [`GET ${BASE}/.well-known/pansy/environment`]: { body: env },
       [`POST ${BASE}/api/auth/pair`]: (req) => {
         const body = JSON.parse(req.body ?? "{}");
-        return body.secret === "s3cret-code" ? { body: { deviceId: "d_1", accessToken: "tok_1", expiresIn: 3600, scopes: SCOPES, approval: "approved" } } : { status: 403, body: { error: { code: "forbidden", message: "expired" } } };
+        return body.secret === "482913" ? { body: { deviceId: "d_1", accessToken: "tok_1", expiresIn: 3600, scopes: SCOPES, approval: "approved" } } : { status: 403, body: { error: { code: "forbidden", message: "expired" } } };
       },
       [`POST ${BASE}/api/auth/ws-ticket`]: { body: { ticket: "tk_1" } },
     },
   });
   await app.waitFor("id:empty-machines");
   expect(app.texts()).toContain("Connect a computer");
+  // nothing to search before a pairing
+  expect(app.shows("id:threads-search")).toBe(false);
   await app.press("id:empty-machines-button");
   await app.waitFor("id:pair-address");
   await app.type("id:pair-address", "home.test");
-  await app.type("id:pair-code", "wrong");
+  // the code takes six digits, shown 123-456; Connect waits for all six
+  await app.type("id:pair-code", "11a1");
+  expect(app.value("id:pair-code")).toBe("111");
+  expect(app.enabled("id:pair-submit")).toBe(false);
+  await app.type("id:pair-code", "11199");
+  expect(app.value("id:pair-code")).toBe("111-111");
   await app.press("id:pair-submit");
   await app.waitFor("id:pair-error");
   await app.clear("id:pair-code");
-  await app.type("id:pair-code", "s3cret-code");
+  await app.type("id:pair-code", "482913");
+  expect(app.value("id:pair-code")).toBe("482-913");
   await app.press("id:pair-submit");
   await app.waitFor("id:pair-done");
   expect(app.texts()).toContain("Workstation");
   const pairing = app.requests().filter((r) => r.method === "POST" && r.url === `${BASE}/api/auth/pair`);
   expect(pairing.length).toBe(2);
   const sent = JSON.parse(pairing[1].body ?? "{}");
-  expect(sent.secret).toBe("s3cret-code");
+  expect(sent.secret).toBe("482913");
   // WebCrypto here: a DPoP proof, not the cookie
   expect(sent.cookie).toBe(false);
   expect(/^ey[\w-]+\.ey[\w-]+\.[\w-]+$/.test(pairing[1].headers.dpop ?? "")).toBe(true);

@@ -94,16 +94,18 @@ function Title() {
   );
 }
 
-/** Pansy or the status on the left; search alone on the right, as T3's (compose floats beside the tab bar). */
+/** Pansy or the status on the left; search alone on the right, as T3's (compose floats beside the tab bar); nothing to search before a pairing. */
 function Header() {
   return (
     <View class="h-[52px] flex-row items-center gap-2 px-4">
       <Title />
       <View class="flex-1" />
-      <GlassButton icon={searching() ? "x" : "search"} label={searching() ? tr("Close search") : tr("Search")} testID="threads-search" onPress={() => {
-        if (searching()) query.set("");
-        searching.set(!searching());
-      }} size={44} />
+      <If when={machines().length > 0}>
+        <GlassButton icon={searching() ? "x" : "search"} label={searching() ? tr("Close search") : tr("Search")} testID="threads-search" onPress={() => {
+          if (searching()) query.set("");
+          searching.set(!searching());
+        }} size={44} />
+      </If>
     </View>
   );
 }

@@ -321,7 +321,7 @@ export function Field(props: {
 }
 
 /** A bare input inside a group's row. */
-export function RowInput(props: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; testID?: string; first?: boolean; mono?: boolean; masked?: boolean }) {
+export function RowInput(props: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; testID?: string; first?: boolean; mono?: boolean; masked?: boolean; keyboardType?: "default" | "url" | "number-pad"; maxLength?: number }) {
   return (
     <View class="min-h-[52px] flex-row items-center px-4">
       <If when={!props.first}>
@@ -335,6 +335,8 @@ export function RowInput(props: { label: string; value: string; onChange: (v: st
         accessibilityLabel={props.label}
         testID={props.testID}
         masked={props.masked}
+        keyboardType={props.keyboardType}
+        maxLength={props.maxLength}
         autoCapitalize="none"
         autoCorrect={false}
         class={`flex-1 py-3 text-[15px] text-fg placeholder:text-fg-3 ${props.mono ? "font-mono" : ""}`}
@@ -408,7 +410,7 @@ export function BottomSheet(props: {
       backdropClass="bg-backdrop"
       accessibilityLabel={props.title}
       footer={props.footer}
-      footerClass="px-5 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2"
+      footerClass="bg-sheet px-5 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2"
     >
       <View testID={props.testID} class="flex-1">
         <View class="min-h-[52px] flex-row items-center gap-2 px-4 pb-[6px] pt-2">
@@ -425,6 +427,10 @@ export function BottomSheet(props: {
         </View>
         <Scroll class="flex-1" keyboardShouldPersistTaps="handled">
           {props.children}
+          {/* the footer (a 48pt button, 8 over, 12 and the safe area under) is drawn over the content's end: room to scroll it clear */}
+          <If when={props.footer}>
+            <View class="pb-[calc(env(safe-area-inset-bottom)+68px)]" />
+          </If>
         </Scroll>
       </View>
     </Sheet>

@@ -35,7 +35,12 @@ nsh package --target web -o dist/web App.tsx
 The server listens on `0.0.0.0:7268`, serves `dist/web/Pansy` at `/` and
 prints a pairing link (`http://<lan-ip>:7268/#pair=…`): open it on a phone
 or in a browser and the app pairs itself. Or open the address and type any
-code in 添加机器 (a code with `expired`, `bad` or `wrong` in it is refused).
+six digits in 添加机器 (`000-000` is refused).
+
+添加机器's code takes six digits (`123-456`) and sends them as the
+pairing secret. A real pansy's secret is the 43 characters in the QR code's
+link, so typed codes pair only with the mock until pansy-remote issues a
+six-digit code of its own; the QR code and the link pair with either.
 `--approval` makes new devices wait for approval, `--slow 0.2` speeds the
 scripted agent up, `--port`, `--host` and `--dir` move it.
 

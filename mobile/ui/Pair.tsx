@@ -4,7 +4,7 @@
 // machine, its agents and "Connected", or the code to approve it by.
 import { effect, platform, signal, Text, untracked, View } from "nsh";
 import type { Machine } from "../net/client";
-import { normalizeAddress, pageUrl, pair } from "../net/pair";
+import { CODE_DIGITS, formatCode, normalizeAddress, pageUrl, pair } from "../net/pair";
 import type { RpcError } from "../net/types";
 import { addMachine, connState } from "../state/store";
 import { tr } from "./i18n";
@@ -72,9 +72,12 @@ export function PairSheet() {
     }
   });
 
+  // a typed code is its six digits; the long secret comes in the QR code's link alone
+  const digits = () => code().replace(/\D/g, "");
+  const ready = () => !!address().trim() && digits().length === CODE_DIGITS && !busy();
   const submit = () => {
-    if (!address().trim() || !code().trim() || busy()) return;
-    void go(normalizeAddress(address()), code().trim().replace(/^.*#pair=/, ""));
+    if (!ready()) return;
+    void go(normalizeAddress(address()), digits());
   };
   const close = () => pairOpen.set(false);
   const state = () => (done() ? connState(done()!.id) : null);
@@ -84,8 +87,14 @@ export function PairSheet() {
       open={pairOpen()}
       onClose={close}
       title={tr("Add machine")}
-      start={0.55}
+      // tall enough for the card, the form and the button at once (on a 6.1" phone); the button stays in view at the sheet's foot on smaller ones
+      start={0.78}
       testID="pair-sheet"
+      footer={
+        <If when={done()} else={<Btn label={busy() ? tr("Connecting…") : tr("Connect")} onPress={submit} disabled={!ready()} testID="pair-submit" />}>
+          <Btn label={tr("Done")} onPress={close} testID="pair-done-button" />
+        </If>
+      }
       left={<GlassButton icon="x" label={tr("Close")} onPress={close} testID="pair-close" />}
       right={
         <If when={!done()}>
@@ -97,7 +106,7 @@ export function PairSheet() {
         </If>
       }
     >
-      <View class="gap-[14px] px-5 pb-10 pt-[6px]">
+      <View class="gap-[14px] px-5 pb-4 pt-[6px]">
         <If
           when={done()}
           else={
@@ -116,7 +125,7 @@ export function PairSheet() {
               <GroupHead text={tr("Or type it in")} />
               <Group danger={!!error()}>
                 <RowInput first label={tr("Address")} value={address()} onChange={address.set} placeholder="192.168.1.20:7268" mono testID="pair-address" />
-                <RowInput label={tr("Code")} value={code()} onChange={code.set} placeholder="••••-••••" mono testID="pair-code" />
+                <RowInput label={tr("Code")} value={code()} onChange={(v) => code.set(formatCode(v))} placeholder="•••-•••" mono keyboardType="number-pad" maxLength={CODE_DIGITS + 1} testID="pair-code" />
               </Group>
               <If when={error()}>
                 <Text testID="pair-error" class="-mt-[6px] text-[14px] text-danger">
@@ -124,7 +133,6 @@ export function PairSheet() {
                 </Text>
               </If>
               <Text class="text-[14px] text-fg-2">{tr("With the computer and the phone on the same Wi-Fi, or both on Tailscale, they connect directly.")}</Text>
-              <Btn label={busy() ? tr("Connecting…") : tr("Connect")} onPress={submit} disabled={busy() || !address().trim() || !code().trim()} testID="pair-submit" />
             </>
           }
         >
@@ -145,7 +153,6 @@ export function PairSheet() {
                 {done()?.code ?? ""}
               </Text>
             </If>
-            <Btn label={tr("Done")} onPress={close} class="mt-4 self-stretch" testID="pair-done-button" />
           </View>
         </If>
       </View>

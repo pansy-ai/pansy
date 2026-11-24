@@ -24,6 +24,15 @@ export function normalizeAddress(address: string): string {
   return a;
 }
 
+/** Digits in a typed pairing code. */
+export const CODE_DIGITS = 6;
+
+/** A pairing code as typed, kept to its six digits and shown `123-456`. */
+export function formatCode(typed: string): string {
+  const d = typed.replace(/\D/g, "").slice(0, CODE_DIGITS);
+  return d.length > 3 ? `${d.slice(0, 3)}-${d.slice(3)}` : d;
+}
+
 /** The page's own pairing link, when the web app was opened from the QR code. */
 export function pageUrl(): string | null {
   try {

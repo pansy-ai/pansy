@@ -379,7 +379,7 @@ export class FakeHome {
     if (route === "GET /.well-known/pansy/environment") return { status: 200, body: this.env };
     if (route === "POST /api/auth/pair") {
       const secret = String(body?.secret ?? "");
-      if (!secret || /expired|bad|wrong/.test(secret)) return { status: 403, body: { error: { code: "forbidden", message: "pairing secret expired or unknown" } } };
+      if (!secret || secret === "000000" || /expired|bad|wrong/.test(secret)) return { status: 403, body: { error: { code: "forbidden", message: "pairing secret expired or unknown" } } };
       const id = `d_${rand()}`;
       const approval = this.requireApproval ? "pending" : "approved";
       this.devices.push({ id, name: String(body?.deviceName ?? "Phone"), platform: String(body?.platform ?? "web"), scopes: SCOPES, approval, createdAt: new Date().toISOString(), lastSeen: new Date().toISOString() });

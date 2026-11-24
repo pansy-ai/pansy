@@ -3,7 +3,7 @@
 // the list's monograms, times and title as T3 has them, usage's counts, and
 // the work log's lines and folds.
 import { expect, test } from "nsh/test";
-import { normalizeAddress, parsePairUrl } from "./net/pair";
+import { formatCode, normalizeAddress, parsePairUrl } from "./net/pair";
 import { apply, fromHistory, type FeedState } from "./state/thread";
 import { blocks, spans } from "./ui/Markdown";
 import { monogram, monogramHue } from "./ui/parts";
@@ -24,6 +24,14 @@ test("an address typed by hand gets its scheme and pansy's port", () => {
   expect(normalizeAddress("192.168.1.20")).toBe("http://192.168.1.20:7268");
   expect(normalizeAddress("192.168.1.20:9000")).toBe("http://192.168.1.20:9000");
   expect(normalizeAddress(" https://m-3f2a.pansy.dev/ ")).toBe("https://m-3f2a.pansy.dev:7268");
+});
+
+test("a typed pairing code keeps six digits, shown 123-456", () => {
+  expect(formatCode("")).toBe("");
+  expect(formatCode("123")).toBe("123");
+  expect(formatCode("1234")).toBe("123-4");
+  expect(formatCode("123-456")).toBe("123-456");
+  expect(formatCode("12a3 45-6789")).toBe("123-456");
 });
 
 test("splits Markdown into blocks and spans", () => {
