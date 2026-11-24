@@ -458,6 +458,8 @@ function ApprovalCard(props: {
   onChoose: (a: Approval, answers: Record<string, string>) => void;
   answers: (a: Approval) => Answers;
   onAnswers: (a: Approval, answers: Answers) => void;
+  /** While the composer has the keyboard: what is asked alone, so the card, the composer and the keyboard fit (the line sent answers it). */
+  compact?: boolean;
 }) {
   const a = () => props.approvals[Math.min(props.index, props.approvals.length - 1)];
   const long = signal(false);
@@ -478,10 +480,18 @@ function ApprovalCard(props: {
           </View>
         </If>
       </View>
-      <If when={a()?.questions}>
+      <If when={props.compact}>
+        <Text testID="approval-compact" class="text-[16px] font-bold leading-[21px] text-fg line-clamp-2">
+          {a()?.questions ? ((a()!.questions!.find((q) => !answered(props.answers(a()!)[q.question])) ?? a()!.questions![0])?.question ?? "") : a() ? approvalTitle(a()!) : ""}
+        </Text>
+        <If when={!a()?.questions && a()?.detail}>
+          <Text class="font-mono text-[12.5px] leading-[18px] text-fg-2 line-clamp-1">{a()?.detail ?? ""}</Text>
+        </If>
+      </If>
+      <If when={!props.compact && a()?.questions}>
         <QuestionCard approval={a()!} answers={props.answers(a()!)} onAnswers={(x) => props.onAnswers(a()!, x)} onChoose={props.onChoose} onAnswer={props.onAnswer} />
       </If>
-      <If when={!a()?.questions}>
+      <If when={!props.compact && !a()?.questions}>
       <Text class="text-[18px] font-bold leading-[23px] text-fg">{a() ? approvalTitle(a()!) : ""}</Text>
       <If when={a()?.detail}>
         <View role="button" onPress={() => long.set(!long())} class="rounded-lg bg-grouped px-[10px] py-2">
@@ -544,9 +554,10 @@ function Capsule(props: { view: ThreadView; queue: number; onBottom: () => void;
   );
 }
 
-function HeaderButtons(props: { t: ThreadSummary | null; onGit: () => void; onDiff: () => void; menu: JSX.Element }) {
+/** Git, the changes, more: a glass capsule of their own, or `bare` in the system's header, which draws its own around them (iOS 26's Liquid Glass). */
+function HeaderButtons(props: { t: ThreadSummary | null; onGit: () => void; onDiff: () => void; menu: JSX.Element; bare?: boolean }) {
   return (
-    <View class={`flex-row items-center rounded-full ${GLASS}`} style={{ ...BLUR, boxShadow: SHADOW.small() }}>
+    <View class={`flex-row items-center rounded-full ${props.bare ? "" : GLASS}`} style={props.bare ? undefined : { ...BLUR, boxShadow: SHADOW.small() }}>
       <View role="button" testID="open-git" accessibilityLabel={tr("Git")} onPress={props.onGit} class="h-9 w-[38px] items-center justify-center active:opacity-50">
         <Icon name="git-branch" size={18} />
       </View>
@@ -569,6 +580,8 @@ export function ThreadPage(props: { machine: string; thread: string }) {
   const t = (): ThreadSummary | null => summary(props.machine, props.thread) ?? view.local();
   const m = () => machine(props.machine);
   const draft = signal("");
+  // the composer has the keyboard
+  const typing = signal(false);
   const approvalAt = signal(0);
   // the questions' answers so far, by request: the card and the composer both fill them
   const questionAnswers = signal<Record<string, Answers>>({});
@@ -726,7 +739,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
     <NavPage
       title={t()?.title ?? ""}
       header={header}
-      headerRight={<HeaderButtons t={t()} onGit={() => sheet.set("git")} onDiff={() => diffOpen.set(true)} menu={moreMenu()} />}
+      headerRight={<HeaderButtons t={t()} onGit={() => sheet.set("git")} onDiff={() => diffOpen.set(true)} menu={moreMenu()} bare />}
       hidesBottomBarWhenPushed
     >
       <View class="flex-1 bg-screen">
@@ -767,7 +780,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
         >
           <Capsule view={view} queue={t()?.queue ?? 0} showBottom={!atBottom()} onBottom={() => { atBottom.set(true); toBottom(); }} />
           <If when={view.approvals().length > 0}>
-            <ApprovalCard approvals={view.approvals()} index={approvalAt()} onIndex={approvalAt.set} onAnswer={(a, d) => void answer(a, d)} onChoose={(a, c) => void choose(a, c)} answers={answersFor} onAnswers={setAnswers} />
+            <ApprovalCard approvals={view.approvals()} index={approvalAt()} onIndex={approvalAt.set} onAnswer={(a, d) => void answer(a, d)} onChoose={(a, c) => void choose(a, c)} answers={answersFor} onAnswers={setAnswers} compact={typing()} />
           </If>
           <Composer
             text={draft()}
@@ -779,6 +792,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
             onSend={(mode) => void send(mode)}
             onStop={(force) => void call("run.interrupt", force ? { force: true } : {}).catch(() => {})}
             onModel={() => sheet.set("model")}
+            onFocusChange={typing.set}
             accessory={<Accessory mode={t()?.mode ?? "full"} onMode={() => sheet.set("mode")} />}
           />
         </View>

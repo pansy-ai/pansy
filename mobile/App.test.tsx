@@ -232,6 +232,21 @@ test("a line typed in the composer answers the first open question, and sends on
   expect(answers(app)).toEqual({ "Which database?": "Postgres, with a pool", "Where do the deploy scripts go?": "ops/" });
 });
 
+test("typing shrinks the card to what it asks; sending lets the keyboard go and brings it back", async () => {
+  const app = await ask();
+  await app.type("id:composer-input", "Postgres");
+  // the composer has the keyboard: the card says only the question the line answers
+  await app.waitFor("id:approval-compact");
+  expect(app.texts()).toContain("Which database?");
+  expect(app.shows("id:question-send")).toBe(false);
+  await app.press("id:send");
+  // one question still open: the card stays, whole again, the line in place
+  await app.waitFor("id:question-send");
+  expect(app.shows("id:approval-compact")).toBe(false);
+  expect(app.value("id:question-other-0")).toBe("Postgres");
+  expect(answers(app)).toBe(undefined);
+});
+
 test("a subagent opens on what it reported back", async () => {
   const app = await launch();
   await app.press("id:thread-t_relay");

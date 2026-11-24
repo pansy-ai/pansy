@@ -2,7 +2,7 @@
 // the text, the model's pill, send. While a turn runs, send steers it, or
 // queues after it (a long press switches), and a red stop sits beside it.
 // Under it, the permission mode.
-import { signal, Text, View, type JSX } from "nsh";
+import { signal, Text, View, type InputRef, type JSX } from "nsh";
 import { Button as BaseButton, Input } from "nsh/base";
 import { Haptics } from "nsh/mobile";
 import type { Mode } from "../net/types";
@@ -27,15 +27,20 @@ export function Composer(props: {
   onModel: () => void;
   accessory?: JSX.Element;
   disabled?: boolean;
+  /** The input took the keyboard (true) or let it go. */
+  onFocusChange?: (focused: boolean) => void;
 }) {
   const sendMode = signal<SendMode>("steer");
   const stopping = signal(false);
   const empty = () => !props.text.trim();
   const icon = (): IconName => (!props.running ? "arrow-up" : sendMode() === "steer" ? "corner-left-up" : "list-ordered");
   const label = () => (!props.running ? tr("Send") : sendMode() === "steer" ? tr("Steer") : tr("Queue"));
+  let input: InputRef | undefined;
   const send = () => {
     if (empty() || props.disabled) return;
     props.onSend(props.running ? sendMode() : "start");
+    // sent: the keyboard goes, the feed shows what follows
+    input?.blur();
   };
   return (
     <View class="gap-[10px]">
@@ -44,6 +49,9 @@ export function Composer(props: {
         style={{ ...BLUR, boxShadow: SHADOW.composer() }}
       >
         <Input
+          ref={(r) => (input = r)}
+          onFocus={() => props.onFocusChange?.(true)}
+          onBlur={() => props.onFocusChange?.(false)}
           value={props.text}
           onChange={({ value }) => props.onText(value)}
           placeholder={props.placeholder}
