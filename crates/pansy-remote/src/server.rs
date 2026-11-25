@@ -687,6 +687,8 @@ async fn call(app: &App, p: &Principal, method: &str, params: Value) -> Result<V
         "thread.subscribe" => {
             let id = thread_param(&params)?;
             let after = params["after"].as_u64();
+            // what each turn changed (a worktree thread's), to show under its answer
+            let changes = hub.thread(&id).map(|t| t.changes).unwrap_or_default();
             let hub2 = hub.clone();
             let (summary, history, live, seq) =
                 tokio::task::spawn_blocking(move || hub2.open(&id, after)).await??;
@@ -694,7 +696,7 @@ async fn call(app: &App, p: &Principal, method: &str, params: Value) -> Result<V
                 .into_iter()
                 .map(|(seq, event)| json!({"seq": seq, "event": event}))
                 .collect();
-            json!({"thread": summary, "history": history, "live": live, "seq": seq})
+            json!({"thread": summary, "history": history, "live": live, "seq": seq, "changes": changes})
         }
         "thread.unsubscribe" => json!({}),
         "thread.create" => {
@@ -815,7 +817,15 @@ async fn call(app: &App, p: &Principal, method: &str, params: Value) -> Result<V
         }
         "git.diff" => {
             let t = hub.thread(&thread_param(&params)?)?;
-            let scope = diff_scope(&t, params["scope"].as_str().unwrap_or("uncommitted"))?;
+            let turn = params["turn"].as_u64().map(|n| n as u32);
+            // a summary has its start only while a turn runs
+            let running = hub.summary(&t.id).is_some_and(|s| s.started_at.is_some());
+            let scope = diff_scope(
+                &t,
+                params["scope"].as_str().unwrap_or("uncommitted"),
+                turn,
+                running,
+            )?;
             let dir = PathBuf::from(&t.workdir);
             serde_json::to_value(
                 tokio::task::spawn_blocking(move || git::diff(&dir, &scope)).await??,
@@ -895,22 +905,37 @@ fn mode_param(params: &Value) -> Result<Option<Mode>> {
     }
 }
 
-fn diff_scope(t: &crate::store::Thread, scope: &str) -> Result<git::Scope> {
-    let n = t.turns;
+/// A diff's scope. The turns' are a worktree thread's alone (only there are
+/// checkpoints): `turn` is turn `n` when asked for, else the turn going on
+/// (from the last checkpoint to the folder now) while one runs, else the
+/// last; `lastTurn` the last one finished.
+fn diff_scope(
+    t: &crate::store::Thread,
+    scope: &str,
+    turn: Option<u32>,
+    running: bool,
+) -> Result<git::Scope> {
+    let done = t.turns;
+    let between = |n: u32| git::Scope::Range {
+        // 0 is the worktree as made
+        from: git::checkpoint_ref(&t.id, n - 1),
+        to: git::checkpoint_ref(&t.id, n),
+    };
     Ok(match scope {
         "uncommitted" => git::Scope::Uncommitted,
         "base" => git::Scope::Base(t.base.clone().unwrap_or_else(|| {
             git::default_branch(Path::new(&t.workdir)).unwrap_or_else(|_| "HEAD".into())
         })),
-        "turn" | "lastTurn" if t.worktree && n >= 1 => {
-            // The last turn: from the checkpoint before it (0 is the
-            // worktree as made) to its own.
-            git::Scope::Range {
-                from: git::checkpoint_ref(&t.id, n - 1),
-                to: git::checkpoint_ref(&t.id, n),
-            }
+        "turn" | "lastTurn" if !t.worktree => {
+            return Err(bad("a turn's changes are kept in pansy's worktrees alone"));
         }
-        "turn" | "lastTurn" => git::Scope::Uncommitted,
+        "turn" if turn.is_some() => match turn {
+            Some(n) if n >= 1 && n <= done => between(n),
+            _ => return Err(bad(format!("no turn {} in this thread", turn.unwrap_or(0)))),
+        },
+        "turn" if running => git::Scope::Since(git::checkpoint_ref(&t.id, done)),
+        "turn" | "lastTurn" if done >= 1 => between(done),
+        "turn" | "lastTurn" => git::Scope::Since(git::checkpoint_ref(&t.id, 0)),
         other => return Err(bad(format!("no diff scope {other}"))),
     })
 }
@@ -1162,6 +1187,55 @@ mod tests {
         ] {
             assert!(!near(ip.parse().unwrap()), "{ip}");
         }
+    }
+
+    #[test]
+    fn a_turns_diff_is_between_its_checkpoints_and_kept_to_worktrees() {
+        let thread = |worktree: bool, turns: u32| -> crate::store::Thread {
+            serde_json::from_value(json!({
+                "id": "t_1", "agent": "codex", "title": "", "folder": "/p", "workdir": "/w",
+                "model": "", "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-01T00:00:00Z",
+                "worktree": worktree, "turns": turns,
+            }))
+            .unwrap()
+        };
+        let range = |from: u32, to: u32| {
+            format!(
+                "{:?}",
+                git::Scope::Range {
+                    from: git::checkpoint_ref("t_1", from),
+                    to: git::checkpoint_ref("t_1", to)
+                }
+            )
+        };
+        let scope = |t: &crate::store::Thread, s: &str, turn: Option<u32>, running: bool| {
+            diff_scope(t, s, turn, running)
+                .map(|s| format!("{s:?}"))
+                .map_err(|e| e.to_string())
+        };
+        let t = thread(true, 3);
+        assert_eq!(scope(&t, "turn", Some(2), false).unwrap(), range(1, 2));
+        assert_eq!(scope(&t, "lastTurn", None, true).unwrap(), range(2, 3));
+        assert_eq!(scope(&t, "turn", None, false).unwrap(), range(2, 3));
+        // while one runs, "this turn" is what it changed so far
+        assert_eq!(
+            scope(&t, "turn", None, true).unwrap(),
+            format!("{:?}", git::Scope::Since(git::checkpoint_ref("t_1", 3)))
+        );
+        assert!(scope(&t, "turn", Some(4), false).is_err());
+        assert!(scope(&t, "turn", Some(0), false).is_err());
+        // the user's own checkout has no checkpoints: no turn of it to show
+        let own = thread(false, 3);
+        assert!(
+            scope(&own, "turn", None, false)
+                .unwrap_err()
+                .contains("worktrees")
+        );
+        assert!(scope(&own, "lastTurn", None, false).is_err());
+        assert_eq!(
+            scope(&own, "uncommitted", None, false).unwrap(),
+            format!("{:?}", git::Scope::Uncommitted)
+        );
     }
 
     #[test]

@@ -82,6 +82,42 @@ test("the approval card answers with runtime-request.respond, and the turn goes 
   await app.waitUntil(() => called(app, "runtime-request.respond", (p) => p.threadId === "t_cost" && p.requestId === "r_test" && p.decision === "accept"));
   await app.waitFor("text:测试都通过了（42 个）。可以提交了。");
   await app.waitUntil(() => !app.shows("id:approval-card"));
+  // a worktree's turn: what it changed comes under its answer once it ends
+  await app.waitFor("id:changes-1");
+  expect(app.texts()).toContain("Changed 2 files");
+  expect(app.texts()).toContain("crates/pansy-core/src/usage.rs");
+});
+
+test("a settled turn's changes card lists its files and opens that turn's diff", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_ojbk");
+  await app.waitFor("id:changes-1");
+  expect(app.texts()).toContain("Changed 7 files");
+  expect(app.texts()).toContain("backtest/spread.py");
+  // five, then the rest on asking
+  expect(app.texts()).not.toContain("pyproject.toml");
+  await app.press("text:Show all 7 files");
+  await app.waitFor("text:pyproject.toml");
+  await app.press("text:Changed 7 files");
+  await app.waitFor("id:diff-view");
+  await app.waitUntil(() => called(app, "git.diff", (p) => p.threadId === "t_ojbk" && p.scope === "turn" && p.turn === 1));
+  expect(app.texts()).toContain("Turn 1");
+  // another scope leaves the turn
+  await app.press("text:Uncommitted");
+  await app.waitUntil(() => called(app, "git.diff", (p) => p.threadId === "t_ojbk" && p.scope === "uncommitted"));
+  expect(app.texts()).toContain("This turn");
+});
+
+test("outside pansy's worktrees the diff has no turns to offer", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_relay");
+  await app.waitFor("text:把 relay 的部署整理一下，现在一个脚本又建 Worker 又发证书");
+  expect(app.shows("id:changes-1")).toBe(false);
+  await app.press("id:open-diff >> nth=0");
+  await app.waitFor("id:diff-view");
+  await app.waitUntil(() => called(app, "git.diff", (p) => p.threadId === "t_relay" && p.scope === "uncommitted"));
+  expect(app.texts()).not.toContain("This turn");
+  expect(app.texts()).not.toContain("Last turn");
 });
 
 test("a turn works in the open, then folds behind how long it worked but for its answer", async () => {
@@ -162,18 +198,79 @@ test("a new message streams in, asks for approval and finishes", async () => {
   await app.waitFor("text:测试都通过了（42 个）。可以提交了。", { timeout: 15_000 });
 });
 
-test("a question is answered with the choice made", async () => {
+const ask = async () => {
   const app = await launch();
   await app.press("id:thread-t_relay");
   await app.waitFor("text:把 relay 的部署整理一下，现在一个脚本又建 Worker 又发证书");
   await app.type("id:composer-input", "问我用哪个数据库");
   await app.press("id:send");
   await app.waitFor("text:Which database?", { timeout: 10_000 });
+  return app;
+};
+const answers = (app: App) => calls(app).find((c) => c.method === "runtime-request.respond")?.params.answers as Record<string, string> | undefined;
+
+test("each question is answered on its own: a choice, or a line of the user's own", async () => {
+  const app = await ask();
   expect(app.texts()).toContain("A QUESTION FOR YOU");
+  expect(app.texts()).toContain("Where do the deploy scripts go?");
   await app.press("id:question-option-SQLite");
+  expect(app.enabled("id:question-send")).toBe(false);
+  await app.type("id:question-other-1", "infra/deploy");
   await app.press("id:question-send");
-  await app.waitUntil(() => called(app, "runtime-request.respond", (p) => (p.answers as Record<string, string>)?.["Which database?"] === "SQLite"));
-  await app.waitFor("text:Going with SQLite.");
+  await app.waitUntil(() => !!answers(app));
+  expect(answers(app)).toEqual({ "Which database?": "SQLite", "Where do the deploy scripts go?": "infra/deploy" });
+  await app.waitFor("text:Going with SQLite, infra/deploy.");
+});
+
+test("a line typed in the composer answers the first open question, and sends once all are", async () => {
+  const app = await ask();
+  await app.press("id:question-option-ops/");
+  // the database is still open: the line goes there, and every question has its answer
+  await app.type("id:composer-input", "Postgres, with a pool");
+  await app.press("id:send");
+  await app.waitUntil(() => !!answers(app));
+  expect(answers(app)).toEqual({ "Which database?": "Postgres, with a pool", "Where do the deploy scripts go?": "ops/" });
+});
+
+test("typing shrinks the card to what it asks; sending lets the keyboard go and brings it back", async () => {
+  const app = await ask();
+  await app.type("id:composer-input", "Postgres");
+  // the composer has the keyboard: the card says only the question the line answers
+  await app.waitFor("id:approval-compact");
+  expect(app.texts()).toContain("Which database?");
+  expect(app.shows("id:question-send")).toBe(false);
+  await app.press("id:send");
+  // one question still open: the card stays, whole again, the line in place
+  await app.waitFor("id:question-send");
+  expect(app.shows("id:approval-compact")).toBe(false);
+  expect(app.value("id:question-other-0")).toBe("Postgres");
+  expect(answers(app)).toBe(undefined);
+});
+
+test("without a system menu (the web, Android) the ⋯ is the app's own", async () => {
+  const app = await launch({ platform: "web" });
+  await app.press("id:thread-t_relay");
+  await app.waitFor("text:把 relay 的部署整理一下，现在一个脚本又建 Worker 又发证书");
+  await app.press("id:thread-more >> nth=1");
+  await app.press("id:more-rename");
+  await app.waitFor("id:rename-sheet");
+  await app.press("id:sheet-close");
+  await app.press("id:thread-more >> nth=1");
+  await app.press("id:more-settings");
+  await app.waitFor("id:mode-sheet");
+});
+
+test("a subagent opens on what it reported back", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_relay");
+  await app.waitFor("text:把 relay 的部署整理一下，现在一个脚本又建 Worker 又发证书");
+  await app.type("id:composer-input", "看看用量按项目怎么分");
+  await app.press("id:send");
+  // it reports back just before the test command asks for approval
+  await app.waitFor("text:Run a command", { timeout: 15_000 });
+  expect(app.shows("text:project 的来源")).toBe(false);
+  await app.press("text:Explore");
+  await app.waitFor("text:project 的来源");
 });
 
 test("pulls the upstream from the Git sheet", async () => {
@@ -199,6 +296,17 @@ test("the model sheet lists groups and providers and changes the thread's model"
   await app.press("id:model-group/cheap");
   await app.waitUntil(() => called(app, "thread.update", (p) => p.model === "group/cheap"));
   await app.waitFor("text:cheap");
+});
+
+test("the model sheet opens on the thread's permission mode and changes it", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_relay");
+  await app.press("id:model-pill");
+  await app.waitFor("id:permission-full");
+  expect(app.texts()).toContain("Nothing asks. The agent runs commands and changes files.");
+  await app.press("id:permission-ask");
+  await app.waitUntil(() => called(app, "thread.update", (p) => p.mode === "ask"));
+  await app.waitFor("text:Commands and file changes wait for your approval.");
 });
 
 test("commits and pushes from the Git sheet, step by step", async () => {

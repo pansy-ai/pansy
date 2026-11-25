@@ -111,7 +111,7 @@ export function NewTask() {
           <Composer
             text={text()}
             onText={text.set}
-            placeholder={tr("Ask it to do something")}
+            placeholder={tr("Ask anything")}
             agent={agent()}
             model={model() || tr("default")}
             onSend={() => void send()}

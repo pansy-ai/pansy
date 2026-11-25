@@ -93,7 +93,7 @@ payload `{"jti","htm","htu","iat","ath"?}`。`htu` 不带 query；`iat` 前后 6
 | 方法 | 范围 | params | result |
 | :-- | :-- | :-- | :-- |
 | `shell.subscribe` | orchestration:read | `{}` | `{machine, threads: [ThreadSummary]}`，之后推 `shell.thread`、`shell.removed` |
-| `thread.subscribe` | orchestration:read | `{threadId, after?}` | `{thread: ThreadSummary, history: [Turn], live: [Seq<Event>], seq}`，之后推 `thread.event` |
+| `thread.subscribe` | orchestration:read | `{threadId, after?}` | `{thread: ThreadSummary, history: [Turn], live: [Seq<Event>], seq, changes: [TurnChange]}`，之后推 `thread.event` |
 | `thread.unsubscribe` | orchestration:read | `{threadId}` | `{}` |
 | `thread.create` | orchestration:operate | `{folder, agent, model?, effort?, mode?, workspace: {kind: "current"\|"branch"\|"worktree", base?}, text}` | `{threadId}` |
 | `message.dispatch` | orchestration:operate | `{threadId, text, dispatchMode: "start"\|"queue"\|"steer"\|"restart", model?, effort?}` | `{}` |
@@ -105,7 +105,7 @@ payload `{"jti","htm","htu","iat","ath"?}`。`htu` 不带 query；`iat` 前后 6
 | `projects.list` | orchestration:read | `{}` | `{projects: [{folder, name, git: bool, branch?}]}` |
 | `usage.summary` | orchestration:read | `{days?}`（1 到 90，默认 7） | `{days, total: Totals, byDay: {日期: Totals}, byModel: {"provider/model": Totals}, byAgent: {agent: Totals}}`；`Totals` 是 `pansy_core::usage::Totals`（`requests, errors, input, output, cacheRead, cacheWrite, reasoning`），每个请求的明细不给 |
 | `git.status` | orchestration:read | `{threadId}` | `GitStatus` |
-| `git.diff` | orchestration:read | `{threadId, scope: "turn"\|"lastTurn"\|"uncommitted"\|"base"}` | `Diff` |
+| `git.diff` | orchestration:read | `{threadId, scope: "turn"\|"lastTurn"\|"uncommitted"\|"base", turn?}` | `Diff`。`turn`、`lastTurn` 只有 pansy 建的工作树有（检查点只在那里），别处是 `bad_request`；`turn` 带 `turn: n` 是第 n 回合，不带时回合进行中是从上个检查点到现在，否则是上一回合 |
 | `git.generate` | source-control:write | `{threadId, kind: "commit"\|"pr"}` | `{title, body}` |
 | `git.run` | source-control:write | `{threadId, action: "commit"\|"push"\|"commit_push"\|"create_pr"\|"commit_push_pr"\|"pull", files?, message?, pr?: {title?, body?, base?}}` | `{commit?, pr?: {number, url}, pull?}`；进度推 `git.progress`；`pull` 只快进上游 |
 | `devices.list` | access:read | `{}` | `{devices: [Device], requireApproval}` |
@@ -160,12 +160,21 @@ type Event =                  // pansy_remote::Event，tag 是 type
   | { type: "user"; text: string }                       // 发出去的一句（多端同步）
   | { type: "toolStarted"; item: string; kind: string; title: string }
   | { type: "toolFinished"; item: string; kind: string; title: string; status: string; output?: string; exit?: number }  // exit：命令的退出码（Codex 给）
+      // kind 是 agent 自己的词，只有一个统一："subagent"（Claude Code 的 Task / Agent、Codex 的 spawnAgent），
+      // title 是"名字 · 类型或 agent · 模型"，output 是它交回来的报告；Codex 的 plan 的 output 是计划全文
   | { type: "approval"; request: string; kind: string; title: string; detail: string; reason?: string }
   | { type: "question"; request: string; questions: { question: string; header: string; multiSelect: boolean;
       options: { label: string; description: string }[] }[] }
   | { type: "resolved"; request: string }
   | { type: "turnFinished"; turn: string; status: string; error?: string }
-  | { type: "exited"; code?: number };
+  | { type: "exited"; code?: number }
+  | ({ type: "turnChanges" } & TurnChange);              // 工作树线程的回合改了东西时，紧跟它的 turnFinished，hub 发
+
+type TurnChange = {           // 一回合改了什么：它的检查点对上一个；路径和行数，最多 100 个文件
+  turn: number; at: string;   // at：结束的时间，在 agent 的历史里找它的那句话用
+  add: number; del: number;
+  files: { path: string; status: "added" | "modified" | "deleted" | "renamed"; add: number; del: number }[];
+};
 
 type Seq<T> = { seq: number; event: T };
 

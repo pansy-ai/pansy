@@ -2,15 +2,15 @@
 // answers flat in Markdown, its work folded into rows, subagents, the
 // approval card docked over the composer, the status capsule; the header's
 // Git, changes and more. History and live events come from state/thread.ts.
-import { cleanup, Clipboard, createAnimatedValue, effect, Scroll, signal, Text, token, View, type JSX, type ScrollRef } from "nsh";
-import { Menu, MenuItem, NavPage } from "nsh/base";
+import { cleanup, Clipboard, createAnimatedValue, effect, platform, Scroll, signal, Text, token, View, type JSX, type ScrollRef } from "nsh";
+import { Menu, MenuButton, MenuItem, NavPage } from "nsh/base";
 import { Haptics } from "nsh/mobile";
 import type { Decision, GitStatus, Mode, Question, ThreadSummary } from "../net/types";
 import { connState, machine, summary } from "../state/store";
 import { toolCalls } from "../state/prefs";
-import { ThreadView, type Approval, type Item } from "../state/thread";
+import { ThreadView, type Approval, type Change, type Item } from "../state/thread";
 import { archive, copyLink, renaming } from "./actions";
-import { Accessory, Composer, type SendMode } from "./Composer";
+import { Composer, type SendMode } from "./Composer";
 import { DiffView } from "./Diff";
 import { CommitSheet, GitSheet, type Way } from "./Git";
 import { tr, trn } from "./i18n";
@@ -18,9 +18,9 @@ import { Markdown } from "./Markdown";
 import { ModelSheet } from "./ModelSheet";
 import { ModeSheet } from "./ModeSheet";
 import { chats } from "./nav";
-import { AddDel, BLUR, Btn, GLASS, GlassButton, Icon, Loading, Note, SHADOW, Spinner, toast, type Color, type IconName } from "./parts";
+import { AddDel, BLUR, Btn, Field, GLASS, GlassButton, Icon, Loading, Note, SHADOW, Spinner, toast, type Color, type IconName } from "./parts";
 import { clock, now, tick, timer } from "./time";
-import { actionOf, duration, latestThought, leadAction, liveLabel, rowsOf, thoughtLine, summary as workSummary, type Action, type Row, type WorkItem } from "./work";
+import { actionOf, changesByPrompt, duration, latestThought, leadAction, liveLabel, rowsOf, thoughtLine, summary as workSummary, type Action, type Row, type WorkItem } from "./work";
 
 const project = (t: ThreadSummary | undefined | null) => (t ? (t.folder.split(/[\\/]/).filter(Boolean).pop() ?? t.folder) : "");
 
@@ -122,14 +122,37 @@ function ToolItem(props: { item: Extract<Item, { kind: "tool" }> }) {
   );
 }
 
+/** A subagent: its dot, what it was told, `agent · model`; opens on what it reported back, once it has. */
 function SubagentItem(props: { item: Extract<Item, { kind: "subagent" }> }) {
+  const open = signal(false);
   const dot = () => (props.item.status === "running" ? "bg-sky" : props.item.status === "failed" ? "bg-danger" : "bg-emerald");
+  const report = () => props.item.output?.trim() ?? "";
   return (
-    <View testID={`subagent-${props.item.id}`} class="flex-row items-center gap-2 py-[6px]">
-      <View class={`h-[6px] w-[6px] rounded-full ${dot()}`} />
-      <Text class="text-[14px] font-medium text-fg">{props.item.name}</Text>
-      <Text class="flex-1 text-[13px] text-fg-2 line-clamp-1">{props.item.detail}</Text>
-      <Icon name="chevron-right" color="fg-3" size={12} />
+    <View>
+      <View
+        role="button"
+        testID={`subagent-${props.item.id}`}
+        onPress={() => {
+          if (!report()) return;
+          open.set(!open());
+          Haptics.selection();
+        }}
+        class="flex-row items-center gap-2 py-[6px]"
+      >
+        <View class={`h-[6px] w-[6px] rounded-full ${dot()}`} />
+        <Text class="shrink text-[14px] font-medium text-fg line-clamp-1">{props.item.name}</Text>
+        <Text class="flex-1 text-[13px] text-fg-2 line-clamp-1">{props.item.detail}</Text>
+        <If when={report()}>
+          <View class="transition-transform duration-180" style={{ transform: [{ rotate: open() ? "90deg" : "0deg" }] }}>
+            <Icon name="chevron-right" color="fg-3" size={12} />
+          </View>
+        </If>
+      </View>
+      <If when={open() && report()}>
+        <Scroll testID={`subagent-report-${props.item.id}`} class="ml-[14px] rounded-lg bg-grouped px-[10px] py-2" style={{ maxHeight: 240 }}>
+          <Markdown text={report()} />
+        </Scroll>
+      </If>
     </View>
   );
 }
@@ -181,7 +204,8 @@ function Work(props: { items: WorkItem[]; live: boolean }) {
         <If when={open()}>
           <Scroll style={{ maxHeight: 256 }}>
             <View class="gap-px">
-              <Each of={props.items} key={(i) => `${i.id}:${JSON.stringify(i)}`}>
+              {/* kept by id: a call that changes updates its row, which stays open if it was */}
+              <Each of={props.items} key={(i) => i.id}>
                 {(i) => <WorkItemView item={i()} live={props.live && i() === latest() && i().kind === "reasoning"} />}
               </Each>
             </View>
@@ -239,9 +263,48 @@ function Answer(props: { item: Extract<Item, { kind: "assistant" }> }) {
 }
 
 /** A row of the feed; its kind stays for its key, its content changes (props are read where they show). */
-function FeedRow(props: { row: Row; startedAt: number | null; onFold: (id: string) => void }) {
+/** Files a changes card lists before "Show all". */
+const CARD_FILES = 5;
+
+/** What a settled turn changed, under its answer (T3's changed-files card): the files with their counts; each opens the turn's diff. */
+function ChangesCard(props: { change: Change; onOpen: (turn: number) => void }) {
+  const all = signal(false);
+  const files = () => (all() ? props.change.files : props.change.files.slice(0, CARD_FILES));
+  const n = () => props.change.files.length;
+  const open = () => {
+    Haptics.selection();
+    props.onOpen(props.change.turn);
+  };
+  return (
+    <View testID={`changes-${props.change.turn}`} class="overflow-hidden rounded-2xl border border-border">
+      <View role="button" accessibilityLabel={tr("Open this turn's changes")} onPress={open} class="min-h-11 flex-row items-center gap-2 bg-grouped px-3 active:opacity-70">
+        <Icon name="file-diff" color="fg-2" size={15} />
+        <Text class="flex-1 text-[14px] font-medium text-fg">{trn(n(), "Changed 1 file", "Changed %d files", n())}</Text>
+        <AddDel add={props.change.add} del={props.change.del} size={13} mono />
+        <Icon name="chevron-right" color="fg-3" size={12} />
+      </View>
+      <Each of={files()} key={(f) => f.path}>
+        {(f) => (
+          <View role="button" accessibilityLabel={f().path} onPress={open} class="min-h-9 flex-row items-center gap-2 border-t border-line px-3 active:bg-line">
+            <Text class={`min-w-0 flex-1 font-mono text-[12px] line-clamp-1 ${f().status === "deleted" ? "text-fg-3 line-through" : "text-fg"}`}>{f().path}</Text>
+            <AddDel add={f().add} del={f().del} size={12} mono />
+          </View>
+        )}
+      </Each>
+      <If when={!all() && n() > CARD_FILES}>
+        <View role="button" testID={`changes-more-${props.change.turn}`} onPress={() => all.set(true)} class="min-h-9 justify-center border-t border-line px-3 active:bg-line">
+          <Text class="text-[13px] text-fg-2">{tr("Show all %d files", n())}</Text>
+        </View>
+      </If>
+    </View>
+  );
+}
+
+function FeedRow(props: { row: Row; startedAt: number | null; onFold: (id: string) => void; onTurnDiff: (turn: number) => void }) {
   const row = <K extends Row["kind"]>() => props.row as Extract<Row, { kind: K }>;
   switch (props.row.kind) {
+    case "changes":
+      return <ChangesCard change={row<"changes">().change} onOpen={props.onTurnDiff} />;
     case "work":
       return <Work items={row<"work">().items} live={row<"work">().live} />;
     case "fold":
@@ -273,7 +336,9 @@ function FeedRow(props: { row: Row; startedAt: number | null; onFold: (id: strin
       return (
         <View class="flex-row items-center gap-2 px-1">
           <Icon name="circle-alert" color="danger" size={14} />
-          <Text class="flex-1 text-[14px] text-danger">{it.text}</Text>
+          <Text class="flex-1 text-[14px] text-danger">
+            {it.exited ? (it.exited.code !== undefined && it.exited.code !== null ? tr("The agent quit (exit code %d)", it.exited.code) : tr("The agent quit")) : it.text}
+          </Text>
         </View>
       );
     case "compact":
@@ -301,26 +366,42 @@ function approvalTitle(a: Approval): string {
   return a.title;
 }
 
-/** A question's choices: one, or several when it says so; Send once each has one. */
-function QuestionCard(props: { approval: Approval; onChoose: (a: Approval, answers: Record<string, string>) => void; onAnswer: (a: Approval, d: Decision) => void }) {
-  const picks = signal<Record<string, string[]>>({});
+/** A question's answer so far: the options picked, and a line of the user's own. */
+export type Picked = { picks: string[]; other: string };
+/** Each question's answer so far, by the question. */
+export type Answers = Record<string, Picked>;
+
+const answered = (p: Picked | undefined) => !!p && (p.picks.length > 0 || !!p.other.trim());
+
+/** What is sent for each question: its picks, then its own line. */
+export function answersOf(questions: Question[], answers: Answers): Record<string, string> {
+  return Object.fromEntries(questions.map((q) => [q.question, [...(answers[q.question]?.picks ?? []), answers[q.question]?.other.trim() ?? ""].filter(Boolean).join(", ")]));
+}
+
+/** A line typed in the composer while questions wait: the first unanswered one takes it as its own (the first one, when all are answered); `send` once every one is. */
+export function typedAnswer(questions: Question[], answers: Answers, text: string): { answers: Answers; send: Record<string, string> | null } {
+  const q = questions.find((q) => !answered(answers[q.question])) ?? questions[0];
+  if (!q) return { answers, send: null };
+  const next = { ...answers, [q.question]: { picks: answers[q.question]?.picks ?? [], other: text } };
+  return { answers: next, send: questions.every((q) => answered(next[q.question])) ? answersOf(questions, next) : null };
+}
+
+/** A question's choices: one, or several when it says so, and a line of the user's own; Send once each has an answer. */
+function QuestionCard(props: { approval: Approval; answers: Answers; onAnswers: (a: Answers) => void; onChoose: (a: Approval, answers: Record<string, string>) => void; onAnswer: (a: Approval, d: Decision) => void }) {
   const qs = (): Question[] => props.approval.questions ?? [];
+  const at = (q: Question): Picked => props.answers[q.question] ?? { picks: [], other: "" };
   const toggle = (q: Question, label: string) => {
-    const now = picks()[q.question] ?? [];
+    const now = at(q).picks;
     const next = q.multiSelect ? (now.includes(label) ? now.filter((l) => l !== label) : [...now, label]) : [label];
-    picks.set({ ...picks(), [q.question]: next });
+    props.onAnswers({ ...props.answers, [q.question]: { ...at(q), picks: next } });
     Haptics.selection();
   };
-  const ready = () => qs().every((q) => (picks()[q.question] ?? []).length > 0);
-  const send = () => {
-    const answers: Record<string, string> = {};
-    for (const q of qs()) answers[q.question] = (picks()[q.question] ?? []).join(", ");
-    props.onChoose(props.approval, answers);
-  };
+  const ready = () => qs().every((q) => answered(props.answers[q.question]));
+  const send = () => props.onChoose(props.approval, answersOf(qs(), props.answers));
   return (
     <View class="gap-[12px]">
       <Each of={qs()} key={(q) => q.question}>
-        {(q) => (
+        {(q, n) => (
           <View class="gap-[6px]">
             <If when={q().header}>
               <Text class="text-[12px] font-bold uppercase tracking-[1.1px] text-fg-2">{q().header}</Text>
@@ -329,7 +410,7 @@ function QuestionCard(props: { approval: Approval; onChoose: (a: Approval, answe
             <View class="overflow-hidden rounded-xl bg-grouped">
               <Each of={q().options} key={(o) => o.label}>
                 {(o, i) => {
-                  const on = () => (picks()[q().question] ?? []).includes(o().label);
+                  const on = () => at(q()).picks.includes(o().label);
                   return (
                     <View
                       role="button"
@@ -350,6 +431,13 @@ function QuestionCard(props: { approval: Approval; onChoose: (a: Approval, answe
                 }}
               </Each>
             </View>
+            {/* each question its own "Other", as T3's */}
+            <Field
+              value={at(q()).other}
+              onChange={(other) => props.onAnswers({ ...props.answers, [q().question]: { ...at(q()), other } })}
+              placeholder={tr("Other answer")}
+              testID={`question-other-${n()}`}
+            />
           </View>
         )}
       </Each>
@@ -362,7 +450,17 @@ function QuestionCard(props: { approval: Approval; onChoose: (a: Approval, answe
 }
 
 /** 需要批准: docked over the composer, not in the feed; several go 1 / N. */
-function ApprovalCard(props: { approvals: Approval[]; index: number; onIndex: (i: number) => void; onAnswer: (a: Approval, d: Decision) => void; onChoose: (a: Approval, answers: Record<string, string>) => void }) {
+function ApprovalCard(props: {
+  approvals: Approval[];
+  index: number;
+  onIndex: (i: number) => void;
+  onAnswer: (a: Approval, d: Decision) => void;
+  onChoose: (a: Approval, answers: Record<string, string>) => void;
+  answers: (a: Approval) => Answers;
+  onAnswers: (a: Approval, answers: Answers) => void;
+  /** While the composer has the keyboard: what is asked alone, so the card, the composer and the keyboard fit (the line sent answers it). */
+  compact?: boolean;
+}) {
   const a = () => props.approvals[Math.min(props.index, props.approvals.length - 1)];
   const long = signal(false);
   const lines = () => a()?.detail.split("\n") ?? [];
@@ -382,10 +480,18 @@ function ApprovalCard(props: { approvals: Approval[]; index: number; onIndex: (i
           </View>
         </If>
       </View>
-      <If when={a()?.questions}>
-        <QuestionCard approval={a()!} onChoose={props.onChoose} onAnswer={props.onAnswer} />
+      <If when={props.compact}>
+        <Text testID="approval-compact" class="text-[16px] font-bold leading-[21px] text-fg line-clamp-2">
+          {a()?.questions ? ((a()!.questions!.find((q) => !answered(props.answers(a()!)[q.question])) ?? a()!.questions![0])?.question ?? "") : a() ? approvalTitle(a()!) : ""}
+        </Text>
+        <If when={!a()?.questions && a()?.detail}>
+          <Text class="font-mono text-[12.5px] leading-[18px] text-fg-2 line-clamp-1">{a()?.detail ?? ""}</Text>
+        </If>
       </If>
-      <If when={!a()?.questions}>
+      <If when={!props.compact && a()?.questions}>
+        <QuestionCard approval={a()!} answers={props.answers(a()!)} onAnswers={(x) => props.onAnswers(a()!, x)} onChoose={props.onChoose} onAnswer={props.onAnswer} />
+      </If>
+      <If when={!props.compact && !a()?.questions}>
       <Text class="text-[18px] font-bold leading-[23px] text-fg">{a() ? approvalTitle(a()!) : ""}</Text>
       <If when={a()?.detail}>
         <View role="button" onPress={() => long.set(!long())} class="rounded-lg bg-grouped px-[10px] py-2">
@@ -448,17 +554,23 @@ function Capsule(props: { view: ThreadView; queue: number; onBottom: () => void;
   );
 }
 
-function HeaderButtons(props: { t: ThreadSummary | null; onGit: () => void; onDiff: () => void; menu: JSX.Element }) {
+/** A hairline between two of the header's buttons, so three read as three. */
+const Divider = () => <View class="h-4 w-px bg-line" />;
+
+/** Git, the changes, more, a line between each: a glass capsule of their own, or `bare` in the system's header, which draws its own around them (iOS 26's Liquid Glass). */
+function HeaderButtons(props: { t: ThreadSummary | null; onGit: () => void; onDiff: () => void; menu: JSX.Element; bare?: boolean }) {
   return (
-    <View class={`flex-row items-center rounded-full ${GLASS}`} style={{ ...BLUR, boxShadow: SHADOW.small() }}>
+    <View class={`flex-row items-center rounded-full ${props.bare ? "" : GLASS}`} style={props.bare ? undefined : { ...BLUR, boxShadow: SHADOW.small() }}>
       <View role="button" testID="open-git" accessibilityLabel={tr("Git")} onPress={props.onGit} class="h-9 w-[38px] items-center justify-center active:opacity-50">
         <Icon name="git-branch" size={18} />
       </View>
+      <Divider />
       <View role="button" testID="open-diff" accessibilityLabel={tr("Changes")} onPress={props.onDiff} class="h-9 min-w-[38px] items-center justify-center px-2 active:opacity-50">
         <If when={props.t?.diff && (props.t.diff.add || props.t.diff.del)} else={<Icon name="file-diff" size={18} />}>
           <AddDel add={props.t?.diff?.add ?? 0} del={props.t?.diff?.del ?? 0} size={12} />
         </If>
       </View>
+      <Divider />
       {props.menu}
     </View>
   );
@@ -473,9 +585,21 @@ export function ThreadPage(props: { machine: string; thread: string }) {
   const t = (): ThreadSummary | null => summary(props.machine, props.thread) ?? view.local();
   const m = () => machine(props.machine);
   const draft = signal("");
+  // the composer has the keyboard
+  const typing = signal(false);
   const approvalAt = signal(0);
+  // the questions' answers so far, by request: the card and the composer both fill them
+  const questionAnswers = signal<Record<string, Answers>>({});
+  const answersFor = (a: Approval): Answers => questionAnswers()[a.request] ?? {};
+  const setAnswers = (a: Approval, answers: Answers) => questionAnswers.set({ ...questionAnswers(), [a.request]: answers });
   const sheet = signal<"model" | "mode" | "git" | "commit" | null>(null);
   const diffOpen = signal(false);
+  // the turn a changes card opened the diff on (else the diff's own scopes)
+  const diffTurn = signal<number | undefined>(undefined);
+  const openTurn = (turn: number) => {
+    diffTurn.set(turn);
+    diffOpen.set(true);
+  };
   const commitWay = signal<Way>("commit_push");
   const commitStatus = signal<GitStatus | null>(null);
   const atBottom = signal(true);
@@ -495,10 +619,10 @@ export function ThreadPage(props: { machine: string; thread: string }) {
     view.approvals()[approvalAt()]?.questions
       ? tr("Or type your own answer")
       : view.approvals().length
-        ? tr("Decline with a line telling the agent what to do")
+        ? tr("Or tell it what to do instead")
         : view.running()
           ? tr("Steer it…")
-          : tr("Ask it to do something");
+          : tr("Ask anything");
 
   const toBottom = (animated = true) => scroller?.scrollTo({ y: Math.max(0, contentHeight), animated });
   // new content follows while the user is at the bottom
@@ -538,8 +662,10 @@ export function ThreadPage(props: { machine: string; thread: string }) {
     const pending = view.approvals()[approvalAt()];
     draft.set("");
     if (pending?.questions) {
-      // typed: the answer to each of its questions
-      await choose(pending, Object.fromEntries(pending.questions.map((q) => [q.question, text])));
+      // typed: the answer to the first question still open; sent once each has one
+      const typed = typedAnswer(pending.questions, answersFor(pending), text);
+      setAnswers(pending, typed.answers);
+      if (typed.send) await choose(pending, typed.send);
       return;
     }
     if (pending) {
@@ -568,7 +694,27 @@ export function ThreadPage(props: { machine: string; thread: string }) {
     }
   };
 
-  const moreMenu = () => (
+  // ⋯: what else a thread does, for the native menu (iOS) and the app's own (elsewhere)
+  const more = () => [
+    { id: "rename", label: tr("Rename"), icon: "pencil" as IconName, symbol: "pencil", run: () => t() && renaming.set({ machine: props.machine, thread: t()! }) },
+    { id: "settings", label: tr("Thread settings"), icon: "sliders-horizontal" as IconName, symbol: "slider.horizontal.3", run: () => sheet.set("mode") },
+    { id: "copy", label: tr("Copy link"), icon: "link" as IconName, symbol: "link", run: () => t() && void copyLink(props.machine, t()!) },
+    { id: "archive", label: tr("Settle"), icon: "archive" as IconName, symbol: "archivebox", run: () => t() && void archive(props.machine, t()!).then(() => chats.pop()) },
+  ];
+  // iOS: the system's own pull-down menu around the app's ⋯; Android and the web have none for a view, so the app's own
+  const moreMenu = () =>
+    platform.os === "ios" ? (
+      <MenuButton
+        testID="thread-more"
+        accessibilityLabel={tr("More")}
+        items={more().map((x) => ({ id: x.id, label: x.label, icon: x.symbol }))}
+        onSelect={({ id }) => more().find((x) => x.id === id)?.run()}
+      >
+        <View class="h-9 w-[38px] items-center justify-center">
+          <Icon name="ellipsis" size={18} />
+        </View>
+      </MenuButton>
+    ) : (
     <Menu
       placement="bottom"
       align="end"
@@ -580,15 +726,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
       popupClass="min-w-[240px] rounded-[14px] border border-border bg-glass p-1"
       popupStyle={BLUR}
     >
-      <Each
-        of={[
-          { id: "rename", label: tr("Rename"), icon: "pencil" as IconName, run: () => t() && renaming.set({ machine: props.machine, thread: t()! }) },
-          { id: "settings", label: tr("Thread settings"), icon: "sliders-horizontal" as IconName, run: () => sheet.set("mode") },
-          { id: "copy", label: tr("Copy link"), icon: "link" as IconName, run: () => t() && void copyLink(props.machine, t()!) },
-          { id: "archive", label: tr("Settle"), icon: "archive" as IconName, run: () => t() && void archive(props.machine, t()!).then(() => chats.pop()) },
-        ]}
-        key={(x) => x.id}
-      >
+      <Each of={more()} key={(x) => x.id}>
         {(x) => (
           <MenuItem onSelect={x().run} testID={`more-${x().id}`} class="min-h-11 flex-row items-center gap-3 rounded-[10px] px-4 focus:bg-line active:bg-line">
             <Text class="flex-1 text-[16px] text-fg">{x().label}</Text>
@@ -597,7 +735,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
         )}
       </Each>
     </Menu>
-  );
+    );
 
   const header = (
     <View class="h-[52px] flex-row items-center gap-2 bg-screen px-4">
@@ -618,7 +756,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
     <NavPage
       title={t()?.title ?? ""}
       header={header}
-      headerRight={<HeaderButtons t={t()} onGit={() => sheet.set("git")} onDiff={() => diffOpen.set(true)} menu={moreMenu()} />}
+      headerRight={<HeaderButtons t={t()} onGit={() => sheet.set("git")} onDiff={() => diffOpen.set(true)} menu={moreMenu()} bare />}
       hidesBottomBarWhenPushed
     >
       <View class="flex-1 bg-screen">
@@ -647,8 +785,8 @@ export function ThreadPage(props: { machine: string; thread: string }) {
               <If when={t()?.source === "terminal" && !view.items().some((i) => i.kind === "user" && i.id.startsWith("local"))}>
                 <Note tone="warning" icon="terminal" text={tr("Opened in a terminal: what you send first takes the session over")} />
               </If>
-              <Each of={rowsOf(view.items(), view.running(), opened(), view.approvals().length > 0, toolCalls())} key={(r) => (r.kind === "item" ? r.item.id : r.id)}>
-                {(r) => <FeedRow row={r()} startedAt={view.startedAt()} onFold={fold} />}
+              <Each of={rowsOf(view.items(), view.running(), opened(), view.approvals().length > 0, toolCalls(), changesByPrompt(view.items(), view.changes()))} key={(r) => (r.kind === "item" ? r.item.id : r.id)}>
+                {(r) => <FeedRow row={r()} startedAt={view.startedAt()} onFold={fold} onTurnDiff={openTurn} />}
               </Each>
             </If>
           </View>
@@ -659,7 +797,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
         >
           <Capsule view={view} queue={t()?.queue ?? 0} showBottom={!atBottom()} onBottom={() => { atBottom.set(true); toBottom(); }} />
           <If when={view.approvals().length > 0}>
-            <ApprovalCard approvals={view.approvals()} index={approvalAt()} onIndex={approvalAt.set} onAnswer={(a, d) => void answer(a, d)} onChoose={(a, c) => void choose(a, c)} />
+            <ApprovalCard approvals={view.approvals()} index={approvalAt()} onIndex={approvalAt.set} onAnswer={(a, d) => void answer(a, d)} onChoose={(a, c) => void choose(a, c)} answers={answersFor} onAnswers={setAnswers} compact={typing()} />
           </If>
           <Composer
             text={draft()}
@@ -671,7 +809,7 @@ export function ThreadPage(props: { machine: string; thread: string }) {
             onSend={(mode) => void send(mode)}
             onStop={(force) => void call("run.interrupt", force ? { force: true } : {}).catch(() => {})}
             onModel={() => sheet.set("model")}
-            accessory={<Accessory mode={t()?.mode ?? "full"} onMode={() => sheet.set("mode")} />}
+            onFocusChange={typing.set}
           />
         </View>
       </View>
@@ -684,6 +822,8 @@ export function ThreadPage(props: { machine: string; thread: string }) {
         effort={t()?.effort}
         thread
         onPick={(model, effort) => void update({ model, ...(effort ? { effort } : {}) })}
+        mode={t()?.mode ?? "full"}
+        onMode={(mode: Mode) => void update({ mode })}
       />
       <ModeSheet
         open={sheet() === "mode"}
@@ -712,9 +852,14 @@ export function ThreadPage(props: { machine: string; thread: string }) {
       <CommitSheet open={sheet() === "commit"} onClose={() => sheet.set(null)} machine={props.machine} thread={props.thread} model={t()?.model ?? ""} way={commitWay()} status={commitStatus()} />
       <DiffView
         open={diffOpen()}
-        onClose={() => diffOpen.set(false)}
+        onClose={() => {
+          diffOpen.set(false);
+          diffTurn.set(undefined);
+        }}
         machine={props.machine}
         thread={props.thread}
+        worktree={!!t()?.worktree}
+        turn={diffTurn()}
         onComment={(text) => draft.set(text + draft())}
       />
     </NavPage>

@@ -17,7 +17,7 @@ use serde_json::Value;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::codex::Codex;
-use crate::store::{self, Thread};
+use crate::store::{self, Thread, TurnChange};
 use crate::{Answer, Decision, Event, Mode};
 
 /// The events a running thread keeps for devices that reconnect.
@@ -534,6 +534,7 @@ impl Hub {
             last: None,
             error: None,
             turns: 0,
+            changes: Vec::new(),
             named: new.workspace != "worktree",
         };
         if thread.worktree {
@@ -596,6 +597,7 @@ impl Hub {
                 last: None,
                 error: None,
                 turns: 0,
+                changes: Vec::new(),
                 named: true,
             },
         );
@@ -983,6 +985,8 @@ impl Hub {
     async fn follow(self, id: String, run: Arc<Run>, mut events: mpsc::UnboundedReceiver<Event>) {
         while let Some(event) = events.recv().await {
             let mut status_changed = false;
+            // what a finished turn changed, sent after its end
+            let mut changed = None;
             match &event {
                 Event::Thread { thread, model } => {
                     let (thread, model) = (thread.clone(), model.clone());
@@ -1032,7 +1036,7 @@ impl Hub {
                         t.turns += 1;
                         t.unread = !watched;
                     });
-                    self.after_turn(&id).await;
+                    changed = self.after_turn(&id).await;
                     crate::notify::turn_finished(&self.thread(&id).ok(), &status);
                 }
                 Event::Exited { .. } => {
@@ -1050,6 +1054,9 @@ impl Hub {
                 _ => {}
             }
             self.log(&id, &run, event.clone());
+            if let Some(c) = changed {
+                self.log(&id, &run, Event::TurnChanges(c));
+            }
             if status_changed {
                 self.changed(&id);
             }
@@ -1083,17 +1090,30 @@ impl Hub {
 
     /// After each turn: a checkpoint of a worktree, and the branch named
     /// after what the thread is about.
-    async fn after_turn(&self, id: &str) {
-        let Ok(t) = self.thread(id) else { return };
+    /// What the turn changed, when it changed something: kept with the
+    /// thread, and for the caller to send after the turn's end.
+    async fn after_turn(&self, id: &str) -> Option<TurnChange> {
+        let t = self.thread(id).ok()?;
         if !t.worktree {
-            return;
+            return None;
         }
         let dir = PathBuf::from(&t.workdir);
         let (tid, n) = (t.id.clone(), t.turns);
-        let checkpoint =
-            tokio::task::spawn_blocking(move || crate::git::checkpoint(&dir, &tid, n)).await;
-        if let Ok(Err(e)) = checkpoint {
-            tracing::warn!("checkpoint of {id}: {e:#}");
+        let checkpoint = tokio::task::spawn_blocking(move || {
+            crate::git::checkpoint(&dir, &tid, n)?;
+            crate::git::turn_change(&dir, &tid, n)
+        })
+        .await;
+        let change = match checkpoint {
+            Ok(Ok(change)) => change,
+            Ok(Err(e)) => {
+                tracing::warn!("checkpoint of {id}: {e:#}");
+                None
+            }
+            Err(_) => None,
+        };
+        if let Some(c) = &change {
+            self.edit(id, |th| th.changes.push(c.clone()));
         }
         if !t.named {
             if let Some(name) = crate::workspace::branch_name(&t).await {
@@ -1105,6 +1125,7 @@ impl Hub {
                 self.edit(id, |th| th.named = true);
             }
         }
+        change
     }
 
     fn watched(&self, id: &str) -> bool {

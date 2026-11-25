@@ -7,10 +7,11 @@ import { formatCode, normalizeAddress, parsePairUrl } from "./net/pair";
 import { apply, fromHistory, type FeedState } from "./state/thread";
 import { blocks, spans } from "./ui/Markdown";
 import { monogram, monogramHue } from "./ui/parts";
+import { answersOf, typedAnswer } from "./ui/Thread";
 import { connectionTitle } from "./ui/Threads";
 import { since } from "./ui/time";
 import { compact, top } from "./ui/Usage";
-import { duration, latestThought, program, rowsOf, summary as workSummary, thoughtLine, type WorkItem } from "./ui/work";
+import { changesByPrompt, duration, latestThought, program, rowsOf, summary as workSummary, thoughtLine, type WorkItem } from "./ui/work";
 import type { Item } from "./state/thread";
 
 test("reads a pairing link's address and secret from #pair=", () => {
@@ -63,6 +64,51 @@ test("folds a turn's events into the feed", () => {
   // the turn's end keeps how long it took from its start
   expect(s.items[3]).toMatchObject({ kind: "end", stopped: false });
   expect(typeof (s.items[3] as { ms?: number }).ms).toBe("number");
+});
+
+test("a subagent is one whatever the agent calls it, and keeps what it reported", () => {
+  let s: FeedState = { items: [], approvals: [], running: true, startedAt: 0 };
+  s = apply(s, { type: "toolStarted", item: "a1", kind: "subagent", title: "Find the header · Explore" });
+  // an older pansy passed Claude Code's own word through
+  s = apply(s, { type: "toolStarted", item: "a2", kind: "Task", title: "Check the docs" });
+  expect(s.items.map((i) => i.kind)).toEqual(["subagent", "subagent"]);
+  expect(s.items[0]).toMatchObject({ name: "Find the header", detail: "Explore", status: "running" });
+  s = apply(s, { type: "toolFinished", item: "a1", kind: "subagent", title: "Find the header · Explore", status: "completed", output: "In proxy.rs" });
+  expect(s.items[0]).toMatchObject({ name: "Find the header", detail: "Explore", status: "done", output: "In proxy.rs" });
+  // Codex's history names it spawn_agent
+  expect(fromHistory([{ role: "tool", name: "spawn_agent", text: "Explore the gateway", output: "done" }])[0]).toMatchObject({ kind: "subagent", name: "Explore the gateway", output: "done" });
+});
+
+test("an agent that quits mid-turn ends the turn, its calls failed, saying so", () => {
+  let s: FeedState = { items: fromHistory([{ role: "user", text: "go" }]), approvals: [], running: false, startedAt: null };
+  s = apply(s, { type: "turnStarted", turn: "t1" }, 1000);
+  s = apply(s, { type: "delta", item: "m1", text: "Look" }, 1000);
+  s = apply(s, { type: "toolStarted", item: "c1", kind: "commandExecution", title: "cargo test" });
+  s = apply(s, { type: "toolStarted", item: "a1", kind: "subagent", title: "Explore" });
+  s = apply(s, { type: "approval", request: "r1", kind: "commandExecution", title: "cargo test", detail: "cargo test" });
+  s = apply(s, { type: "exited", code: 137 }, 4000);
+  expect(s.running).toBe(false);
+  expect(s.approvals).toEqual([]);
+  expect(s.items.map((i) => i.kind)).toEqual(["user", "assistant", "tool", "subagent", "notice", "end"]);
+  expect(s.items[1]).toMatchObject({ streaming: false });
+  expect(s.items[2]).toMatchObject({ status: "failed" });
+  expect(s.items[3]).toMatchObject({ status: "failed" });
+  expect(s.items[4]).toMatchObject({ kind: "notice", tone: "danger", exited: { code: 137 } });
+  expect(s.items[5]).toMatchObject({ kind: "end", ms: 3000, stopped: false });
+  // quitting between turns adds nothing
+  expect(apply(s, { type: "exited" }).items.length).toBe(s.items.length);
+});
+
+test("a typed line answers the first open question; all answered, it sends", () => {
+  const qs = ["Which database?", "Where?"].map((question) => ({ question, header: "", multiSelect: false, options: [] }));
+  const one = typedAnswer(qs, { "Where?": { picks: ["ops/"], other: "" } }, "Postgres");
+  expect(one.answers["Which database?"]).toEqual({ picks: [], other: "Postgres" });
+  expect(one.send).toEqual({ "Which database?": "Postgres", "Where?": "ops/" });
+  const first = typedAnswer(qs, {}, "SQLite");
+  expect(first.send).toBe(null);
+  expect(typedAnswer(qs, first.answers, "scripts/").send).toEqual({ "Which database?": "SQLite", "Where?": "scripts/" });
+  // a choice and a line of its own go together
+  expect(answersOf(qs, { "Which database?": { picks: ["SQLite"], other: " in WAL mode " } })["Which database?"]).toBe("SQLite, in WAL mode");
 });
 
 test("a question waits like an approval, with its choices", () => {
@@ -125,6 +171,38 @@ test("a command's program, and T3's durations", () => {
   expect(duration(4_240)).toBe("4.2s");
   expect(duration(80_000)).toBe("1m 20s");
   expect(duration(3_723_000)).toBe("1h 2m 3s");
+});
+
+test("a turn's changes find its prompt, live by the prompt, from history by time", () => {
+  const items: Item[] = [
+    { kind: "user", id: "p1", text: "first", at: "2026-11-24T10:00:00Z" },
+    { kind: "assistant", id: "a1", text: "done", at: "2026-11-24T10:02:00Z" },
+    { kind: "user", id: "p2", text: "second", at: "2026-11-24T10:05:00Z" },
+    { kind: "assistant", id: "a2", text: "done too", at: "2026-11-24T10:09:00Z" },
+  ];
+  const change = (turn: number, at: string, prompt?: string) => ({ turn, at, add: 1, del: 0, files: [{ path: `f${turn}`, status: "added" as const, add: 1, del: 0 }], prompt });
+  const byPrompt = changesByPrompt(items, [change(2, "2026-11-24T10:09:30Z"), change(1, "2026-11-24T10:02:10Z"), change(0, "2026-11-24T09:00:00Z")]);
+  expect(byPrompt.get("p1")?.turn).toBe(1);
+  expect(byPrompt.get("p2")?.turn).toBe(2);
+  // before any prompt: nowhere to show it
+  expect(byPrompt.size).toBe(2);
+  // live, the prompt it came under, whatever the phone's clock said
+  expect(changesByPrompt(items, [change(3, "2026-11-24T09:00:00Z", "p2")]).get("p2")?.turn).toBe(3);
+  // under each settled turn, after its answer; a turn running has none yet
+  const rows = rowsOf(items, true, new Set(), false, "showAll", byPrompt);
+  expect(rows.map((r) => (r.kind === "item" ? r.item.id : r.kind))).toEqual(["p1", "a1", "changes", "p2", "working", "a2", "thinking"]);
+  expect(rowsOf(items, false, new Set(), false, "zen", byPrompt).filter((r) => r.kind === "changes").length).toBe(2);
+});
+
+test("a turn's changes come after its end, once, under its prompt", () => {
+  let s: FeedState = { items: fromHistory([{ role: "user", text: "go" }]), approvals: [], running: true, startedAt: 0, changes: [{ turn: 1, at: "2026-11-24T10:00:00Z", add: 1, del: 0, files: [] }] };
+  const event = { type: "turnChanges" as const, turn: 2, at: "2026-11-24T10:10:00Z", add: 3, del: 1, files: [{ path: "a.rs", status: "modified" as const, add: 3, del: 1 }] };
+  s = apply(s, event);
+  s = apply(s, event);
+  expect(s.changes?.map((c) => [c.turn, c.prompt])).toEqual([
+    [1, undefined],
+    [2, "h0"],
+  ]);
 });
 
 test("a settled turn folds behind how long it worked but for its answer; the one running doesn't", () => {

@@ -3,7 +3,7 @@
 // turn runs; subscribed again with `after` (the last seq) on reconnect.
 import { signal } from "nsh";
 import type { Connection } from "../net/client";
-import type { Event, Question, Seq, Subscribed, ThreadSummary, Turn } from "../net/types";
+import type { Event, Question, Seq, Subscribed, ThreadSummary, Turn, TurnChange } from "../net/types";
 import { conn, putSummary } from "./store";
 
 export type ToolStatus = "running" | "done" | "failed" | "declined" | "waiting";
@@ -13,15 +13,25 @@ export type Item =
   | { kind: "assistant"; id: string; text: string; at?: string; streaming?: boolean }
   | { kind: "reasoning"; id: string; text: string; at?: string }
   | { kind: "tool"; id: string; tool: string; title: string; status: ToolStatus; input?: string; output?: string; exit?: number; at?: string }
-  | { kind: "subagent"; id: string; name: string; detail: string; status: ToolStatus }
-  | { kind: "notice"; id: string; text: string; tone: "danger" | "muted" }
+  /** A subagent the agent started: what it was told, its type or agent and model, what it reported back. */
+  | { kind: "subagent"; id: string; name: string; detail: string; status: ToolStatus; output?: string }
+  /** What went wrong: the agent's words, or (`exited`) that the agent quit while it worked. */
+  | { kind: "notice"; id: string; text: string; tone: "danger" | "muted"; exited?: { code?: number } }
   | { kind: "compact"; id: string }
   /** A turn ended here, live or as the agent's file says: how long it took (where known), whether the user stopped it. */
   | { kind: "end"; id: string; ms?: number; stopped?: boolean; at?: string };
 
 export type Approval = { request: string; kind: string; title: string; detail: string; reason?: string; questions?: Question[] };
 
-const SUBAGENT_KINDS = new Set(["subagent", "task", "agent"]);
+/** A subagent's call: pansy's own word live, the agents' own in their files (Claude Code's Task and Agent, Codex's spawn_agent). */
+const SUBAGENT_KINDS = new Set(["subagent", "task", "agent", "spawn_agent", "spawnagent"]);
+const isSubagent = (kind: string | undefined) => !!kind && SUBAGENT_KINDS.has(kind.toLowerCase());
+
+/** A subagent's title, `name · detail`, as its row shows it. */
+function subagentOf(id: string, title: string, status: ToolStatus): Extract<Item, { kind: "subagent" }> {
+  const [name, ...rest] = title.split(" · ");
+  return { kind: "subagent", id, name, detail: rest.join(" · "), status };
+}
 
 /** A tool's status as the protocol says it, as the feed shows it. */
 function toolStatus(s: string | undefined): ToolStatus {
@@ -48,13 +58,23 @@ export function fromHistory(turns: Turn[]): Item[] {
       case "end":
         return { kind: "end", id, ms: t.ms, stopped: t.status === "stopped", at: t.at };
       default:
-        if (t.name && SUBAGENT_KINDS.has(t.name.toLowerCase())) return { kind: "subagent", id, name: t.text || t.name, detail: t.input ?? "", status: toolStatus(t.status) };
+        if (isSubagent(t.name)) return { kind: "subagent", id, name: t.text || t.name!, detail: t.input ?? "", status: toolStatus(t.status), output: t.output };
         return { kind: "tool", id, tool: t.name ?? "tool", title: t.text || t.name || "", status: toolStatus(t.status), input: t.input, output: t.output, at: t.at };
     }
   });
 }
 
-export type FeedState = { items: Item[]; approvals: Approval[]; running: boolean; startedAt: number | null };
+/** A turn's changes, with the prompt it came under when it came live (else its time finds it). */
+export type Change = TurnChange & { prompt?: string };
+
+export type FeedState = { items: Item[]; approvals: Approval[]; running: boolean; startedAt: number | null; changes?: Change[] };
+
+/** The turn going on, ended: the reply done streaming, the calls still running as `running`, then `notice` and the end. */
+function close(state: FeedState, running: ToolStatus, notice: Item[], stopped: boolean, now: number): FeedState {
+  const done: Item[] = state.items.map((i) => (i.kind === "assistant" && i.streaming ? { ...i, streaming: false } : (i.kind === "tool" || i.kind === "subagent") && i.status === "running" ? { ...i, status: running } : i));
+  const end: Item = { kind: "end", id: `e${now}`, ms: state.startedAt ? now - state.startedAt : undefined, stopped, at: new Date(now).toISOString() };
+  return { ...state, items: [...done, ...notice, end], running: false, startedAt: null, approvals: [] };
+}
 
 /** `state` after `event`: pure, so the tests and the view fold the same way. */
 export function apply(state: FeedState, event: Event, now = Date.now()): FeedState {
@@ -82,10 +102,7 @@ export function apply(state: FeedState, event: Event, now = Date.now()): FeedSta
     case "toolStarted": {
       // Codex's reasoning comes as an item of its own
       if (event.kind === "reasoning") return { ...state, items: [...items, { kind: "reasoning", id: event.item, text: "", at: new Date(now).toISOString() }] };
-      if (SUBAGENT_KINDS.has(event.kind)) {
-        const [name, ...rest] = event.title.split(" · ");
-        return { ...state, items: [...items, { kind: "subagent", id: event.item, name, detail: rest.join(" · "), status: "running" }] };
-      }
+      if (isSubagent(event.kind)) return { ...state, items: [...items, subagentOf(event.item, event.title, "running")] };
       return { ...state, items: [...items, { kind: "tool", id: event.item, tool: event.kind, title: event.title, status: "running", at: new Date(now).toISOString() }] };
     }
     case "toolFinished": {
@@ -97,7 +114,7 @@ export function apply(state: FeedState, event: Event, now = Date.now()): FeedSta
           i.kind === "reasoning"
             ? { ...i, text: event.output || i.text }
             : i.kind === "subagent"
-              ? { ...i, status: toolStatus(event.status) }
+              ? { ...subagentOf(i.id, event.title || `${i.name} · ${i.detail}`, toolStatus(event.status)), output: event.output || i.output }
               : { ...(i as Extract<Item, { kind: "tool" }>), title: event.title || (i as { title: string }).title, status: toolStatus(event.status), output: event.output, exit: event.exit }),
       };
     }
@@ -110,14 +127,20 @@ export function apply(state: FeedState, event: Event, now = Date.now()): FeedSta
     case "resolved":
       return { ...state, approvals: state.approvals.filter((a) => a.request !== event.request) };
     case "turnFinished": {
-      const done: Item[] = items.map((i) => (i.kind === "assistant" && i.streaming ? { ...i, streaming: false } : (i.kind === "tool" || i.kind === "subagent") && i.status === "running" ? { ...i, status: "done" as ToolStatus } : i));
       const failed = /fail|error/i.test(event.status);
       const stopped = /interrupt|cancel/i.test(event.status);
       const notice: Item[] = failed ? [{ kind: "notice", id: `n${now}`, text: event.error ?? event.status, tone: "danger" }] : [];
-      const end: Item = { kind: "end", id: `e${now}`, ms: state.startedAt ? now - state.startedAt : undefined, stopped, at: new Date(now).toISOString() };
-      return { ...state, items: [...done, ...notice, end], running: false, startedAt: null };
+      return { ...close(state, "done", notice, stopped, now), approvals: state.approvals };
+    }
+    case "turnChanges": {
+      // after its turnFinished: the turn whose prompt came last; once per turn (the subscription's list and the log both bring it)
+      const { type: _, ...change } = event;
+      const prompt = [...items].reverse().find((i) => i.kind === "user")?.id;
+      return { ...state, changes: [...(state.changes ?? []).filter((c) => c.turn !== change.turn), { ...change, prompt }] };
     }
     case "exited":
+      // quit while it worked: what was running never finishes, so the turn ends here, saying so
+      if (state.running) return close(state, "failed", [{ kind: "notice", id: `n${now}`, text: "", tone: "danger", exited: { code: event.code } }], false, now);
       return { ...state, running: false, startedAt: null, approvals: [] };
     default:
       return state;
@@ -130,6 +153,7 @@ export class ThreadView {
   readonly approvals = signal<Approval[]>([]);
   readonly running = signal(false);
   readonly startedAt = signal<number | null>(null);
+  readonly changes = signal<Change[]>([]);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   private lastSeq = 0;
@@ -146,7 +170,7 @@ export class ThreadView {
   }
 
   private state(): FeedState {
-    return { items: this.items(), approvals: this.approvals(), running: this.running(), startedAt: this.startedAt() };
+    return { items: this.items(), approvals: this.approvals(), running: this.running(), startedAt: this.startedAt(), changes: this.changes() };
   }
 
   private set(s: FeedState) {
@@ -154,6 +178,7 @@ export class ThreadView {
     this.approvals.set(s.approvals);
     this.running.set(s.running);
     this.startedAt.set(s.startedAt);
+    this.changes.set(s.changes ?? []);
   }
 
   private take(e: Seq<Event>) {
@@ -186,7 +211,7 @@ export class ThreadView {
       this.local.set(r.thread);
       if (!again) {
         const t = r.thread;
-        this.set({ items: fromHistory(r.history), approvals: [], running: t.status === "working" || t.status === "approval", startedAt: t.startedAt ? Date.parse(t.startedAt) : null });
+        this.set({ items: fromHistory(r.history), approvals: [], running: t.status === "working" || t.status === "approval", startedAt: t.startedAt ? Date.parse(t.startedAt) : null, changes: r.changes ?? [] });
       }
       for (const e of r.live) this.take(e);
       this.lastSeq = Math.max(this.lastSeq, r.seq);

@@ -9,7 +9,7 @@ import { modeLabel } from "./Composer";
 /** The modes `agent` can keep: Codex and Claude Code all four, the others asking or not. */
 export const modesOf = (agent: string): Mode[] => (agent === "codex" || agent === "claude-code" ? ["ask", "edits", "auto", "full"] : ["ask", "full"]);
 
-const modeNote = (m: Mode) =>
+export const modeNote = (m: Mode) =>
   ({
     ask: tr("Commands and file changes wait for your approval."),
     edits: tr("File changes go through; anything else waits for you."),

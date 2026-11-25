@@ -2,8 +2,8 @@
 // "设计令牌"): zinc neutrals, pansy's indigo, flat lists with inset hairlines,
 // glass for what floats, 24pt grouped cards, round buttons. Colors are the
 // tokens of nsh.json's theme, light and dark.
-import { colorScheme, Image, Scroll, signal, Text, token, View, type JSX, type Tokens } from "nsh";
-import { Button as BaseButton, Input as BaseInput, Sheet } from "nsh/base";
+import { colorScheme, effect, Image, Scroll, signal, Text, token, View, type JSX, type Tokens } from "nsh";
+import { Button as BaseButton, Input as BaseInput, Sheet, type SheetDetent } from "nsh/base";
 import { ICONS } from "./icons";
 import { LOGOS } from "./logos";
 import { tr } from "./i18n";
@@ -261,7 +261,9 @@ export function Toggle(props: { on: boolean; onChange: (on: boolean) => void; la
   );
 }
 
-/** A segmented control: a grouped track, the choice on a card thumb. */
+/** A segmented control: a grouped track, the choice on a card thumb. Each
+ *  segment is as wide as its label and shares what is left, so a long label
+ *  ("Uncommitted") stays on one line. */
 export function Seg<T extends string>(props: { options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; testID?: string }) {
   return (
     <View testID={props.testID} class="flex-row rounded-[10px] bg-grouped p-[3px]">
@@ -274,10 +276,10 @@ export function Seg<T extends string>(props: { options: { value: T; label: strin
               accessibilityState={{ selected: on() }}
               testID={`${props.testID ?? "seg"}-${o().value}`}
               onPress={() => props.onChange(o().value)}
-              class={`flex-1 items-center rounded-lg py-[6px] ${on() ? "bg-card" : ""}`}
+              class={`flex-auto items-center rounded-lg px-2 py-[6px] ${on() ? "bg-card" : ""}`}
               style={on() ? { boxShadow: SHADOW.small() } : undefined}
             >
-              <Text class={`text-[13px] font-medium ${on() ? "text-fg" : "text-fg-2"}`}>{o().label}</Text>
+              <Text class={`text-center text-[13px] font-medium line-clamp-1 ${on() ? "text-fg" : "text-fg-2"}`}>{o().label}</Text>
             </View>
           );
         }}
@@ -382,7 +384,10 @@ export function Loading(props: { text: string }) {
 /**
  * A bottom sheet with a grabber and two resting heights (its start, then
  * the whole screen), as phone-ui.md "导航" has them; a title in the middle of
- * its head and the buttons on either side.
+ * its head and the buttons on either side. The panel is as tall as the whole
+ * screen and stands lower at its start, its end below the screen: scrolling
+ * its content takes it to the whole screen first, as iOS's sheets do, so the
+ * end can be reached.
  */
 export function BottomSheet(props: {
   open: boolean;
@@ -397,11 +402,18 @@ export function BottomSheet(props: {
   footer?: JSX.Element;
   testID?: string;
 }) {
+  const start = (): SheetDetent => ({ fraction: props.start ?? 0.55 });
+  const detent = signal<SheetDetent>(start());
+  effect(() => {
+    if (props.open) detent.set(start());
+  });
   return (
     <Sheet
       open={props.open}
       onOpenChange={(e) => !e.open && props.onClose()}
-      detents={[{ fraction: props.start ?? 0.55 }, "large"]}
+      detents={[start(), "large"]}
+      detent={detent()}
+      onDetentChange={(e) => detent.set(e.detent)}
       grabber
       closeOnSwipe
       grabberClass="mx-auto mt-[6px] h-[5px] w-9 rounded-full bg-fg-3 opacity-35"
@@ -425,7 +437,7 @@ export function BottomSheet(props: {
           </View>
           <View class="w-[38px] items-end">{props.right ?? <GlassButton icon="x" label={tr("Close")} onPress={props.onClose} testID="sheet-close" />}</View>
         </View>
-        <Scroll class="flex-1" keyboardShouldPersistTaps="handled">
+        <Scroll class="flex-1" keyboardShouldPersistTaps="handled" onScroll={(e) => e.offset.y > 0 && detent() !== "large" && detent.set("large")}>
           {props.children}
           {/* the footer (a 48pt button, 8 over, 12 and the safe area under) is drawn over the content's end: room to scroll it clear */}
           <If when={props.footer}>
