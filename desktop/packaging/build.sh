@@ -5,13 +5,14 @@
 #             updater replaces what is in it, so it names no version):
 #               pansy        the window with the gateway beside it, and the command
 #               nsh/         the compiled TSX window
+#               mobile-web/  the phone's page, which the remote interface serves
 #               share/       the desktop entry and the icon
 #               install.sh   puts the desktop entry in place for this user
 #   macOS     pansy-<version>-macos-<arch>.tar.gz, Pansy.app (signed ad hoc,
-#             or by PANSY_CODESIGN_IDENTITY): Contents/MacOS/pansy and
-#             Contents/Resources/nsh
+#             or by PANSY_CODESIGN_IDENTITY): Contents/MacOS/pansy,
+#             Contents/Resources/nsh and Contents/Resources/mobile-web
 #   Windows   pansy-<version>-windows-<arch>.zip, a directory, pansy\:
-#             pansy.exe and nsh\ (run from Git Bash)
+#             pansy.exe, nsh\ and mobile-web\ (run from Git Bash)
 #
 # Each is laid out as `nsh package` lays an app out, which is what the
 # window's updater replaces (nsh/updater): it finds its release feed in
@@ -49,11 +50,12 @@ name=pansy-$version-$os-$arch
 package=target/package/$name
 rm -rf -- "$package"
 mkdir -p "$package" ../dist
-# what the archive holds, where the program goes in it and where the window's code
+# what the archive holds, where the program goes in it, where the window's code
+# and where the phone's page (pansy-remote's server.rs, web_dir)
 case $os in
-  linux) stage=$package/pansy program=$stage/pansy resources=$stage/nsh ;;
-  macos) stage=$package/Pansy.app program=$stage/Contents/MacOS/pansy resources=$stage/Contents/Resources/nsh ;;
-  windows) stage=$package/pansy program=$stage/pansy.exe resources=$stage/nsh ;;
+  linux) stage=$package/pansy program=$stage/pansy resources=$stage/nsh mobile=$stage/mobile-web ;;
+  macos) stage=$package/Pansy.app program=$stage/Contents/MacOS/pansy resources=$stage/Contents/Resources/nsh mobile=$stage/Contents/Resources/mobile-web ;;
+  windows) stage=$package/pansy program=$stage/pansy.exe resources=$stage/nsh mobile=$stage/mobile-web ;;
 esac
 mkdir -p "$(dirname "$program")" "$(dirname "$resources")"
 
@@ -67,6 +69,13 @@ if "updater" in app:
     with open(sys.argv[1], "w") as out:
         json.dump(config, out)
 PY
+
+# the phone's page, the same on every system: `nsh package` writes it in
+# a directory named after the app (Pansy)
+web=target/package/mobile-web
+rm -rf -- "$web"
+(cd ../mobile && nsh package --target web -o "$OLDPWD/$web" App.tsx)
+cp -R "$web/Pansy" "$mobile"
 
 case $os in
   linux)
