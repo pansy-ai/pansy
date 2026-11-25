@@ -6,10 +6,13 @@
   "icon": "assets/icon.png",
   "appearance": "system",
   "schemes": ["pansy"],
+  "web": { "host": "./host.js" },
   "capabilities": {
     "network": { "hosts": ["*"] },
     "clipboard": true,
     "statusBar": true,
+    "speech": true,
+    "host": ["speechState", "speechStart", "speechStop", "speechAbort"],
     "openUrl": { "schemes": ["http", "https"] }
   },
   "theme": {

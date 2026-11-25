@@ -20,6 +20,8 @@ pansy (`pansy-remote`), or to the mock in `mock/`.
   (`parts.tsx`, `status.tsx`, `actions.tsx`, `Markdown.tsx`), `i18n.ts`
   (every string, English and Simplified Chinese), `icons/` (Lucide) and
   `logos.ts` (LobeHub's, as the desktop's).
+- `host.js` — the web page's host (`nsh.json` `web.host`): the browser's
+  speech recognition for dictation, where NSH's `Speech` has none.
 - `mock/` — `fake.ts` a home pansy in memory with a scripted agent;
   `server.ts` serves it and the web build on Bun.
 - `test/harness.tsx`, `App.test.tsx`, `logic.test.ts` — the tests.

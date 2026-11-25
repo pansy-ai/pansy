@@ -463,3 +463,49 @@ test("speaks Chinese when the system does", async () => {
   expect(app.texts()).toContain("已收尾");
   expect(app.texts()).toContain("显示更多（已隐藏 2 个已收尾）");
 });
+
+test("the microphone dictates into the composer where the caret was, and send sends it", async () => {
+  const app = await launch();
+  await app.press("id:thread-t_sub");
+  await app.waitFor("id:capsule");
+  await app.type("id:composer-input", "先看 ");
+  await app.press("label:Voice input");
+  expect(app.speechRequests().length).toBe(1);
+  await app.hear("跑一下");
+  expect(app.value("id:composer-input")).toBe("先看 跑一下");
+  await app.hear("跑一下测试");
+  expect(app.value("id:composer-input")).toBe("先看 跑一下测试");
+  // stopped, the recognizer ends with what it heard
+  await app.press("label:Stop voice input");
+  await app.waitFor("label:Voice input");
+  expect(app.value("id:composer-input")).toBe("先看 跑一下测试");
+  await app.press("id:send");
+  await app.waitUntil(() => called(app, "message.dispatch", (p) => p.threadId === "t_sub" && p.text === "先看 跑一下测试"));
+
+  // refused: the composer says why, and its text stays
+  await app.type("id:composer-input", "keep this");
+  await app.press("label:Voice input");
+  await app.endSpeech("not-allowed");
+  await app.waitFor("label:Voice input");
+  expect(app.texts()).toContain("No microphone or speech recognition permission. Allow them in Settings.");
+  expect(app.value("id:composer-input")).toBe("keep this");
+});
+
+test("on the web the browser dictates, through the page's host", async () => {
+  const app = await launch({
+    modules: { nsh: { "Speech.available": false } },
+    host: { handlers: { speechState: { supported: true }, speechStart: {}, speechStop: {}, speechAbort: {} } },
+  });
+  await app.press("id:thread-t_sub");
+  await app.waitFor("id:capsule");
+  await app.type("id:composer-input", "run");
+  await app.press("label:Voice input");
+  expect(app.host.calls().some((c) => c.name === "speechStart")).toBe(true);
+  await app.host.send("speech", { text: "the tests" });
+  expect(app.value("id:composer-input")).toBe("run the tests");
+  await app.press("label:Stop voice input");
+  expect(app.host.calls().some((c) => c.name === "speechStop")).toBe(true);
+  await app.host.send("speechEnd", {});
+  await app.waitFor("label:Voice input");
+  expect(app.speechRequests().length).toBe(0);
+});

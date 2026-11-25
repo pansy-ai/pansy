@@ -4,7 +4,10 @@
 //
 //   nsh package --target web -o dist/web App.tsx
 //   bun mock/server.ts [--dir dist/web/Pansy] [--port 7268] [--host 0.0.0.0] [--approval] [--slow 1]
+//                      [--cert cert.pem --key key.pem]
 //
+// With a certificate it serves HTTPS: a browser gives a page the microphone
+// (dictation) only on a secure one.
 // It prints a pairing link (any secret pairs, except one with "expired");
 // open it on the phone, or type the address and any code in "Add machine".
 // No proof or token is checked. Kept out of `nsh check` (tsconfig.json).
@@ -19,6 +22,9 @@ const arg = (name: string, fallback: string) => {
 const dir = arg("dir", join(import.meta.dir, "../dist/web/Pansy"));
 const port = Number(arg("port", "7268"));
 const host = arg("host", "0.0.0.0");
+const cert = arg("cert", "");
+const key = arg("key", "");
+const tls = cert && key ? { cert: Bun.file(cert), key: Bun.file(key) } : undefined;
 
 /** The machine's LAN address, for the link the phone opens. */
 function lan(): string {
@@ -26,7 +32,7 @@ function lan(): string {
     for (const a of list ?? []) if (a.family === "IPv4" && !a.internal && /^(10|172|192)\./.test(a.address)) return a.address;
   return "127.0.0.1";
 }
-const base = `http://${host === "0.0.0.0" ? lan() : host}:${port}`;
+const base = `${tls ? "https" : "http"}://${host === "0.0.0.0" ? lan() : host}:${port}`;
 const home = new FakeHome({ base, scale: Number(arg("slow", "1")), requireApproval: process.argv.includes("--approval") });
 home.onCall = (c) => console.log(`← ${c.method} ${JSON.stringify(c.params).slice(0, 160)}`);
 
@@ -60,6 +66,7 @@ type Data = { deviceId: string; client?: Client; stop?: () => void };
 const server = Bun.serve<Data, never>({
   hostname: host,
   port,
+  tls,
   async fetch(req, srv) {
     const url = new URL(req.url);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(req) });
@@ -107,6 +114,6 @@ setInterval(() => {
 }, 20_000);
 
 const secret = crypto.randomUUID().replaceAll("-", "");
-console.log(`mock pansy-remote on http://${server.hostname}:${server.port} (serving ${dir})`);
+console.log(`mock pansy-remote on ${tls ? "https" : "http"}://${server.hostname}:${server.port} (serving ${dir})`);
 console.log(`pair: ${base}/#pair=${secret}`);
-console.log(`  or: address ${base.replace(/^http:\/\//, "")}, any code`);
+console.log(`  or: address ${base.replace(/^https?:\/\//, "")}, any code`);
