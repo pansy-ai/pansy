@@ -1115,7 +1115,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-agents"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1135,7 +1135,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-cli"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1155,7 +1155,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-core"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1175,7 +1175,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-gateway"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -1200,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-mask"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "hmac",
  "regex",
@@ -1211,7 +1211,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-plugins"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "axum",
@@ -1237,7 +1237,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-remote"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "axum",
