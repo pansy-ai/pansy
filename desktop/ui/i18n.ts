@@ -419,6 +419,7 @@ const ZH_HANS = {
   "Copy the page's address": "复制页面地址",
   "Waiting for the sign-in to finish in the browser…": "正在等待浏览器中完成登录…",
   "Google's models on your Code Assist plan, as Gemini CLI uses them": "你的 Code Assist 套餐里的 Google 模型，按 Gemini CLI 的方式使用",
+  "pansy calls Code Assist's API itself, as Gemini CLI, and serves it to your other agents; it doesn't run Google's own program. Google may count that against Gemini CLI's terms and suspend the account: use it at your own risk.": "pansy 以 Gemini CLI 的身份直接调用 Code Assist 的接口，并提供给你的其他 agent 使用，不运行 Google 自己的程序。Google 可能认为这违反 Gemini CLI 的条款并停用账号，风险自负。",
   "The Google Cloud project it bills: Code Assist Standard and Enterprise ask for one; empty for the one Google gives it": "它计费的 Google Cloud 项目：Code Assist 标准版和企业版需要填写；留空则使用 Google 分配的项目",
   "Cloud project": "Cloud 项目",
   "Project saved": "已保存项目",
