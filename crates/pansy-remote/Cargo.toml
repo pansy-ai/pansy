@@ -1,0 +1,33 @@
+[package]
+name = "pansy-remote"
+description = "The agents driven for another device: their headless protocols, turned into one stream of events (docs/plans/phone.md)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+pansy-agents.workspace = true
+pansy-core.workspace = true
+pansy-plugins.workspace = true
+anyhow.workspace = true
+axum = { workspace = true, features = ["ws"] }
+base64.workspace = true
+chrono.workspace = true
+futures.workspace = true
+getrandom = "0.2"
+p256 = { version = "0.13", features = ["ecdsa", "jwk"] }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio = { workspace = true, features = ["process"] }
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio-tungstenite = "0.29"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Power"] }

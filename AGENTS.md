@@ -10,11 +10,14 @@ agent use every provider's models, with a desktop window on NSH 0.6.1. Read
   subscriptions' sign-ins in `subscription/`),
   `pansy-mask` (privacy masking), `pansy-gateway` (the gateway),
   `pansy-agents` (agent configs), `pansy-plugins` (magpie's community
-  plugins on Bun, `docs/plugins.md`), `pansy-cli` (the `pansy` command).
+  plugins on Bun, `docs/plugins.md`), `pansy-remote` (agents driven for the
+  phone, `docs/plans/phone.md`), `pansy-cli` (the `pansy` command).
 - `desktop/` — a workspace of its own, so NSH's crates (GTK, AppKit, Win32)
   stay out of the core's builds: `App.tsx` and `ui/` (the window in TSX),
   `native/` (`pansy/native`, what the TSX imports), `runner/` (the program:
   the window, or the command line when given arguments).
+- `mobile/` — the phone app in NSH TSX alone (`docs/plans/phone-ui.md`),
+  with a mock home pansy on Bun to run it against (`mobile/README.md`).
 
 ## Invariants
 
@@ -68,6 +71,13 @@ agent use every provider's models, with a desktop window on NSH 0.6.1. Read
   build in `nsh.json` grows with every release (`packaging/bump.sh`), and a
   release of the window alone carries no Rust change.
 
+- **Only paired devices drive agents, and only from near.** `pansy-remote`
+  is off until the user turns it on, listens on its own port (7268, never
+  the gateway's), and answers loopback, private and tailnet addresses
+  alone. `remote.json` (0600) keeps a token's hash, never the token; a
+  pairing secret is shown once. A thread's checkpoints and diffs are
+  written only in worktrees pansy made; the user's own checkout is read.
+
 - **A plugin's tests run on a Bun of their own.** `pansy-plugins`' tests
   that need Bun take `PANSY_BUN` or one on `PATH`, and pass saying so
   without one; nothing is
@@ -79,6 +89,7 @@ agent use every provider's models, with a desktop window on NSH 0.6.1. Read
 ```sh
 cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
 cd desktop && cargo fmt --all && cargo clippy --workspace && nsh check && ./test.sh
+cd mobile && nsh check && nsh test && nsh package --target web -o dist/web App.tsx
 ```
 
 NSH 0.6.1 exactly (`nsh --version`): the crates are pinned to `=0.6.1`.

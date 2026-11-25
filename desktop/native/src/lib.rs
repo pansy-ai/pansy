@@ -37,6 +37,7 @@ fn native(registry: &mut Registry) {
         .module::<Masking>()
         .module::<Settings>()
         .module::<Prefs>()
+        .module::<Remote>()
         .module::<Panel>();
 }
 
@@ -97,9 +98,20 @@ pub fn start_gateway() {
                 Ok(runtime) => runtime,
                 Err(e) => return record_error(format!("{e}")),
             };
-            let result = runtime.block_on(pansy_gateway::serve(serving, async {
-                let _ = stopped.await;
-            }));
+            let result = runtime.block_on(async {
+                // The remote interface the phone talks to, when it is on, stops
+                // with the gateway. A `pansy serve` that has its port already
+                // serves it instead.
+                let (quit, quitting) = tokio::sync::watch::channel(false);
+                let remote = tokio::spawn(remote_serve(quitting));
+                let served = pansy_gateway::serve(serving, async {
+                    let _ = stopped.await;
+                })
+                .await;
+                let _ = quit.send(true);
+                let _ = remote.await;
+                served
+            });
             if let Err(e) = result {
                 record_error(format!("{e:#}"));
             }
@@ -111,6 +123,34 @@ pub fn start_gateway() {
         error: None,
         gateway,
     });
+}
+
+/// The remote interface, while `quitting` stays false.
+async fn remote_serve(mut quitting: tokio::sync::watch::Receiver<bool>) {
+    let Ok(settings) = pansy_remote::config::load() else {
+        return;
+    };
+    if !settings.enabled {
+        return;
+    }
+    let app = match (
+        pansy_remote::hub::Hub::load(),
+        pansy_remote::auth::Auth::load(),
+    ) {
+        (Ok(hub), Ok(auth)) => std::sync::Arc::new(pansy_remote::server::App {
+            hub,
+            auth: std::sync::Arc::new(auth),
+            web: pansy_remote::server::web_dir(),
+        }),
+        (Err(e), _) => return tracing::warn!("the remote interface: {e:#}"),
+        (_, Err(e)) => return tracing::warn!("the remote interface: {e}"),
+    };
+    let stop = async move {
+        let _ = quitting.wait_for(|q| *q).await;
+    };
+    if let Err(e) = pansy_remote::server::serve(app, settings, stop).await {
+        tracing::warn!("the remote interface: {e:#}");
+    }
 }
 
 fn record_error(error: String) {
@@ -1326,6 +1366,140 @@ impl Settings {
     /// pansy's version.
     pub fn version() -> String {
         pansy_core::VERSION.to_owned()
+    }
+}
+
+// --- Other devices ------------------------------------------------------------
+
+/// Other devices controlling this computer's agents: the remote interface,
+/// pairing, the paired devices, and the service that keeps pansy running
+/// without the window (docs/plans/phone.md).
+#[module]
+pub struct Remote;
+
+#[module]
+impl Remote {
+    /// `{settings, machine, name, hosts, requireApproval, devices,
+    /// service: {installed, answering}, answering}` (JSON).
+    pub async fn status() -> Result<String, String> {
+        off(|| {
+            let settings = pansy_remote::config::load()?;
+            let auth = pansy_remote::auth::Auth::load()?;
+            let devices: Vec<Value> = auth
+                .devices()
+                .into_iter()
+                .map(|d| {
+                    let code = auth.code_for(&d.id);
+                    let mut v = serde_json::to_value(&d).unwrap_or_default();
+                    v["code"] = json!(code);
+                    v
+                })
+                .collect();
+            let service = pansy_cli::service::status()?;
+            let answering = std::net::TcpStream::connect_timeout(
+                &std::net::SocketAddr::from(([127, 0, 0, 1], settings.port)),
+                std::time::Duration::from_millis(300),
+            )
+            .is_ok();
+            Ok(to_json(&json!({
+                "machine": auth.machine_id(),
+                "name": pansy_remote::config::machine_name(&settings),
+                "hosts": pansy_remote::server::pair_hosts(settings.port, settings.lan),
+                "requireApproval": auth.require_approval(),
+                "devices": devices,
+                "service": {"installed": service.installed, "answering": service.answering},
+                "answering": answering,
+                "settings": settings,
+            })))
+        })
+        .await
+    }
+
+    /// Sets one of `enabled`, `lan`, `webhook`, `writerModel`, `name` from
+    /// text, then starts the window's gateway and remote interface again.
+    pub async fn set(key: String, value: String) -> Result<(), String> {
+        off(move || {
+            let mut s = pansy_remote::config::load()?;
+            let on = || value == "true";
+            match key.as_str() {
+                "enabled" => s.enabled = on(),
+                "lan" => s.lan = on(),
+                "webhook" => s.webhook = value.trim().to_owned(),
+                "writerModel" => s.writer_model = value.trim().to_owned(),
+                "name" => s.name = value.trim().to_owned(),
+                other => anyhow::bail!("no setting {other}"),
+            }
+            pansy_remote::config::save(&s)?;
+            if matches!(key.as_str(), "enabled" | "lan") {
+                stop_gateway();
+                start_gateway();
+            }
+            Ok(())
+        })
+        .await
+    }
+
+    /// A one-time pairing: `{secret, urls, expiresAt, qr}` (JSON), `qr` an
+    /// SVG of the first link. `readOnly` gives the device reading alone.
+    pub async fn pair(read_only: bool) -> Result<String, String> {
+        off(move || {
+            use pansy_remote::auth::Scope;
+            let settings = pansy_remote::config::load()?;
+            let auth = pansy_remote::auth::Auth::load()?;
+            let scopes = read_only.then(|| {
+                vec![
+                    Scope::AccessRead,
+                    Scope::OrchestrationRead,
+                    Scope::FilesystemRead,
+                    Scope::TerminalRead,
+                ]
+            });
+            let (secret, expires) =
+                auth.create_pairing(scopes.as_deref(), pansy_remote::auth::PAIRING_TTL)?;
+            let mut urls: Vec<String> =
+                pansy_remote::server::pair_hosts(settings.port, settings.lan)
+                    .iter()
+                    .map(|h| format!("http://{h}/#pair={secret}"))
+                    .collect();
+            if urls.is_empty() {
+                urls.push(format!("http://127.0.0.1:{}/#pair={secret}", settings.port));
+            }
+            let qr = qrcode::QrCode::new(urls[0].as_bytes())?
+                .render::<qrcode::render::svg::Color>()
+                .min_dimensions(200, 200)
+                .quiet_zone(true)
+                .build();
+            Ok(to_json(
+                &json!({"secret": secret, "urls": urls, "expiresAt": expires, "qr": qr}),
+            ))
+        })
+        .await
+    }
+
+    /// Signs a device out and forgets it.
+    pub async fn revoke(device: String) -> Result<(), String> {
+        off(move || Ok(pansy_remote::auth::Auth::load()?.revoke(&device)?)).await
+    }
+
+    /// Lets a device that waits for approval operate.
+    pub async fn approve(device: String) -> Result<(), String> {
+        off(move || Ok(pansy_remote::auth::Auth::load()?.approve(&device)?)).await
+    }
+
+    /// Whether a device paired from another device waits for approval.
+    pub async fn require_approval(on: bool) -> Result<(), String> {
+        off(move || Ok(pansy_remote::auth::Auth::load()?.set_require_approval(on)?)).await
+    }
+
+    /// Installs pansy as a service of the user's (`pansy service install`):
+    /// what it did, a line each.
+    pub async fn install_service() -> Result<String, String> {
+        off(|| Ok(pansy_cli::service::install()?.join("\n"))).await
+    }
+
+    /// Removes the service `install_service` installed: what it did.
+    pub async fn uninstall_service() -> Result<String, String> {
+        off(|| Ok(pansy_cli::service::uninstall()?.join("\n"))).await
     }
 }
 

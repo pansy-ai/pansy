@@ -1,0 +1,48 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pansy-site",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "../pansy-site",
+        "run",
+        "dev"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "pansy-docs",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--bind",
+        "127.0.0.1"
+      ],
+      "port": 8765
+    },
+    {
+      "name": "mobile-mock",
+      "runtimeExecutable": "/home/aiden/.config/pansy/bun/1.4.2/bun-linux-x64/bun",
+      "runtimeArgs": ["mobile/mock/server.ts", "--port", "7269", "--host", "127.0.0.1", "--dir", "mobile/dist/web/Pansy"],
+      "port": 7269
+    },
+    {
+      "name": "p0-web",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8767",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "/tmp/p0/nshweb/out/p0web"
+      ],
+      "port": 8767
+    }
+  ]
+}

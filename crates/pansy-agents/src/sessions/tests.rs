@@ -276,6 +276,50 @@ fn reads_what_was_said() {
 }
 
 #[test]
+fn says_where_each_turn_ended_for_the_phone() {
+    let (home, _lock) = scratch();
+    let claude = claude_session(home.path());
+    let codex = codex_session(home.path());
+    let line = |v: serde_json::Value| {
+        use std::io::Write;
+        move |path: &Path| {
+            let mut f = fs::OpenOptions::new().append(true).open(path).unwrap();
+            writeln!(f, "{v}").unwrap();
+        }
+    };
+    line(
+        json!({"timestamp": "2026-11-09T08:05:00.000Z", "type": "event_msg", "payload": {"type": "task_complete", "turn_id": "t1", "duration_ms": 240_000}}),
+    )(&codex);
+    line(
+        json!({"timestamp": "2026-11-09T08:07:00.000Z", "type": "event_msg", "payload": {"type": "turn_aborted", "reason": "interrupted", "duration_ms": 5_000}}),
+    )(&codex);
+    line(
+        json!({"type": "user", "cwd": "/work/app", "sessionId": CLAUDE_ID, "timestamp": "2026-11-10T10:07:00.000Z",
+                "message": {"role": "user", "content": [{"type": "text", "text": "[Request interrupted by user]"}]}}),
+    )(&claude);
+
+    // Codex writes how long a turn took, and whether it was stopped
+    let turns = timed_transcript("codex", CODEX_ID).unwrap();
+    let ends: Vec<(Option<u64>, &str)> = turns
+        .iter()
+        .filter(|t| t.role == "end")
+        .map(|t| (t.ms, t.status))
+        .collect();
+    assert_eq!(ends, [(Some(240_000), ""), (Some(5_000), "stopped")]);
+    // Claude Code only that the user stopped one
+    let turns = timed_transcript("claude-code", CLAUDE_ID).unwrap();
+    let last = turns.last().unwrap();
+    assert_eq!((last.role, last.status, last.ms), ("end", "stopped", None));
+    // the window's transcript keeps none of it
+    assert!(
+        transcript("codex", CODEX_ID, "")
+            .unwrap()
+            .iter()
+            .all(|t| t.role != "end")
+    );
+}
+
+#[test]
 fn exports_a_conversation_as_markdown() {
     let (home, _lock) = scratch();
     claude_session(home.path());

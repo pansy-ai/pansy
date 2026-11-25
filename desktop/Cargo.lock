@@ -146,6 +146,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "31b698c5f9a010f6573133b09e0de5408834d0c82f8d7475a89fc1867a71cd90"
 dependencies = [
  "axum-core",
+ "base64 0.22.1",
  "bytes",
  "form_urlencoded",
  "futures-util",
@@ -164,8 +165,10 @@ dependencies = [
  "serde_json",
  "serde_path_to_error",
  "serde_urlencoded",
+ "sha1",
  "sync_wrapper",
  "tokio",
+ "tokio-tungstenite 0.29.0",
  "tower",
  "tower-layer",
  "tower-service",
@@ -190,6 +193,12 @@ dependencies = [
  "tower-service",
  "tracing",
 ]
+
+[[package]]
+name = "base16ct"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c7f02d4ea65f2c1853089ffd8d2787bdbc63de2f0d29dedbcf8ccdfa0ccd4cf"
 
 [[package]]
 name = "base62"
@@ -609,6 +618,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
+name = "crypto-bigint"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0dc92fb57ca44df6db8059111ab3af99a63d5d0f8375d9972e319a379c6bab76"
+dependencies = [
+ "generic-array",
+ "rand_core 0.6.4",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "crypto-common"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -664,6 +685,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7c1832837b905bbfb5101e07cc24c8deddf52f93225eee6ead5f4d63d53ddcb"
 dependencies = [
  "const-oid",
+ "pem-rfc7468",
  "zeroize",
 ]
 
@@ -674,6 +696,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
  "block-buffer",
+ "const-oid",
  "crypto-common",
  "subtle",
 ]
@@ -723,6 +746,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ecdsa"
+version = "0.16.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee27f32b5c5292967d2d4a9d7f1e0b0aed2c15daded5a60300e4abb9d8020bca"
+dependencies = [
+ "der",
+ "digest",
+ "elliptic-curve",
+ "rfc6979",
+ "signature",
+ "spki",
+]
+
+[[package]]
 name = "ed25519"
 version = "2.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -751,6 +788,29 @@ name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
+
+[[package]]
+name = "elliptic-curve"
+version = "0.13.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5e6043086bf7973472e0c7dff2142ea0b680d30e18d9cc40f267efbf222bd47"
+dependencies = [
+ "base16ct",
+ "base64ct",
+ "crypto-bigint",
+ "digest",
+ "ff",
+ "generic-array",
+ "group",
+ "pem-rfc7468",
+ "pkcs8",
+ "rand_core 0.6.4",
+ "sec1",
+ "serde_json",
+ "serdect",
+ "subtle",
+ "zeroize",
+]
 
 [[package]]
 name = "encoding_rs"
@@ -870,6 +930,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
+]
+
+[[package]]
+name = "ff"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0b50bfb653653f9ca9095b427bed08ab8d75a137839d9ad64eb11810d5b6393"
+dependencies = [
+ "rand_core 0.6.4",
+ "subtle",
 ]
 
 [[package]]
@@ -1145,6 +1215,7 @@ checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
  "version_check",
+ "zeroize",
 ]
 
 [[package]]
@@ -1339,6 +1410,17 @@ dependencies = [
  "glib-sys",
  "libc",
  "system-deps",
+]
+
+[[package]]
+name = "group"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0f9ef7462f7c099f518d754361858f86d8a07af53ba9af0fe635bbccb151a63"
+dependencies = [
+ "ff",
+ "rand_core 0.6.4",
+ "subtle",
 ]
 
 [[package]]
@@ -2375,7 +2457,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
- "tokio-tungstenite",
+ "tokio-tungstenite 0.28.0",
  "url",
 ]
 
@@ -2754,6 +2836,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "p256"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9863ad85fa8f4460f9c48cb909d38a0d689dba1f6f6988a5e3e0d31071bcd4b"
+dependencies = [
+ "ecdsa",
+ "elliptic-curve",
+ "primeorder",
+ "sha2",
+]
+
+[[package]]
 name = "pango"
 version = "0.22.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2803,7 +2897,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-agents"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2822,7 +2916,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-cli"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2832,6 +2926,7 @@ dependencies = [
  "pansy-gateway",
  "pansy-mask",
  "pansy-plugins",
+ "pansy-remote",
  "serde",
  "serde_json",
  "tokio",
@@ -2841,7 +2936,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-core"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2861,7 +2956,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-desktop"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "nsh-base",
  "nsh-core",
@@ -2879,17 +2974,20 @@ dependencies = [
 
 [[package]]
 name = "pansy-desktop-native"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "nsh-base",
  "nsh-core",
  "open",
  "pansy-agents",
+ "pansy-cli",
  "pansy-core",
  "pansy-gateway",
  "pansy-mask",
  "pansy-plugins",
+ "pansy-remote",
+ "qrcode",
  "serde",
  "serde_json",
  "tokio",
@@ -2899,7 +2997,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-gateway"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -2921,7 +3019,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-mask"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "hmac",
  "regex",
@@ -2932,7 +3030,7 @@ dependencies = [
 
 [[package]]
 name = "pansy-plugins"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -2952,6 +3050,30 @@ dependencies = [
  "tracing",
  "uuid",
  "zip",
+]
+
+[[package]]
+name = "pansy-remote"
+version = "0.1.7"
+dependencies = [
+ "anyhow",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "futures",
+ "getrandom 0.2.17",
+ "p256",
+ "pansy-agents",
+ "pansy-core",
+ "pansy-plugins",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tracing",
+ "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2975,6 +3097,15 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-link",
+]
+
+[[package]]
+name = "pem-rfc7468"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88b39c9bfcfc231068454382784bb460aae594343fb030d46e9f50a645418412"
+dependencies = [
+ "base64ct",
 ]
 
 [[package]]
@@ -3161,6 +3292,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "primeorder"
+version = "0.13.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "353e1ca18966c16d9deb1c69278edbc5f194139612772bd9537af60ac231e1e6"
+dependencies = [
+ "elliptic-curve",
+]
+
+[[package]]
 name = "proc-macro-crate"
 version = "3.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3183,6 +3323,12 @@ name = "pxfm"
 version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
 name = "quick-error"
@@ -3529,6 +3675,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rfc6979"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8dd2a808d456c4a54e300a23e9f5a67e122c3024119acbfd73e3bf664491cb2"
+dependencies = [
+ "hmac",
+ "subtle",
+]
+
+[[package]]
 name = "rgb"
 version = "0.8.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3817,6 +3973,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "sec1"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3e97a565f76233a6003f9f5c54be1d9c5bdfa3eccfb189469f11ec4901c47dc"
+dependencies = [
+ "base16ct",
+ "der",
+ "generic-array",
+ "pkcs8",
+ "serdect",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "security-framework"
 version = "3.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3949,6 +4120,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serdect"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a84f14a19e9a014bb9f4512488d9829a68e04ecabffb0f9904cd1ace94598177"
+dependencies = [
+ "base16ct",
+ "serde",
+]
+
+[[package]]
 name = "sha1"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4007,6 +4188,7 @@ version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77549399552de45a898a580c1b41d445bf730df867cc44e6c0233bbc4b8329de"
 dependencies = [
+ "digest",
  "rand_core 0.6.4",
 ]
 
@@ -4407,8 +4589,20 @@ dependencies = [
  "rustls-pki-types",
  "tokio",
  "tokio-rustls",
- "tungstenite",
+ "tungstenite 0.28.0",
  "webpki-roots 0.26.11",
+]
+
+[[package]]
+name = "tokio-tungstenite"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f72a05e828585856dacd553fba484c242c46e391fb0e58917c942ee9202915c"
+dependencies = [
+ "futures-util",
+ "log",
+ "tokio",
+ "tungstenite 0.29.0",
 ]
 
 [[package]]
@@ -4668,6 +4862,22 @@ dependencies = [
  "sha1",
  "thiserror",
  "utf-8",
+]
+
+[[package]]
+name = "tungstenite"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c01152af293afb9c7c2a57e4b559c5620b421f6d133261c60dd2d0cdb38e6b8"
+dependencies = [
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand 0.9.5",
+ "sha1",
+ "thiserror",
 ]
 
 [[package]]

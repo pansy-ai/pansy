@@ -24,8 +24,11 @@ use pansy_core::subscription;
 use pansy_core::usage;
 use serde_json::json;
 
+mod drive;
 mod plugins;
+mod remote;
 mod run;
+pub mod service;
 
 const HELP: &str = "pansy — every agent's model, one place
 
@@ -81,6 +84,9 @@ Agents
   project init [folder]               write one from the connected agents' models
   project trust|forget [folder]       say yes to the file as it is now (one that came with
                                       a repository is not used before), or take it back
+  drive [--model <provider/model>] [--resume <thread>] [--mode ask|edits|full] codex [folder]
+                                      drive an agent as the phone will (Codex for now):
+                                      type to send or steer, answer approvals, /stop
   doctor                              whether the gateway, providers and agents work
   test [provider/model]               send one short message through the gateway, as an
                                       agent would (the first model without one)
@@ -179,6 +185,16 @@ Profiles
 
 Gateway
   serve                               run the gateway in the foreground
+  remote [status|on|off]              let paired phones and browsers control this computer's
+                                      agents (port 7268); remote lan on|off, remote webhook
+                                      <url>|off (a line when a thread waits or ends),
+                                      remote writer <provider/model>|default (commit messages)
+  pair [read]                         a one-time link to pair a phone with (10 minutes)
+  devices [revoke|approve <id>]       the paired devices; devices approval on|off: new ones
+                                      wait to be approved here
+  service install|uninstall|status    the gateway as a service of yours: started when you
+                                      log in, running without the window (systemd,
+                                      launchd, or a task at logon)
   status                              the gateway, providers and agents at a glance
   usage [days=7]                      requests and tokens through the gateway, by day,
                                       provider, model, agent and project (pansy run's)
@@ -226,6 +242,15 @@ pub fn run(args: Vec<String>) -> ExitCode {
     // What follows `pansy run <agent>` is the agent's own, `--json` too.
     if args.first().is_some_and(|a| a == "run") {
         return run::command(&args[1..]);
+    }
+    if args.first().is_some_and(|a| a == "drive") {
+        return match drive::command(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("pansy: {error:#}");
+                ExitCode::FAILURE
+            }
+        };
     }
     let json = args.iter().any(|a| a == "--json");
     let args: Vec<String> = args.into_iter().filter(|a| a != "--json").collect();
@@ -292,6 +317,12 @@ fn dispatch(args: &[String], json: bool) -> Result<()> {
             Ok(())
         }
         ["serve", ..] => serve(),
+        ["remote", rest @ ..] => remote::command(rest, json),
+        ["pair", rest @ ..] => remote::pair(rest),
+        ["devices", rest @ ..] => remote::devices(rest, json),
+        ["service", "install"] => say(service::install()?),
+        ["service", "uninstall"] => say(service::uninstall()?),
+        ["service"] | ["service", "status"] => service_status(json),
         ["status"] => status(json),
         ["agents"] => agents(json),
         ["agents", "versions"] => agent_versions(json),
@@ -752,9 +783,80 @@ fn serve() -> Result<()> {
         .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
         .init();
     let gateway = pansy_gateway::Gateway::new();
-    runtime()?.block_on(pansy_gateway::serve(gateway, async {
+    runtime()?.block_on(async {
+        // Both stop on the same Ctrl-C (or the service manager's SIGTERM).
+        let (stop, _) = tokio::sync::broadcast::channel::<()>(1);
+        let stopping = stop.clone();
+        tokio::spawn(async move {
+            stopped().await;
+            let _ = stopping.send(());
+        });
+        let (mut a, mut b) = (stop.subscribe(), stop.subscribe());
+        let remote = tokio::spawn(remote::serve(async move {
+            let _ = a.recv().await;
+        }));
+        let served = pansy_gateway::serve(gateway, async move {
+            let _ = b.recv().await;
+        })
+        .await;
+        let _ = stop.send(());
+        match remote.await {
+            Ok(Err(e)) => eprintln!("pansy: the remote interface: {e:#}"),
+            Err(e) => eprintln!("pansy: the remote interface: {e}"),
+            Ok(Ok(())) => {}
+        }
+        served
+    })
+}
+
+fn say(lines: Vec<String>) -> Result<()> {
+    for line in lines {
+        println!("{line}");
+    }
+    Ok(())
+}
+
+fn service_status(json: bool) -> Result<()> {
+    let s = service::status()?;
+    if json {
+        return print_json(&json!({
+            "installed": s.installed, "file": s.file, "answering": s.answering, "url": s.url,
+        }));
+    }
+    match (s.installed, &s.file) {
+        (true, Some(file)) => println!("installed: {}", file.display()),
+        (true, None) => println!("installed: a task at logon"),
+        (false, _) => println!("not installed (pansy service install)"),
+    }
+    if s.answering {
+        println!("a pansy answers at {}", s.url);
+    } else {
+        println!("nothing answers at {}", s.url);
+    }
+    Ok(())
+}
+
+/// Ctrl-C, or SIGTERM (a service manager stopping pansy).
+async fn stopped() {
+    #[cfg(unix)]
+    {
+        let mut term =
+            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+                Ok(t) => t,
+                Err(_) => {
+                    let _ = tokio::signal::ctrl_c().await;
+                    return;
+                }
+            };
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = term.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
         let _ = tokio::signal::ctrl_c().await;
-    }))
+    }
 }
 
 /// Every check, a line each; fails when one does.

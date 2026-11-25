@@ -125,8 +125,10 @@ pub struct Subagent {
 pub struct Turn {
     /// `user`, `assistant`, `reasoning` (what the model thought, as its
     /// agent kept it), `tool` (a tool the agent called: its name, and what
-    /// it was given in a line), or `compact` (the conversation was compacted
-    /// here).
+    /// it was given in a line), `compact` (the conversation was compacted
+    /// here), or, kept only for [`Keep::TIMED`], `end` (a turn ended here:
+    /// `ms` it took where the agent wrote it, `status` `stopped` when the
+    /// user stopped it).
     pub role: &'static str,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub name: String,
@@ -143,6 +145,9 @@ pub struct Turn {
     #[serde(skip_serializing_if = "str::is_empty")]
     pub status: &'static str,
     pub at: Option<DateTime<Utc>>,
+    /// An `end`'s: how long the turn took, as its agent wrote it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ms: Option<u64>,
 }
 
 /// How much of each turn a transcript keeps, in characters.
@@ -152,6 +157,8 @@ pub struct Keep {
     pub text: usize,
     /// A tool's input, and its output.
     pub tool: usize,
+    /// Where each turn ended, as `end` turns.
+    pub ends: bool,
 }
 
 impl Keep {
@@ -159,11 +166,18 @@ impl Keep {
     pub const SHOWN: Keep = Keep {
         text: 8000,
         tool: 4000,
+        ends: false,
+    };
+    /// What the phone shows: the window's, and where each turn ended.
+    pub const TIMED: Keep = Keep {
+        ends: true,
+        ..Keep::SHOWN
     };
     /// All of it: an export.
     pub const WHOLE: Keep = Keep {
         text: usize::MAX,
         tool: usize::MAX,
+        ends: false,
     };
 }
 
@@ -221,6 +235,13 @@ pub fn transcript(agent: &str, id: &str, sub: &str) -> Result<Vec<Turn>> {
             codex::transcript(&path, Keep::SHOWN)
         }
     }
+}
+
+/// What was said in the session `id` of `agent`, with where each turn
+/// ended (`end` turns): the phone's thread.
+pub fn timed_transcript(agent: &str, id: &str) -> Result<Vec<Turn>> {
+    let session = find(agent, id).ok_or_else(|| anyhow!("no {agent} session {id}"))?;
+    transcript_of(&session, Keep::TIMED)
 }
 
 /// What was said in a session listed, as much of each turn as `keep` says.

@@ -12,6 +12,9 @@ pansy-agents = { path = "../../crates/pansy-agents" }
 pansy-gateway = { path = "../../crates/pansy-gateway" }
 pansy-mask = { path = "../../crates/pansy-mask" }
 pansy-plugins = { path = "../../crates/pansy-plugins" }
+pansy-remote = { path = "../../crates/pansy-remote" }
+pansy-cli = { path = "../../crates/pansy-cli" }
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 anyhow = "1"
 nsh-core = "=0.6.1"
 nsh-base = "=0.6.1"
