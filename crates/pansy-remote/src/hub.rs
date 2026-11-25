@@ -267,6 +267,8 @@ struct State {
     queue: VecDeque<Queued>,
     used: Option<Instant>,
     ended: bool,
+    /// Held while a turn runs: the computer stays awake for it.
+    awake: Option<crate::awake::Awake>,
     /// What the agent's files held when the run started: the history shown
     /// beside the run's own events, which repeat what it writes since.
     history: Vec<sessions::Turn>,
@@ -755,6 +757,7 @@ impl Hub {
                 let mut s = run.state.lock().unwrap_or_else(|e| e.into_inner());
                 s.waiting.clear();
                 s.started = None;
+                s.awake = None;
                 s.turn.take()
             };
             self.end(id).await;
@@ -1001,6 +1004,7 @@ impl Hub {
                     let mut s = run.state.lock().unwrap_or_else(|e| e.into_inner());
                     s.turn = Some(turn.clone());
                     s.started.get_or_insert_with(Utc::now);
+                    s.awake.get_or_insert_with(crate::awake::Awake::hold);
                     status_changed = true;
                 }
                 Event::Approval { request, .. } | Event::Question { request, .. } => {
@@ -1025,6 +1029,7 @@ impl Hub {
                         let mut s = run.state.lock().unwrap_or_else(|e| e.into_inner());
                         s.turn = None;
                         s.started = None;
+                        s.awake = None;
                         s.waiting.clear();
                         s.used = Some(Instant::now());
                     }
@@ -1078,6 +1083,7 @@ impl Hub {
             let mut s = run.state.lock().unwrap_or_else(|e| e.into_inner());
             s.ended = true;
             s.turn = None;
+            s.awake = None;
             s.waiting.clear();
         }
         self.inner

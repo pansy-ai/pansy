@@ -28,3 +28,6 @@ uuid.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 tokio-tungstenite = "0.29"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Power"] }

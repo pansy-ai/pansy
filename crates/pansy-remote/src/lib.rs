@@ -11,6 +11,7 @@
 //! trait.
 
 pub mod auth;
+mod awake;
 pub mod claude;
 pub mod codex;
 pub mod config;

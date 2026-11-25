@@ -62,6 +62,13 @@ linger）、macOS 的 launchd、Windows 的计划任务，跑 `pansy serve`。�
 时先连已在跑的服务，没有才自己起（roadmap 迭代 2 的这一部分先做）。没有
 它，人一走，回合就没了。
 
+有回合在跑时，电脑不因空闲睡着（`pansy-remote/src/awake.rs`，照 noop 的
+`src/awake.ts`）：macOS 用 `caffeinate -i`，Linux 用 `systemd-inhibit
+--what=sleep:idle`（被 polkit 拒了退到 `idle`），Windows 用
+`SetThreadExecutionState`。最后一个回合结束就放开；pansy 怎么退出都会一起
+放开。合盖照样睡（logind 默认 `LidSwitchIgnoreInhibited`）；Linux 上手动
+挂起会先提示有程序阻止。
+
 ### 协议
 
 T3: `packages/contracts/src/rpc.ts`、`orchestrationV2.ts`、
