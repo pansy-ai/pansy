@@ -27,6 +27,7 @@ use crate::mask;
 use crate::plugins;
 use crate::prompt;
 use crate::proto::{self, Quirks};
+use crate::recall::{Keeper, Recall};
 use crate::route::{self, Attempt, Health, NoRoute};
 use crate::sse;
 use crate::trace::{Trace, Tracing};
@@ -45,6 +46,7 @@ pub struct Gateway {
     clients: Clients,
     trace: Arc<Trace>,
     desktop: Desktop,
+    recall: Arc<Recall>,
 }
 
 /// A Gemini call: its model and method are in the URL.
@@ -77,6 +79,9 @@ struct Meta {
     /// What the answer has used so far, and when its first byte came.
     usage: Usage,
     first_ms: u64,
+    /// The answer's reasoning by its tool calls, for a vendor that wants
+    /// it back and an agent that may not keep it.
+    keeper: Option<Keeper>,
     /// The answer is on its way: dropped now (the agent went away, its
     /// request cancelled), the request goes on record as cancelled.
     armed: bool,
@@ -107,6 +112,7 @@ impl Meta {
             unmask: None,
             usage: Usage::default(),
             first_ms: 0,
+            keeper: None,
             armed: false,
         }
     }
@@ -120,6 +126,11 @@ impl Meta {
 
     fn record(&mut self, status: u16, error: &str) {
         self.armed = false;
+        if let Some(keeper) = self.keeper.take()
+            && status == 200
+        {
+            keeper.finish();
+        }
         let usage = self.usage;
         let first_ms = self.first_ms;
         let record = usage::Record {
@@ -932,6 +943,14 @@ impl Gateway {
                 build_for(attempt, ir_request.as_ref().unwrap())
             };
             let request_ir = fresh_ir.as_ref().or(ir_request.as_ref());
+            // Reasoning the agent dropped from its tool calls, back to the
+            // vendor that wrote it.
+            if Recall::wanted(attempt) {
+                let put = self.recall.put_back(&attempt.provider, &mut upstream_body);
+                if put > 0 {
+                    tracing::debug!(provider = %attempt.provider, turns = put, "reasoning put back");
+                }
+            }
             // A subscription's backend takes the request its own way; one
             // that answers in a stream alone has a whole answer gathered.
             let mut gather = false;
@@ -1032,6 +1051,7 @@ impl Gateway {
             meta.unmask = unmask.clone();
             meta.tried = tried.clone();
             meta.tracing = Some(trace.clone());
+            meta.keeper = Keeper::of(&self.recall, attempt);
             if !response.status().is_success() {
                 let retry = upstream::retry_after(response.headers());
                 let text = response.text().await.unwrap_or_default();
@@ -1200,6 +1220,9 @@ impl Gateway {
                     if let Event::Usage(u) = &event {
                         meta.usage.merge(*u);
                     }
+                    if let Some(keeper) = meta.keeper.as_mut() {
+                        keeper.event(&event);
+                    }
                     if let Some(writer) = writer.as_mut() {
                         let text = writer.event(event);
                         if !text.is_empty() {
@@ -1258,6 +1281,9 @@ impl Gateway {
                                     if let Event::Usage(u) = &event {
                                         meta.usage.merge(*u);
                                     }
+                                    if let Some(keeper) = meta.keeper.as_mut() {
+                                        keeper.event(&event);
+                                    }
                                     if let Some(writer) = writer.as_mut() {
                                         let text = writer.event(event);
                                         if !text.is_empty() {
@@ -1292,6 +1318,9 @@ impl Gateway {
                         for event in events {
                             if let Event::Usage(u) = &event {
                                 meta.usage.merge(*u);
+                            }
+                            if let Some(keeper) = meta.keeper.as_mut() {
+                                keeper.event(&event);
                             }
                             if let Some(writer) = writer.as_mut() {
                                 tail.push_str(&writer.event(event));
@@ -1359,6 +1388,9 @@ async fn whole(
         Err(message) => return meta.fail(502, message),
     };
     meta.usage = parsed.usage;
+    if let Some(keeper) = meta.keeper.as_mut() {
+        keeper.parts(&parsed.parts);
+    }
     meta.record(200, "");
     let body = if passthrough {
         bytes.to_vec()
@@ -1408,6 +1440,9 @@ async fn gathered(
         for event in events {
             if let Event::Usage(u) = &event {
                 meta.usage.merge(*u);
+            }
+            if let Some(keeper) = meta.keeper.as_mut() {
+                keeper.event(&event);
             }
             collector.push(event);
         }

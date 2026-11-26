@@ -11,6 +11,7 @@ pub mod mask;
 pub mod plugins;
 pub mod prompt;
 pub mod proto;
+pub mod recall;
 pub mod route;
 pub mod server;
 pub mod sse;
